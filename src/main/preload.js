@@ -21,4 +21,13 @@ contextBridge.exposeInMainWorld('api', {
   openPath:    (p)   => ipcRenderer.invoke('shell:openPath', p),
   openExternal:(url) => ipcRenderer.invoke('shell:openExternal', url),
   openVSCode:  (p)   => ipcRenderer.invoke('shell:openVSCode', p),
+
+  // Updates
+  checkForUpdate:   () => ipcRenderer.invoke('update:check'),
+  downloadUpdate:   () => ipcRenderer.invoke('update:download'),
+  installUpdate:    () => ipcRenderer.invoke('update:install'),
+  onUpdateAvailable:(cb) => ipcRenderer.on('update-available',  (_, info) => cb(info)),
+  onUpdateProgress: (cb) => ipcRenderer.on('update-progress',   (_, pct)  => cb(pct)),
+  onUpdateReady:    (cb) => ipcRenderer.on('update-ready',      ()        => cb()),
+  onUpdateError:    (cb) => ipcRenderer.on('update-error',      (_, msg)  => cb(msg)),
 });

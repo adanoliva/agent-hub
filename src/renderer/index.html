@@ -267,6 +267,16 @@ html,body{height:100%;background:var(--bg0);color:var(--text0);font-family:var(-
 </style>
 </head>
 <body>
+<div id="update-banner" style="display:none;position:fixed;bottom:28px;right:16px;z-index:9999;background:var(--accent);color:#fff;border-radius:10px;padding:10px 16px;font-size:12px;display:none;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:360px">
+  <i class="ti ti-cloud-download" style="font-size:16px;flex-shrink:0"></i>
+  <div style="flex:1">
+    <div id="update-banner-title" style="font-weight:600;margin-bottom:2px">Nueva versión disponible</div>
+    <div id="update-banner-sub" style="opacity:.85;font-size:11px"></div>
+  </div>
+  <button id="update-banner-btn" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:600;flex-shrink:0">Actualizar</button>
+  <button onclick="document.getElementById('update-banner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0">×</button>
+</div>
+
 <div id="app">
   <nav class="sidebar">
     <div class="sidebar-logo"><i class="ti ti-robot"></i></div>
@@ -1739,6 +1749,44 @@ async function init() {
 }
 
 init();
+
+// ── Auto-update UI ────────────────────────────────────────────────────────────
+(function setupUpdateListeners() {
+  if (!window.api) return;
+
+  const banner    = document.getElementById('update-banner');
+  const bannerSub = document.getElementById('update-banner-sub');
+  const bannerBtn = document.getElementById('update-banner-btn');
+
+  window.api.onUpdateAvailable((info) => {
+    bannerSub.textContent = `v${info.version} lista para descargar`;
+    bannerBtn.textContent = 'Descargar';
+    bannerBtn.onclick = async () => {
+      bannerBtn.textContent = 'Descargando…';
+      bannerBtn.disabled = true;
+      await window.api.downloadUpdate();
+    };
+    banner.style.display = 'flex';
+  });
+
+  window.api.onUpdateProgress((pct) => {
+    bannerSub.textContent = `Descargando… ${pct}%`;
+  });
+
+  window.api.onUpdateReady(() => {
+    document.getElementById('update-banner-title').textContent = '¡Actualización lista!';
+    bannerSub.textContent = 'Se instalará al reiniciar la app';
+    bannerBtn.textContent = 'Reiniciar ahora';
+    bannerBtn.disabled = false;
+    bannerBtn.onclick = () => window.api.installUpdate();
+    banner.style.display = 'flex';
+  });
+
+  window.api.onUpdateError((msg) => {
+    console.warn('[update] error:', msg);
+    banner.style.display = 'none';
+  });
+})();
 </script>
 </body>
 </html>

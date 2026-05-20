@@ -12,6 +12,51 @@ const { migrateAgentFiles, seedDefaultAgents, syncGlobalAgentsToClaudeDir } = re
 
 const isDev = !app.isPackaged;
 
+// ── Auto-updater ──────────────────────────────────────────────────────────────
+
+let autoUpdater = null;
+
+function setupAutoUpdater() {
+  if (isDev) return;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+
+    // Token de solo lectura para el repo privado
+    autoUpdater.token = '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';
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.logger = null;
+
+    autoUpdater.on('update-available', (info) => {
+      mainWindow?.webContents.send('update-available', {
+        version: info.version,
+        releaseDate: info.releaseDate,
+      });
+    });
+
+    autoUpdater.on('download-progress', (p) => {
+      mainWindow?.webContents.send('update-progress', Math.round(p.percent));
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      mainWindow?.webContents.send('update-ready');
+    });
+
+    autoUpdater.on('error', (err) => {
+      mainWindow?.webContents.send('update-error', err.message);
+    });
+
+    // Comprobar al arrancar, con retraso para no bloquear la carga
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 8000);
+  } catch (e) {
+    console.warn('[updater] electron-updater no disponible:', e.message);
+  }
+}
+
+ipcMain.handle('update:check',    () => autoUpdater?.checkForUpdates().catch(e => ({ error: e.message })));
+ipcMain.handle('update:download', () => autoUpdater?.downloadUpdate().catch(e => ({ error: e.message })));
+ipcMain.handle('update:install',  () => { autoUpdater?.quitAndInstall(false, true); });
+
 let mainWindow = null;
 let server     = null;
 
@@ -105,6 +150,7 @@ app.whenReady().then(async () => {
 
   createWindow();
   createTray(mainWindow);
+  setupAutoUpdater();
   console.log('[main] Ready');
 });
 
