@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Dev Manager — Especificación Completa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg0: #0d0d0f;
+  --bg1: #141416;
+  --bg2: #1a1a1d;
+  --bg3: #222226;
+  --bg4: #2a2a2f;
+  --bg5: #323238;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.10);
+  --border3: rgba(255,255,255,0.16);
+  --text0: #f2f2f3;
+  --text1: #a8a8b3;
+  --text2: #62626e;
+  --text3: #3e3e48;
+  --accent: #7c6af7;
+  --accent2: #5b4fd4;
+  --green: #34d399;
+  --green-dim: rgba(52,211,153,0.12);
+  --amber: #fbbf24;
+  --amber-dim: rgba(251,191,36,0.10);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96,165,250,0.10);
+  --coral: #fb7185;
+  --coral-dim: rgba(251,113,133,0.10);
+  --purple-dim: rgba(124,106,247,0.12);
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg0);
+  color: var(--text0);
+  font-family: var(--display);
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── Layout ── */
+.page { max-width: 900px; margin: 0 auto; padding: 60px 32px 100px; }
+
+/* ── Cover ── */
+.cover {
+  margin-bottom: 64px;
+  padding-bottom: 48px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.cover::before {
+  content: '';
+  position: absolute;
+  top: -60px; left: -32px; right: -32px;
+  height: 320px;
+  background: radial-gradient(ellipse 60% 40% at 30% 50%, rgba(124,106,247,0.08) 0%, transparent 70%),
+              radial-gradient(ellipse 40% 30% at 70% 60%, rgba(52,211,153,0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cover-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--purple-dim);
+  border: 1px solid rgba(124,106,247,0.2);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 24px;
+  letter-spacing: .04em;
+}
+.cover-title {
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 700;
+  color: var(--text0);
+  line-height: 1.15;
+  margin-bottom: 12px;
+  letter-spacing: -.02em;
+}
+.cover-title span { color: var(--accent); }
+.cover-sub {
+  font-size: 15px;
+  color: var(--text1);
+  max-width: 560px;
+  line-height: 1.7;
+  margin-bottom: 32px;
+}
+.cover-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text1);
+  font-family: var(--mono);
+}
+.pill.green { border-color: rgba(52,211,153,0.3); color: var(--green); background: var(--green-dim); }
+.pill.amber { border-color: rgba(251,191,36,0.3); color: var(--amber); background: var(--amber-dim); }
+.pill.blue  { border-color: rgba(96,165,250,0.3);  color: var(--blue);  background: var(--blue-dim);  }
+.pill.accent{ border-color: rgba(124,106,247,0.3); color: var(--accent); background: var(--purple-dim); }
+.pill.coral { border-color: rgba(251,113,133,0.3); color: var(--coral); background: var(--coral-dim); }
+
+/* ── TOC ── */
+.toc {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 56px;
+}
+.toc-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+}
+.toc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 24px;
+}
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  color: var(--text1);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .12s;
+  text-decoration: none;
+}
+.toc-item:hover { color: var(--text0); }
+.toc-item .toc-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  width: 20px;
+  flex-shrink: 0;
+}
+
+/* ── Sections ── */
+.section { margin-bottom: 56px; scroll-margin-top: 24px; }
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  padding-top: 5px;
+  width: 24px;
+  flex-shrink: 0;
+}
+.section-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text0);
+  letter-spacing: -.02em;
+  line-height: 1.2;
+}
+.section-title span { color: var(--accent); }
+
+/* ── Cards & blocks ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.card.accent-l { border-left: 2px solid var(--accent); }
+.card.green-l  { border-left: 2px solid var(--green); }
+.card.amber-l  { border-left: 2px solid var(--amber); }
+.card.blue-l   { border-left: 2px solid var(--blue); }
+.card.coral-l  { border-left: 2px solid var(--coral); }
+
+.card-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  margin-bottom: 6px;
+}
+.card-value {
+  font-size: 12px;
+  color: var(--text0);
+  line-height: 1.55;
+}
+.card-value.mono { font-family: var(--mono); font-size: 11px; color: var(--text1); }
+
+/* ── Code block ── */
+.code-block {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--text1);
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+.code-block .hi  { color: var(--text0); font-weight: 600; }
+.code-block .dim { color: var(--text3); }
+.code-block .acc { color: var(--accent); }
+.code-block .grn { color: var(--green); }
+.code-block .amb { color: var(--amber); }
+.code-block .blu { color: var(--blue); }
+
+/* ── Decision block ── */
+.decision {
+  display: flex;
+  gap: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.decision-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.decision-body { flex: 1; }
+.decision-q {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-family: var(--mono);
+  margin-bottom: 4px;
+}
+.decision-a {
+  font-size: 13px;
+  color: var(--text0);
+  font-weight: 500;
+  line-height: 1.5;
+}
+.decision-sub {
+  font-size: 11px;
+  color: var(--text1);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ── Row list ── */
+.row-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.row-item { display: flex; gap: 10px; align-items: flex-start; }
+.row-dot {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.row-text { font-size: 12px; color: var(--text0); line-height: 1.55; flex: 1; }
+.row-text .sub { font-size: 11px; color: var(--text1); margin-top: 3px; line-height: 1.5; }
+
+/* ── Alert ── */
+.alert {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  border: 1px solid;
+}
+.alert.warn  { background: var(--amber-dim); border-color: rgba(251,191,36,0.2); }
+.alert.info  { background: var(--blue-dim);  border-color: rgba(96,165,250,0.2);  }
+.alert.ok    { background: var(--green-dim); border-color: rgba(52,211,153,0.2);  }
+.alert i     { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.alert.warn i{ color: var(--amber); }
+.alert.info i{ color: var(--blue); }
+.alert.ok i  { color: var(--green); }
+.alert-body  { flex: 1; }
+.alert-title { font-size: 12px; font-weight: 600; color: var(--text0); margin-bottom: 3px; }
+.alert-sub   { font-size: 11px; color: var(--text1); line-height: 1.5; }
+
+/* ── Flow ── */
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.flow-step {
+  flex: 1;
+  padding: 11px 13px;
+  font-size: 11px;
+  color: var(--text1);
+  line-height: 1.4;
+  text-align: center;
+}
+.flow-step strong { display: block; font-size: 12px; color: var(--text0); margin-bottom: 2px; }
+.flow-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+.flow-sep::after {
+  content: '›';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  color: var(--text3);
+  background: var(--bg2);
+  padding: 2px;
+}
+
+/* ── Tag clusters ── */
+.tag-cluster { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.tag {
+  font-size: 10px;
+  font-family: var(--mono);
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  color: var(--text1);
+}
+.tag.green  { background: var(--green-dim);  border-color: rgba(52,211,153,0.2);  color: var(--green); }
+.tag.blue   { background: var(--blue-dim);   border-color: rgba(96,165,250,0.2);  color: var(--blue);  }
+.tag.amber  { background: var(--amber-dim);  border-color: rgba(251,191,36,0.2);  color: var(--amber); }
+.tag.accent { background: var(--purple-dim); border-color: rgba(124,106,247,0.2); color: var(--accent);}
+.tag.coral  { background: var(--coral-dim);  border-color: rgba(251,113,133,0.2); color: var(--coral); }
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ── Section divider ── */
+.section-sep {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border2), transparent);
+  margin: 56px 0;
+}
+
+/* ── Status chips ── */
+.status-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-family: var(--mono);
+  padding: 3px 8px; border-radius: 20px;
+  border: 1px solid;
+}
+.chip.green  { background: var(--green-dim);  border-color: rgba(52,211,153,0.25); color: var(--green); }
+.chip.amber  { background: var(--amber-dim);  border-color: rgba(251,191,36,0.25); color: var(--amber); }
+.chip.gray   { background: var(--bg3); border-color: var(--border2); color: var(--text2); }
+
+/* ── Inline code ── */
+code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text1);
+}
+
+/* ── Sub-heading ── */
+h4 {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  margin: 18px 0 10px;
+}
+
+/* ── Footer ── */
+.footer {
+  margin-top: 80px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.footer-left { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+.closed-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; font-family: var(--mono);
+  padding: 5px 12px; border-radius: 20px;
+  background: var(--green-dim);
+  border: 1px solid rgba(52,211,153,0.25);
+  color: var(--green);
+  font-weight: 600;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Cover ── -->
+  <div class="cover">
+    <div class="cover-tag"><i class="ti ti-file-description" aria-hidden="true"></i> ESPECIFICACIÓN COMPLETA v1.0</div>
+    <h1 class="cover-title">Claude <span>Dev</span> Manager</h1>
+    <p class="cover-sub">Aplicación Electron de escritorio para gestionar agentes de Claude Code, organizar proyectos de desarrollo y mantener contexto CLAUDE.md por proyecto, con asistencia de IA integrada.</p>
+    <div class="cover-pills">
+      <span class="pill"><i class="ti ti-brand-windows" aria-hidden="true"></i> Windows</span>
+      <span class="pill"><i class="ti ti-atom" aria-hidden="true"></i> Electron</span>
+      <span class="pill accent"><i class="ti ti-robot" aria-hidden="true"></i> Claude API</span>
+      <span class="pill green"><i class="ti ti-check" aria-hidden="true"></i> Spec cerrada</span>
+      <span class="pill"><i class="ti ti-calendar" aria-hidden="true"></i> Mayo 2025</span>
+    </div>
+  </div>
+
+  <!-- ── TOC ── -->
+  <div class="toc">
+    <div class="toc-title">Índice</div>
+    <div class="toc-grid">
+      <a class="toc-item" href="#s01"><span class="toc-num">01</span> Plataforma e infraestructura</a>
+      <a class="toc-item" href="#s02"><span class="toc-num">02</span> Estructura de ficheros</a>
+      <a class="toc-item" href="#s03"><span class="toc-num">03</span> Categorías y tecnologías</a>
+      <a class="toc-item" href="#s04"><span class="toc-num">04</span> Jerarquía de agentes</a>
+      <a class="toc-item" href="#s05"><span class="toc-num">05</span> Sistema de sincronización</a>
+      <a class="toc-item" href="#s06"><span class="toc-num">06</span> Creación de agentes</a>
+      <a class="toc-item" href="#s07"><span class="toc-num">07</span> Sugerencias de agentes por IA</a>
+      <a class="toc-item" href="#s08"><span class="toc-num">08</span> Gestión de proyectos</a>
+      <a class="toc-item" href="#s09"><span class="toc-num">09</span> Navegación e interfaz</a>
+      <a class="toc-item" href="#s10"><span class="toc-num">10</span> Primer arranque y ajustes</a>
+      <a class="toc-item" href="#s11"><span class="toc-num">11</span> Agentes incluidos por defecto</a>
+      <a class="toc-item" href="#s12"><span class="toc-num">12</span> Flujos de vida completos</a>
+    </div>
+  </div>
+
+  <!-- ── 01 ── -->
+  <div class="section" id="s01">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2 class="section-title">Plataforma e <span>infraestructura</span></h2>
+    </div>
+    <div class="grid3">
+      <div class="card accent-l"><div class="card-label">Runtime</div><div class="card-value">Electron (Node.js embebido, Chromium para UI)</div></div>
+      <div class="card accent-l"><div class="card-label">Distribución</div><div class="card-value">Portable <code>.exe</code> — sin instalador, sin Node.js requerido</div></div>
+      <div class="card accent-l"><div class="card-label">Sistema operativo</div><div class="card-value">Windows (objetivo principal)</div></div>
+      <div class="card"><div class="card-label">Backend</div><div class="card-value">Express embebido en el proceso principal de Electron</div></div>
+      <div class="card"><div class="card-label">Puerto</div><div class="card-value mono">localhost:3737</div></div>
+      <div class="card"><div class="card-label">Actualizaciones</div><div class="card-value">Manual — descargar nuevo <code>.exe</code> de GitHub privado y reemplazar</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card green-l">
+        <div class="card-label">System tray</div>
+        <div class="card-value">La app vive en la bandeja del sistema. Minimizar cierra la ventana pero la app sigue activa. Click derecho en el icono → menú contextual (Abrir, Reiniciar, Salir).</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-label">Rutas portables</div>
+        <div class="card-value">Toda la configuración, agentes y caché se generan en la carpeta donde se ejecuta el <code>.exe</code>. El proyecto es 100% portable — mueve la carpeta y funciona.</div>
+      </div>
+    </div>
+    <div class="alert info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">Rutas de proyectos externas</div>
+        <div class="alert-sub">Los proyectos de desarrollo (Unity, React, etc.) pueden estar en cualquier ruta del sistema — no necesitan estar dentro de la carpeta de la app. Solo se registra la ruta en la configuración.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 02 ── -->
+  <div class="section" id="s02">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2 class="section-title">Estructura de <span>ficheros</span></h2>
+    </div>
+    <div class="code-block">
+<span class="hi">Carpeta de la app (donde está el .exe)</span>
+claude-dev-manager/
+  <span class="acc">claude-dev-manager.exe</span>
+  config.json              <span class="dim">← configuración, proyectos registrados, hashes</span>
+  agents/
+    <span class="grn">global/</span>                  <span class="dim">← nivel 1: agentes para todos los proyectos</span>
+      code-reviewer.md
+      git-helper.md
+      ...
+    <span class="blu">section-games/</span>           <span class="dim">← nivel 2: agentes por categoría</span>
+    <span class="blu">section-web/</span>
+    <span class="blu">section-mobile/</span>
+    <span class="blu">section-docs/</span>
+    <span class="amb">tech-games-unity/</span>        <span class="dim">← nivel 3: agentes por tecnología</span>
+    <span class="amb">tech-web-react/</span>
+    <span class="amb">tech-mobile-react-native/</span>
+    ...
+  cache/
+    suggestions.json       <span class="dim">← sugerencias cacheadas de IA por nivel</span>
+
+<span class="hi">Cada proyecto (en cualquier ruta del sistema)</span>
+C:/ruta/al/proyecto/
+  <span class="acc">CLAUDE.md</span>                <span class="dim">← contexto del proyecto para Claude Code</span>
+  .claude/
+    agents/                <span class="dim">← nivel 4: agentes propios + copias de 1-3</span>
+      code-reviewer.md     <span class="dim">← copia del global</span>
+      unity-dev.md         <span class="dim">← copia del tech</span>
+      mi-agente-custom.md  <span class="dim">← exclusivo del proyecto</span>
+    </div>
+    <div class="alert warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">Los proyectos son autónomos</div>
+        <div class="alert-sub">Claude Code solo lee <code>{proyecto}/.claude/agents/</code>. Todos los agentes aplicables (niveles 1-3) se copian físicamente ahí al crear o importar el proyecto. No hay dependencias externas.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 03 ── -->
+  <div class="section" id="s03">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2 class="section-title">Categorías y <span>tecnologías</span></h2>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-label"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i> Juegos</div>
+        <div class="tag-cluster">
+          <span class="tag accent">Unity</span>
+          <span class="tag">Godot</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label"><i class="ti ti-world" aria-hidden="true"></i> Aplicaciones Web</div>
+        <div class="tag-cluster">
+          <span class="tag blue">React</span>
+          <span class="tag blue">Fullstack</span>
+          <span class="tag blue">Next.js</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label"><i class="ti ti-device-mobile" aria-hidden="true"></i> Apps Móviles</div>
+        <div class="tag-cluster">
+          <span class="tag amber">React Native</span>
+          <span class="tag amber">PWA</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label"><i class="ti ti-file-description" aria-hidden="true"></i> Documentación</div>
+        <div class="tag-cluster">
+          <span class="tag coral">Markdown/MDX</span>
+          <span class="tag coral">Docusaurus</span>
+        </div>
+      </div>
+    </div>
+    <div class="alert ok">
+      <i class="ti ti-puzzle" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">Categorías y tecnologías son extensibles desde Ajustes</div>
+        <div class="alert-sub">Se definen en <code>config.json</code>. Al añadir una nueva categoría o tecnología desde Ajustes, la IA propone agentes base directamente en la vista del nivel creado.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 04 ── -->
+  <div class="section" id="s04">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2 class="section-title">Jerarquía de <span>agentes</span></h2>
+    </div>
+    <div class="grid4">
+      <div class="card green-l">
+        <div class="card-label">Nivel 1</div>
+        <div class="card-value" style="font-weight:600;margin-bottom:4px">Global</div>
+        <div class="card-value" style="font-size:11px;color:var(--text1)">Aplica a todos los proyectos sin excepción</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-label">Nivel 2</div>
+        <div class="card-value" style="font-weight:600;margin-bottom:4px">Categoría</div>
+        <div class="card-value" style="font-size:11px;color:var(--text1)">Aplica a todos los proyectos de esa categoría</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-label">Nivel 3</div>
+        <div class="card-value" style="font-weight:600;margin-bottom:4px">Tecnología</div>
+        <div class="card-value" style="font-size:11px;color:var(--text1)">Aplica a proyectos con esa tech concreta</div>
+      </div>
+      <div class="card coral-l">
+        <div class="card-label">Nivel 4</div>
+        <div class="card-value" style="font-weight:600;margin-bottom:4px">Proyecto</div>
+        <div class="card-value" style="font-size:11px;color:var(--text1)">Exclusivo del proyecto, no se propaga</div>
+      </div>
+    </div>
+    <h4>Formato de cada agente (.md)</h4>
+    <div class="code-block">
+---
+name: unity-dev
+description: Experto en Unity, C# y arquitectura de GameObjects
+tools: Bash, Read, Write, Grep
+model: sonnet
+---
+Eres un experto en Unity 2023 LTS. Dominas MonoBehaviour,
+ScriptableObjects, prefabs y URP. Escribes C# limpio usando
+[SerializeField] en lugar de campos public...
+    </div>
+    <h4>Herramientas disponibles</h4>
+    <div class="tag-cluster">
+      <span class="tag">Bash</span><span class="tag">Read</span><span class="tag">Write</span>
+      <span class="tag">Grep</span><span class="tag">Edit</span><span class="tag">MultiEdit</span>
+      <span class="tag">WebFetch</span><span class="tag">WebSearch</span>
+      <span class="tag">TodoRead</span><span class="tag">TodoWrite</span>
+    </div>
+    <h4>Modelos disponibles</h4>
+    <div class="tag-cluster">
+      <span class="tag green">haiku — rápido y económico</span>
+      <span class="tag amber">sonnet — equilibrado (recomendado)</span>
+      <span class="tag accent">opus — máxima capacidad</span>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 05 ── -->
+  <div class="section" id="s05">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2 class="section-title">Sistema de <span>sincronización</span></h2>
+    </div>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-copy" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Copia física al crear/importar proyecto</strong> — todos los agentes de niveles 1-3 aplicables se copian a <code>{proyecto}/.claude/agents/</code>. El manager guarda un hash SHA-256 del contenido de cada copia en <code>config.json</code>.
+          <div class="sub">Los agentes de nivel 4 (propios del proyecto) nunca participan en el sync — son intocables.</div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--amber-dim)"><i class="ti ti-alert-triangle" style="font-size:11px;color:var(--amber)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Detección de cambios</strong> — al editar un agente en niveles 1-3 o crear uno nuevo, el manager compara el hash actual con el de cada copia en cada proyecto. Si difieren → estado "Actualización disponible".
+          <div class="sub">Los agentes nuevos aparecen como "pendiente de copiar" en proyectos que deberían tenerlos.</div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--blue-dim)"><i class="ti ti-eye" style="font-size:11px;color:var(--blue)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Estados visibles por agente en la vista de proyecto:</strong>
+          <div class="status-row" style="margin-top:8px">
+            <span class="chip green"><i class="ti ti-check" aria-hidden="true"></i> Al día</span>
+            <span class="chip amber"><i class="ti ti-arrow-up" aria-hidden="true"></i> Actualización disponible</span>
+            <span class="chip gray"><i class="ti ti-user" aria-hidden="true"></i> Solo este proyecto</span>
+          </div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-refresh" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Sincronización — opción C (global + por proyecto)</strong>
+          <div class="sub">Botón "Sync todos" en la vista de Agentes → propaga todos los cambios a todos los proyectos.<br>Botón "Sync" en cada proyecto → solo ese proyecto. Ambas opciones siempre disponibles.</div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--bg3)"><i class="ti ti-bell" style="font-size:11px;color:var(--text2)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Badge de pendientes en la vista de Proyectos</strong> — cada card de proyecto muestra un badge numérico con las actualizaciones pendientes. A golpe de vista sabes qué proyectos necesitan sync sin entrar en ellos.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 06 ── -->
+  <div class="section" id="s06">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2 class="section-title">Creación de <span>agentes</span></h2>
+    </div>
+    <div class="grid2">
+      <div class="card blue-l">
+        <div class="card-label">Modo manual</div>
+        <div class="card-value">Rellenas todos los campos directamente: nombre, descripción, modelo, herramientas y system prompt. Control total sobre el resultado.</div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-label">Modo asistido por IA</div>
+        <div class="card-value">Escribes una descripción breve. La app llama a Claude con contexto del nivel actual y genera un system prompt completo, optimizado y listo para editar antes de guardar.</div>
+      </div>
+    </div>
+    <h4>Flujo modo asistido</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>Descripción breve</strong>Ej: "Experto en UI/UX que genera interfaces con HTML y CSS"</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Selector idioma</strong>ES · EN</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Claude genera</strong>System prompt completo adaptado al nivel y categoría</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Revisar y guardar</strong>Editable antes de confirmar</div>
+    </div>
+    <div class="alert info">
+      <i class="ti ti-language" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">Idioma del system prompt: ES o EN</div>
+        <div class="alert-sub">El meta-prompt enviado a Claude incluye: nivel del agente, categoría/tech, herramientas seleccionadas, agentes ya existentes en ese nivel (para no duplicar) e idioma elegido.</div>
+      </div>
+    </div>
+    <div class="alert warn">
+      <i class="ti ti-key" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">Requiere API key de Anthropic</div>
+        <div class="alert-sub">Se configura en el wizard del primer arranque. Guardada en <code>config.json</code>. Editable desde Ajustes. Sin API key, el modo manual siempre está disponible.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 07 ── -->
+  <div class="section" id="s07">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2 class="section-title">Sugerencias de agentes <span>por IA</span></h2>
+    </div>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-sparkles" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Aparecen en todos los niveles</strong> — al navegar a cualquier nivel en la vista de Agentes (global, categoría, tech o proyecto), se muestran 2-4 cards de sugerencias junto a los agentes existentes. Visualmente diferenciadas: borde discontinuo, ligeramente atenuadas.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-database" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Cacheadas</strong> — las sugerencias se generan una sola vez por nivel y se guardan en <code>cache/suggestions.json</code>. No se gasta tokens en cada visita.
+          <div class="sub">El botón "Sugerir más" reemplaza las sugerencias cacheadas por un nuevo lote. No es acumulativo.</div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--amber-dim)"><i class="ti ti-brain" style="font-size:11px;color:var(--amber)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Contextuales y no repetitivas</strong> — el prompt incluye la lista de agentes ya existentes en ese nivel. Claude no propone nada que ya esté creado ni variantes redundantes.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--blue-dim)"><i class="ti ti-click" style="font-size:11px;color:var(--blue)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Click para crear</strong> — al pulsar una card sugerida, se abre el formulario pre-rellenado con los datos de la sugerencia. El usuario puede editar antes de confirmar. Al guardar, la sugerencia desaparece del panel.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 08 ── -->
+  <div class="section" id="s08">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <h2 class="section-title">Gestión de <span>proyectos</span></h2>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-label">Crear nuevo proyecto</div>
+        <div class="card-value">Elige nombre, categoría y tecnología. La app crea la carpeta en la ruta indicada, genera la estructura base, copia los agentes aplicables y escribe el CLAUDE.md con plantilla según la tech elegida.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Importar proyecto existente</div>
+        <div class="card-value">Apunta a una carpeta ya existente. La app registra el proyecto, crea <code>.claude/agents/</code> si no existe, copia los agentes y actualiza el CLAUDE.md si no lo tiene.</div>
+      </div>
+    </div>
+    <h4>Metadatos por proyecto</h4>
+    <div class="grid4">
+      <div class="card"><div class="card-label">Nombre</div><div class="card-value mono">string</div></div>
+      <div class="card"><div class="card-label">Categoría</div><div class="card-value mono">games|web|mobile|docs</div></div>
+      <div class="card"><div class="card-label">Tecnología</div><div class="card-value mono">unity|react|rn|...</div></div>
+      <div class="card"><div class="card-label">Estado</div><div class="card-value mono">active|paused|archived</div></div>
+    </div>
+    <h4>Acciones dentro de un proyecto</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text">Editar agentes del nivel 4 (propios). Ver agentes de niveles 1-3 copiados con su estado de sync.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text">Editar CLAUDE.md con editor de texto integrado. Guardado directo al fichero.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text">Botón "Abrir en VS Code" → ejecuta <code>code {ruta}</code>. Si <code>code</code> no está en PATH, muestra instrucciones.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text">Botón "Abrir carpeta" → abre el Explorador de Windows en la ruta del proyecto.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
+        <div class="row-text">Botón "Sync" → sincroniza solo este proyecto con los agentes actualizados de niveles 1-3.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 09 ── -->
+  <div class="section" id="s09">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <h2 class="section-title">Navegación e <span>interfaz</span></h2>
+    </div>
+    <div class="grid2">
+      <div class="card accent-l">
+        <div class="card-label">Vista Proyectos</div>
+        <div class="card-value">Cards agrupadas por categoría. Badge de sync pendientes. Filtro por estado. Click → panel de detalle del proyecto con todas las acciones.</div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-label">Vista Agentes</div>
+        <div class="card-value">Árbol colapsable estilo VS Code en sidebar. Panel central con cards del nivel activo + sugerencias. Panel lateral con editor al seleccionar un agente.</div>
+      </div>
+    </div>
+    <h4>Árbol de navegación — Vista Agentes</h4>
+    <div class="code-block">
+<span class="grn">▼ Global</span>                    <span class="dim">← nivel 1</span>
+    code-reviewer
+    git-helper
+    <span class="dim">+ [2 sugeridos]</span>
+
+<span class="blu">▼ Categorías</span>
+  <span class="blu">▼ Juegos</span>                 <span class="dim">← nivel 2</span>
+    <span class="amb">▼ Unity</span>               <span class="dim">← nivel 3</span>
+        unity-dev
+        unity-shader
+        <span class="dim">+ [2 sugeridos]</span>
+    <span class="amb">▶ Godot</span>
+  <span class="blu">▶ Web</span>
+  <span class="blu">▶ Móvil</span>
+  <span class="blu">▶ Docs</span>
+
+<span class="acc">▼ Proyectos</span>               <span class="dim">← nivel 4 (por proyecto)</span>
+  <span class="acc">▶ Mi RPG (Unity)  ↑2</span>   <span class="dim">← badge de actualizaciones</span>
+  <span class="acc">▶ Mi App Web (React)</span>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-label">Tema visual</div>
+        <div class="card-value">Oscuro fijo, estilo VS Code. <code>#0d0d0f</code> fondo, <code>#141416</code> sidebar, acentos en violeta/verde/ámbar según nivel de jerarquía.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Tipografía</div>
+        <div class="card-value">UI general en <code>Syne</code>. Código, nombres de agentes y rutas en <code>JetBrains Mono</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 10 ── -->
+  <div class="section" id="s10">
+    <div class="section-header">
+      <span class="section-num">10</span>
+      <h2 class="section-title">Primer arranque <span>y ajustes</span></h2>
+    </div>
+    <h4>Wizard de primer arranque</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>Paso 1</strong>Bienvenida + explicación rápida</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Paso 2</strong>Introducir API key de Anthropic</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Paso 3</strong>Generar estructura base + agentes por defecto</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Listo</strong>App operativa con agentes pre-cargados</div>
+    </div>
+    <h4>Pantalla de ajustes (mínima)</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-key" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>API key de Anthropic</strong> — mostrada enmascarada, botón para cambiarla. Necesaria para modo asistido y sugerencias.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-category" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
+        <div class="row-text"><strong>Gestión de categorías y tecnologías</strong> — crear, editar y borrar. Al añadir una nueva tech, la IA propone agentes base que aparecen como sugerencias en ese nivel.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 11 ── -->
+  <div class="section" id="s11">
+    <div class="section-header">
+      <span class="section-num">11</span>
+      <h2 class="section-title">Agentes incluidos <span>por defecto</span></h2>
+    </div>
+    <h4>Global (nivel 1)</h4>
+    <div class="tag-cluster">
+      <span class="tag green">code-reviewer</span>
+      <span class="tag green">git-helper</span>
+      <span class="tag green">test-writer</span>
+      <span class="tag green">doc-writer</span>
+      <span class="tag green">refactor-agent</span>
+    </div>
+    <h4>Juegos — categoría (nivel 2)</h4>
+    <div class="tag-cluster">
+      <span class="tag blue">game-designer</span>
+      <span class="tag blue">performance-optimizer</span>
+    </div>
+    <h4>Unity — tecnología (nivel 3)</h4>
+    <div class="tag-cluster">
+      <span class="tag amber">unity-dev</span>
+      <span class="tag amber">unity-shader</span>
+      <span class="tag amber">unity-ui</span>
+    </div>
+    <h4>Godot — tecnología (nivel 3)</h4>
+    <div class="tag-cluster">
+      <span class="tag amber">godot-dev</span>
+    </div>
+    <h4>Web — categoría (nivel 2)</h4>
+    <div class="tag-cluster">
+      <span class="tag blue">api-designer</span>
+      <span class="tag blue">security-audit</span>
+      <span class="tag blue">accessibility</span>
+    </div>
+    <h4>React / Fullstack / Next.js — tecnología (nivel 3)</h4>
+    <div class="tag-cluster">
+      <span class="tag amber">react-dev</span>
+      <span class="tag amber">css-designer</span>
+      <span class="tag amber">backend-dev</span>
+      <span class="tag amber">nextjs-dev</span>
+    </div>
+    <h4>Móvil — categoría (nivel 2)</h4>
+    <div class="tag-cluster">
+      <span class="tag blue">mobile-ux</span>
+    </div>
+    <h4>React Native / PWA — tecnología (nivel 3)</h4>
+    <div class="tag-cluster">
+      <span class="tag amber">rn-dev</span>
+      <span class="tag amber">pwa-dev</span>
+    </div>
+    <h4>Docs — categoría (nivel 2)</h4>
+    <div class="tag-cluster">
+      <span class="tag blue">tech-writer</span>
+      <span class="tag blue">diagram-maker</span>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ── 12 ── -->
+  <div class="section" id="s12">
+    <div class="section-header">
+      <span class="section-num">12</span>
+      <h2 class="section-title">Flujos de vida <span>completos</span></h2>
+    </div>
+    <h4>Crear un proyecto nuevo</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>Nuevo proyecto</strong>Nombre + categoría + tech + ruta</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>App genera</strong>Carpeta + CLAUDE.md con plantilla + .claude/agents/</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Copia agentes</strong>Global + sección + tech → .claude/agents/ + hashes</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Listo</strong>Abrir en VS Code → Claude Code operativo</div>
+    </div>
+    <h4>Editar un agente global</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>Editar agente</strong>En Vista Agentes → nivel Global</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Hash cambia</strong>Manager detecta diferencia en todos los proyectos</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Badges aparecen</strong>↑ en cards de proyectos afectados</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Sync</strong>Global o por proyecto según decida el usuario</div>
+    </div>
+    <h4>Crear un agente nuevo en nivel 3</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>Crear agente</strong>Manual o asistido por IA en tech-web-react/</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Se guarda</strong>En la carpeta del nivel correspondiente</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>"Pendiente"</strong>Proyectos React muestran badge ↑</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Sync</strong>Se copia al proyecto cuando el usuario sincroniza</div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer">
+    <div class="footer-left">claude-dev-manager / spec v1.0 / mayo 2025</div>
+    <span class="closed-badge"><i class="ti ti-lock" aria-hidden="true"></i> Spec cerrada — lista para construir</span>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Dev Manager — Manual de uso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
+<style>
+:root{
+  --bg0:#0d0d0f;--bg1:#141416;--bg2:#1a1a1d;--bg3:#222226;--bg4:#2a2a2f;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.10);--border3:rgba(255,255,255,0.16);
+  --text0:#f2f2f3;--text1:#a8a8b3;--text2:#62626e;--text3:#3e3e48;
+  --accent:#7c6af7;--green:#34d399;--amber:#fbbf24;--blue:#60a5fa;--coral:#fb7185;
+  --green-dim:rgba(52,211,153,0.10);--amber-dim:rgba(251,191,36,0.10);
+  --blue-dim:rgba(96,165,250,0.10);--purple-dim:rgba(124,106,247,0.10);--coral-dim:rgba(251,113,133,0.10);
+  --mono:'JetBrains Mono',monospace;--display:'Syne',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg0);color:var(--text0);font-family:var(--display);font-size:14px;line-height:1.65}
+
+/* ── Shell ── */
+.shell{display:flex;min-height:100vh}
+.nav{width:260px;background:var(--bg1);border-right:1px solid var(--border);position:fixed;top:0;left:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;z-index:10}
+.nav::-webkit-scrollbar{width:4px}
+.nav::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.main{margin-left:260px;flex:1;min-height:100vh}
+
+/* ── Nav ── */
+.nav-logo{padding:24px 20px 16px;border-bottom:1px solid var(--border)}
+.nav-logo-title{font-size:14px;font-weight:700;color:var(--text0);display:flex;align-items:center;gap:8px}
+.nav-logo-title i{color:var(--accent);font-size:18px}
+.nav-logo-sub{font-size:11px;color:var(--text2);margin-top:3px;font-family:var(--mono)}
+.nav-section{padding:16px 20px 6px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono)}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 20px;color:var(--text1);font-size:12px;cursor:pointer;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
+.nav-item:hover{color:var(--text0);background:var(--bg3)}
+.nav-item.active{color:var(--accent);background:var(--purple-dim);border-left-color:var(--accent)}
+.nav-item i{font-size:15px;flex-shrink:0}
+.nav-spacer{flex:1}
+.nav-footer{padding:16px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);font-family:var(--mono)}
+
+/* ── Content ── */
+.content{max-width:780px;margin:0 auto;padding:60px 48px 100px}
+
+/* ── Hero ── */
+.hero{margin-bottom:64px;padding-bottom:48px;border-bottom:1px solid var(--border)}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--accent);background:var(--purple-dim);border:1px solid rgba(124,106,247,0.2);padding:4px 10px;border-radius:20px;margin-bottom:20px}
+.hero-title{font-size:clamp(28px,4vw,42px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-bottom:12px}
+.hero-title span{color:var(--accent)}
+.hero-sub{font-size:15px;color:var(--text1);line-height:1.7;max-width:520px}
+
+/* ── Section ── */
+.section{margin-bottom:64px;scroll-margin-top:24px}
+.section-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-family:var(--mono);color:var(--text2);margin-bottom:14px}
+.section-badge::before{content:'';width:24px;height:1px;background:var(--border3)}
+.section-title{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px;color:var(--text0)}
+.section-title span{color:var(--accent)}
+.section-intro{font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:28px;max-width:580px}
+
+/* ── Step ── */
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:20px;padding-bottom:32px;position:relative}
+.step:last-child{padding-bottom:0}
+.step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:var(--border2)}
+.step-num{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text0);flex-shrink:0;font-family:var(--mono);z-index:1}
+.step-body{flex:1;padding-top:8px}
+.step-title{font-size:14px;font-weight:600;color:var(--text0);margin-bottom:6px}
+.step-desc{font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:10px}
+.step-num.accent{background:var(--purple-dim);border-color:rgba(124,106,247,0.3);color:var(--accent)}
+.step-num.green{background:var(--green-dim);border-color:rgba(52,211,153,0.3);color:var(--green)}
+.step-num.amber{background:var(--amber-dim);border-color:rgba(251,191,36,0.3);color:var(--amber)}
+
+/* ── Cards ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.card.green-l{border-left:2px solid var(--green)}
+.card.blue-l{border-left:2px solid var(--blue)}
+.card.amber-l{border-left:2px solid var(--amber)}
+.card.accent-l{border-left:2px solid var(--accent)}
+.card.coral-l{border-left:2px solid var(--coral)}
+.card-icon{font-size:22px;margin-bottom:8px}
+.card-title{font-size:13px;font-weight:600;color:var(--text0);margin-bottom:5px}
+.card-body{font-size:12px;color:var(--text1);line-height:1.6}
+
+/* ── Callout ── */
+.callout{display:flex;gap:12px;padding:14px 16px;border-radius:10px;border:1px solid;margin-bottom:16px}
+.callout.tip{background:var(--green-dim);border-color:rgba(52,211,153,0.2)}
+.callout.warn{background:var(--amber-dim);border-color:rgba(251,191,36,0.2)}
+.callout.info{background:var(--blue-dim);border-color:rgba(96,165,250,0.2)}
+.callout.note{background:var(--purple-dim);border-color:rgba(124,106,247,0.2)}
+.callout i{font-size:18px;flex-shrink:0;margin-top:1px}
+.callout.tip i{color:var(--green)}
+.callout.warn i{color:var(--amber)}
+.callout.info i{color:var(--blue)}
+.callout.note i{color:var(--accent)}
+.callout-body{flex:1}
+.callout-title{font-size:13px;font-weight:600;color:var(--text0);margin-bottom:4px}
+.callout-text{font-size:12px;color:var(--text1);line-height:1.6}
+
+/* ── Code ── */
+code{font-family:var(--mono);font-size:11px;background:var(--bg3);border:1px solid var(--border2);padding:2px 6px;border-radius:4px;color:var(--text1)}
+.code-block{background:var(--bg1);border:1px solid var(--border);border-radius:10px;padding:16px 18px;font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--text1);margin-bottom:16px;overflow-x:auto}
+.code-block .hi{color:var(--text0);font-weight:600}
+.code-block .dim{color:var(--text3)}
+.code-block .acc{color:var(--accent)}
+.code-block .grn{color:var(--green)}
+.code-block .amb{color:var(--amber)}
+
+/* ── UI mockup ── */
+.mockup{background:var(--bg1);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:20px}
+.mockup-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px}
+.mockup-dot{width:10px;height:10px;border-radius:50%}
+.mockup-title{font-size:11px;color:var(--text2);font-family:var(--mono);margin-left:8px}
+.mockup-body{padding:16px}
+.mock-nav{display:flex;gap:6px;margin-bottom:12px}
+.mock-tab{font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:default}
+.mock-tab.active{background:var(--purple-dim);border-color:rgba(124,106,247,0.3);color:var(--accent)}
+.mock-tree{font-family:var(--mono);font-size:11px;line-height:2;color:var(--text1)}
+.mock-tree .sel{color:var(--accent);background:var(--purple-dim);padding:1px 6px;border-radius:4px}
+.mock-tree .grn{color:var(--green)}
+.mock-tree .blu{color:var(--blue)}
+.mock-tree .amb{color:var(--amber)}
+.mock-tree .dim{color:var(--text3)}
+.mock-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mock-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.mock-card.suggested{border-style:dashed;opacity:.65}
+.mock-card-name{font-size:11px;font-weight:600;color:var(--text0);font-family:var(--mono);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.mock-card-desc{font-size:10px;color:var(--text1);line-height:1.4}
+.mock-badge{font-size:9px;padding:1px 6px;border-radius:20px}
+.mock-badge.green{background:var(--green-dim);color:var(--green)}
+.mock-badge.amber{background:var(--amber-dim);color:var(--amber)}
+.mock-badge.gray{background:var(--bg4);color:var(--text2)}
+.mock-badge.suggested{background:var(--bg4);color:var(--text2);border:1px dashed var(--text3)}
+.mock-badge.pending{background:var(--amber-dim);color:var(--amber)}
+
+/* ── Status chips ── */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:20px;border:1px solid}
+.chip.green{background:var(--green-dim);border-color:rgba(52,211,153,0.25);color:var(--green)}
+.chip.amber{background:var(--amber-dim);border-color:rgba(251,191,36,0.25);color:var(--amber)}
+.chip.gray{background:var(--bg3);border-color:var(--border2);color:var(--text2)}
+
+/* ── Tags ── */
+.tag{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:5px;background:var(--bg3);border:1px solid var(--border2);color:var(--text1)}
+
+/* ── Section separator ── */
+.sep{height:1px;background:linear-gradient(to right,transparent,var(--border2),transparent);margin:64px 0}
+
+/* ── H4 ── */
+h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-transform:uppercase;font-family:var(--mono);margin:20px 0 10px}
+
+/* ── Divider ── */
+.divider{height:1px;background:var(--border);margin:14px 0}
+
+/* ── Tray mockup ── */
+.tray-bar{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text1);margin-bottom:10px}
+.tray-icon{width:22px;height:22px;background:var(--purple-dim);border-radius:4px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(124,106,247,0.2)}
+.tray-menu{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;overflow:hidden;width:200px;margin-bottom:16px}
+.tray-item{padding:8px 14px;font-size:12px;color:var(--text1);border-bottom:1px solid var(--border);cursor:default}
+.tray-item:last-child{border-bottom:none}
+.tray-item:hover{background:var(--bg3);color:var(--text0)}
+.tray-item.danger{color:var(--coral)}
+
+/* ── FAQ ── */
+.faq{display:flex;flex-direction:column;gap:12px}
+.faq-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.faq-q{padding:14px 16px;font-size:13px;font-weight:600;color:var(--text0);display:flex;align-items:center;gap:10px;cursor:pointer}
+.faq-q i{color:var(--accent);font-size:15px;flex-shrink:0}
+.faq-a{padding:0 16px 14px 41px;font-size:12px;color:var(--text1);line-height:1.65}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ── Sidebar nav ── -->
+<nav class="nav">
+  <div class="nav-logo">
+    <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Claude Dev Manager</div>
+    <div class="nav-logo-sub">Manual de uso · v1.0</div>
+  </div>
+
+  <div class="nav-section">Primeros pasos</div>
+  <a class="nav-item active" href="#inicio"><i class="ti ti-home" aria-hidden="true"></i> Introducción</a>
+  <a class="nav-item" href="#instalacion"><i class="ti ti-download" aria-hidden="true"></i> Instalación</a>
+  <a class="nav-item" href="#wizard"><i class="ti ti-wand" aria-hidden="true"></i> Primer arranque</a>
+  <a class="nav-item" href="#tray"><i class="ti ti-bell" aria-hidden="true"></i> Bandeja del sistema</a>
+
+  <div class="nav-section">La aplicación</div>
+  <a class="nav-item" href="#proyectos"><i class="ti ti-layout-grid" aria-hidden="true"></i> Vista Proyectos</a>
+  <a class="nav-item" href="#agentes"><i class="ti ti-robot" aria-hidden="true"></i> Vista Agentes</a>
+  <a class="nav-item" href="#jerarquia"><i class="ti ti-sitemap" aria-hidden="true"></i> Jerarquía de niveles</a>
+
+  <div class="nav-section">Tareas frecuentes</div>
+  <a class="nav-item" href="#crear-proyecto"><i class="ti ti-folder-plus" aria-hidden="true"></i> Crear un proyecto</a>
+  <a class="nav-item" href="#crear-agente"><i class="ti ti-plus" aria-hidden="true"></i> Crear un agente</a>
+  <a class="nav-item" href="#sync"><i class="ti ti-refresh" aria-hidden="true"></i> Sincronizar cambios</a>
+  <a class="nav-item" href="#sugerencias"><i class="ti ti-sparkles" aria-hidden="true"></i> Sugerencias de IA</a>
+  <a class="nav-item" href="#ajustes"><i class="ti ti-settings" aria-hidden="true"></i> Ajustes</a>
+
+  <div class="nav-section">Referencia</div>
+  <a class="nav-item" href="#faq"><i class="ti ti-help-circle" aria-hidden="true"></i> Preguntas frecuentes</a>
+
+  <div class="nav-spacer"></div>
+  <div class="nav-footer">Claude Dev Manager © 2025</div>
+</nav>
+
+<!-- ── Main content ── -->
+<main class="main">
+<div class="content">
+
+  <!-- Hero -->
+  <div class="hero" id="inicio">
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO</div>
+    <h1 class="hero-title">Claude <span>Dev</span> Manager</h1>
+    <p class="hero-sub">Guía completa para gestionar tus agentes de Claude Code, organizar proyectos y mantener contexto por proyecto — todo desde una interfaz visual.</p>
+  </div>
+
+  <!-- ── Instalación ── -->
+  <div class="section" id="instalacion">
+    <div class="section-badge">primeros pasos</div>
+    <h2 class="section-title">Instalación</h2>
+    <p class="section-intro">Claude Dev Manager es un ejecutable portable — no requiere instalador ni Node.js.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Descarga el ejecutable</div>
+          <div class="step-desc">Descarga <code>claude-dev-manager.exe</code> desde la sección <strong>Releases</strong> del repositorio privado de GitHub.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Colócalo en su carpeta definitiva</div>
+          <div class="step-desc">Crea una carpeta para la app y mueve el <code>.exe</code> ahí. Toda la configuración y los agentes se generarán en esa misma carpeta. Ej: <code>C:\Tools\ClaudeDevManager\</code></div>
+          <div class="callout warn">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">Elige bien la carpeta desde el principio</div>
+              <div class="callout-text">Si mueves el <code>.exe</code> después, la configuración y los agentes se quedan en la carpeta original. Lo más seguro es moverla carpeta completa.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">3</div>
+        <div class="step-body">
+          <div class="step-title">Ejecuta y sigue el wizard</div>
+          <div class="step-desc">Haz doble clic en el <code>.exe</code>. El wizard de primer arranque te guía en la configuración inicial.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Wizard ── -->
+  <div class="section" id="wizard">
+    <div class="section-badge">primeros pasos</div>
+    <h2 class="section-title">Primer <span>arranque</span></h2>
+    <p class="section-intro">La primera vez que ejecutas la app, un wizard de 3 pasos configura todo lo necesario.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Bienvenida</div>
+          <div class="step-desc">Presentación de la app y resumen de lo que puedes hacer con ella. Haz clic en <strong>Comenzar</strong>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">API key de Anthropic</div>
+          <div class="step-desc">Introduce tu API key de Anthropic. La necesitas para el modo asistido por IA y las sugerencias de agentes. Si no la tienes ahora, puedes saltarte este paso y configurarla más tarde desde Ajustes.</div>
+          <div class="callout info">
+            <i class="ti ti-info-circle" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">¿Dónde consigo mi API key?</div>
+              <div class="callout-text">En <code>console.anthropic.com</code> → API Keys → Create Key. La key tiene el formato <code>sk-ant-api03-...</code></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">3</div>
+        <div class="step-body">
+          <div class="step-title">Generación de estructura base</div>
+          <div class="step-desc">La app crea todas las carpetas necesarias y carga los agentes por defecto en todos los niveles. Este proceso tarda unos segundos. Al terminar, la app está lista para usar.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <i class="ti ti-check" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Agentes pre-cargados desde el primer minuto</div>
+        <div class="callout-text">Tras el wizard, ya tienes 20+ agentes listos — globales, por categoría y por tecnología. No necesitas crear nada para empezar a trabajar con Claude Code.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Tray ── -->
+  <div class="section" id="tray">
+    <div class="section-badge">primeros pasos</div>
+    <h2 class="section-title">Bandeja del <span>sistema</span></h2>
+    <p class="section-intro">Claude Dev Manager vive en la bandeja del sistema de Windows (esquina inferior derecha), siempre disponible sin ocupar la barra de tareas.</p>
+
+    <div class="tray-bar">
+      <div class="tray-icon"><i class="ti ti-robot" style="font-size:13px;color:var(--accent)" aria-hidden="true"></i></div>
+      <span>Claude Dev Manager está activo en la bandeja del sistema</span>
+    </div>
+
+    <h4>Menú del icono (clic derecho)</h4>
+    <div class="tray-menu">
+      <div class="tray-item"><i class="ti ti-layout-grid" style="margin-right:8px" aria-hidden="true"></i>Abrir</div>
+      <div class="tray-item"><i class="ti ti-refresh" style="margin-right:8px" aria-hidden="true"></i>Reiniciar</div>
+      <div class="tray-item danger"><i class="ti ti-power" style="margin-right:8px" aria-hidden="true"></i>Salir</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Cerrar la ventana</div>
+        <div class="card-body">Al pulsar la X de la ventana, la app <strong>no se cierra</strong> — se minimiza a la bandeja. Sigue corriendo en segundo plano.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cerrar completamente</div>
+        <div class="card-body">Clic derecho en el icono de la bandeja → <strong>Salir</strong>. Esto detiene el proceso por completo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Vista Proyectos ── -->
+  <div class="section" id="proyectos">
+    <div class="section-badge">la aplicación</div>
+    <h2 class="section-title">Vista <span>Proyectos</span></h2>
+    <p class="section-intro">Panel principal de gestión de proyectos. Muestra todos tus proyectos agrupados por categoría con su estado de sincronización.</p>
+
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#febc2e"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <span class="mockup-title">Claude Dev Manager — Proyectos</span>
+      </div>
+      <div class="mockup-body">
+        <div class="mock-nav">
+          <div class="mock-tab active">Proyectos</div>
+          <div class="mock-tab">Agentes</div>
+          <div class="mock-tab">Ajustes</div>
+        </div>
+        <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">🎮 Juegos</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span style="font-size:12px;font-weight:600;color:var(--text0)">Mi RPG</span>
+              <span class="mock-badge pending">↑ 2</span>
+            </div>
+            <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:6px">Unity · activo</div>
+            <div style="display:flex;gap:4px">
+              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">VS Code</button>
+              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">Carpeta</button>
+              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid rgba(124,106,247,0.3);background:var(--purple-dim);color:var(--accent);cursor:default">Sync ↑</button>
+            </div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span style="font-size:12px;font-weight:600;color:var(--text0)">Puzzle Game</span>
+              <span class="mock-badge green">✓</span>
+            </div>
+            <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:6px">Godot · activo</div>
+            <div style="display:flex;gap:4px">
+              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">VS Code</button>
+              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">Carpeta</button>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">🌐 Web</div>
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px;max-width:240px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:600;color:var(--text0)">Dashboard App</span>
+            <span class="mock-badge green">✓</span>
+          </div>
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono)">React · activo</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Acciones disponibles en cada proyecto</h4>
+    <div class="grid2">
+      <div class="card green-l"><div class="card-title"><i class="ti ti-brand-vscode" aria-hidden="true"></i> Abrir en VS Code</div><div class="card-body">Abre la carpeta del proyecto directamente en VS Code con Claude Code listo.</div></div>
+      <div class="card green-l"><div class="card-title"><i class="ti ti-folder-open" aria-hidden="true"></i> Abrir carpeta</div><div class="card-body">Abre el Explorador de Windows en la ruta del proyecto.</div></div>
+      <div class="card green-l"><div class="card-title"><i class="ti ti-refresh" aria-hidden="true"></i> Sync</div><div class="card-body">Sincroniza los agentes de niveles 1-3 con los cambios pendientes. Solo aparece cuando hay actualizaciones.</div></div>
+      <div class="card green-l"><div class="card-title"><i class="ti ti-edit" aria-hidden="true"></i> Editar proyecto</div><div class="card-body">Cambia el nombre, estado o edita el CLAUDE.md del proyecto.</div></div>
+    </div>
+
+    <h4>Badge de actualizaciones</h4>
+    <p style="font-size:13px;color:var(--text1);margin-bottom:10px">El número en naranja (<span class="mock-badge pending" style="font-size:11px">↑ 2</span>) indica cuántos agentes tienen una versión más nueva disponible en sus niveles fuente. Haz clic en <strong>Sync ↑</strong> para actualizar.</p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Vista Agentes ── -->
+  <div class="section" id="agentes">
+    <div class="section-badge">la aplicación</div>
+    <h2 class="section-title">Vista <span>Agentes</span></h2>
+    <p class="section-intro">Gestión completa de agentes en los cuatro niveles de jerarquía. Árbol de navegación estilo VS Code en el sidebar.</p>
+
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#febc2e"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <span class="mockup-title">Claude Dev Manager — Agentes</span>
+      </div>
+      <div class="mockup-body" style="display:flex;gap:16px;min-height:280px">
+        <div style="width:180px;flex-shrink:0;border-right:1px solid var(--border);padding-right:12px">
+          <div class="mock-tree">
+            <div><span class="grn">▼ Global</span></div>
+            <div style="padding-left:12px;color:var(--text2)">  code-reviewer</div>
+            <div style="padding-left:12px;color:var(--text2)">  git-helper</div>
+            <div style="padding-left:12px;color:var(--text2)">  ...</div>
+            <div><span class="blu">▼ Categorías</span></div>
+            <div style="padding-left:12px"><span class="blu">▼ Juegos</span></div>
+            <div style="padding-left:24px"><span class="sel">▼ Unity</span></div>
+            <div style="padding-left:36px;color:var(--text2)">unity-dev</div>
+            <div style="padding-left:36px;color:var(--text2)">unity-shader</div>
+            <div style="padding-left:24px"><span class="amb">▶ Godot</span></div>
+            <div style="padding-left:12px"><span class="blu">▶ Web</span></div>
+            <div><span class="acc">▼ Proyectos</span></div>
+            <div style="padding-left:12px;color:var(--text1)">▶ Mi RPG <span style="color:var(--amber)">↑2</span></div>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:10px;text-transform:uppercase">Unity — Nivel 3 · Tecnología</div>
+          <div class="mock-cards">
+            <div class="mock-card">
+              <div class="mock-card-name"><i class="ti ti-device-gamepad-2" style="color:var(--amber)" aria-hidden="true"></i> unity-dev <span class="mock-badge amber">tech</span></div>
+              <div class="mock-card-desc">Unity, C# y arquitectura de GameObjects</div>
+            </div>
+            <div class="mock-card">
+              <div class="mock-card-name"><i class="ti ti-eye" style="color:var(--amber)" aria-hidden="true"></i> unity-shader <span class="mock-badge amber">tech</span></div>
+              <div class="mock-card-desc">Shaders HLSL y Shader Graph URP/HDRP</div>
+            </div>
+            <div class="mock-card suggested">
+              <div class="mock-card-name"><i class="ti ti-sparkles" style="color:var(--text2)" aria-hidden="true"></i> unity-audio <span class="mock-badge suggested">sugerido</span></div>
+              <div class="mock-card-desc">Sistema de audio, AudioMixer y FMOD</div>
+            </div>
+            <div class="mock-card suggested">
+              <div class="mock-card-name"><i class="ti ti-sparkles" style="color:var(--text2)" aria-hidden="true"></i> unity-physics <span class="mock-badge suggested">sugerido</span></div>
+              <div class="mock-card-desc">Físicas, Rigidbody y colisiones</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid rgba(124,106,247,0.3);background:var(--purple-dim);color:var(--accent);cursor:default">+ Nuevo agente</button>
+            <button style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">↻ Sugerir más</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Cards en gris discontinuo = sugerencias de IA</div>
+        <div class="callout-text">Las cards con borde discontinuo son propuestas generadas por Claude basadas en lo que ya existe en ese nivel. Haz clic para crear el agente con esa propuesta pre-rellenada.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Jerarquía ── -->
+  <div class="section" id="jerarquia">
+    <div class="section-badge">la aplicación</div>
+    <h2 class="section-title">Jerarquía de <span>niveles</span></h2>
+    <p class="section-intro">Los agentes se organizan en cuatro niveles. Cada proyecto hereda físicamente los agentes de los niveles superiores que le aplican.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num green">1</div>
+        <div class="step-body">
+          <div class="step-title">Global</div>
+          <div class="step-desc">Agentes que aplican a <strong>todos los proyectos</strong> sin excepción. Aquí viven los agentes de uso universal: revisor de código, ayudante de Git, escritor de tests, escritor de documentación y el agente de refactorización.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--blue-dim);border-color:rgba(96,165,250,0.3);color:var(--blue)">2</div>
+        <div class="step-body">
+          <div class="step-title">Categoría</div>
+          <div class="step-desc">Agentes que aplican a todos los proyectos de una categoría (Juegos, Web, Móvil, Docs). Por ejemplo, el agente <code>game-designer</code> solo tiene sentido en proyectos de la categoría Juegos.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num amber">3</div>
+        <div class="step-body">
+          <div class="step-title">Tecnología</div>
+          <div class="step-desc">Agentes específicos de una tecnología concreta. <code>unity-dev</code> solo aplica a proyectos Unity, <code>react-dev</code> solo a proyectos React, etc.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--coral-dim);border-color:rgba(251,113,133,0.3);color:var(--coral)">4</div>
+        <div class="step-body">
+          <div class="step-title">Proyecto</div>
+          <div class="step-desc">Agentes exclusivos de un proyecto concreto. <strong>Nunca participan en el sync</strong> — son intocables y solo tú los gestionas. Úsalos para lógica muy específica de ese proyecto.</div>
+          <div class="callout tip">
+            <i class="ti ti-shield" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">Los agentes de nivel 4 son tuyos</div>
+              <div class="callout-text">Ninguna sincronización global puede modificarlos ni eliminarlos. Son 100% independientes.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Crear proyecto ── -->
+  <div class="section" id="crear-proyecto">
+    <div class="section-badge">tareas frecuentes</div>
+    <h2 class="section-title">Crear un <span>proyecto</span></h2>
+
+    <div class="grid2">
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-folder-plus" aria-hidden="true"></i> Proyecto nuevo</div>
+        <div class="card-body">La app crea la carpeta, la estructura base y el <code>CLAUDE.md</code> con plantilla según la tecnología elegida. Los agentes aplicables se copian automáticamente.</div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-folder-open" aria-hidden="true"></i> Importar existente</div>
+        <div class="card-body">Apunta a una carpeta que ya existe en tu sistema. La app añade <code>.claude/agents/</code> si no existe y copia los agentes correspondientes.</div>
+      </div>
+    </div>
+
+    <h4>Pasos — Proyecto nuevo</h4>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">En Vista Proyectos → botón "Nuevo proyecto"</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Rellena el formulario</div>
+          <div class="step-desc">Nombre del proyecto, categoría, tecnología concreta y ruta donde crear la carpeta.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">La app genera todo automáticamente</div>
+          <div class="step-desc">Carpeta del proyecto, <code>CLAUDE.md</code> con plantilla adaptada a tu tecnología y copia de todos los agentes aplicables en <code>.claude/agents/</code>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">4</div>
+        <div class="step-body">
+          <div class="step-title">Abre en VS Code y empieza</div>
+          <div class="step-desc">Desde la card del proyecto → botón <strong>VS Code</strong>. Claude Code ya tiene acceso a todos los agentes y al contexto del CLAUDE.md.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Crear agente ── -->
+  <div class="section" id="crear-agente">
+    <div class="section-badge">tareas frecuentes</div>
+    <h2 class="section-title">Crear un <span>agente</span></h2>
+    <p class="section-intro">Navega al nivel donde quieres crear el agente en la Vista Agentes y pulsa "+ Nuevo agente".</p>
+
+    <div class="grid2">
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-pencil" aria-hidden="true"></i> Modo manual</div>
+        <div class="card-body">Rellenas todos los campos directamente. Tienes control total sobre el nombre, descripción, modelo, herramientas y system prompt.</div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-sparkles" aria-hidden="true"></i> Modo asistido por IA</div>
+        <div class="card-body">Describes el agente en una frase. Claude genera el system prompt completo teniendo en cuenta el nivel y los agentes existentes.</div>
+      </div>
+    </div>
+
+    <h4>Modo asistido — paso a paso</h4>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Escribe una descripción breve</div>
+          <div class="step-desc">Ejemplo: <em>"Experto en animaciones Unity con Animator, AnimationTree y Timeline"</em></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Selecciona el idioma del system prompt</div>
+          <div class="step-desc">Elige <strong>ES</strong> (español) o <strong>EN</strong> (inglés). Los system prompts en inglés suelen obtener mejores resultados con Claude.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Generar con IA"</div>
+          <div class="step-desc">Claude genera un system prompt completo y bien estructurado. El resultado aparece en el campo de texto, listo para editar antes de guardar.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">4</div>
+        <div class="step-body">
+          <div class="step-title">Revisa, ajusta y guarda</div>
+          <div class="step-desc">El agente se crea en el nivel correspondiente. Si es nivel 1-3, aparecerá como <span class="chip amber"><i class="ti ti-arrow-up" aria-hidden="true"></i> pendiente</span> en los proyectos que lo necesiten.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Herramientas disponibles para los agentes</div>
+        <div class="callout-text" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+          <span class="tag">Bash</span><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Grep</span><span class="tag">Edit</span><span class="tag">MultiEdit</span><span class="tag">WebFetch</span><span class="tag">WebSearch</span><span class="tag">TodoRead</span><span class="tag">TodoWrite</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Sync ── -->
+  <div class="section" id="sync">
+    <div class="section-badge">tareas frecuentes</div>
+    <h2 class="section-title">Sincronizar <span>cambios</span></h2>
+    <p class="section-intro">Cuando editas un agente de nivel 1-3 o creas uno nuevo, los proyectos muestran una notificación de actualización. Tú decides cuándo aplicarla.</p>
+
+    <h4>Estados de un agente en un proyecto</h4>
+    <div class="grid3" style="margin-bottom:20px">
+      <div class="card">
+        <div style="margin-bottom:6px"><span class="chip green"><i class="ti ti-check" aria-hidden="true"></i> Al día</span></div>
+        <div class="card-body">La copia en el proyecto es idéntica a la fuente. No hay nada que hacer.</div>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:6px"><span class="chip amber"><i class="ti ti-arrow-up" aria-hidden="true"></i> Actualización</span></div>
+        <div class="card-body">La fuente ha cambiado desde la última copia. El agente puede mejorarse.</div>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:6px"><span class="chip gray"><i class="ti ti-user" aria-hidden="true"></i> Solo proyecto</span></div>
+        <div class="card-body">Agente de nivel 4. No tiene fuente superior. Nunca se toca en sync.</div>
+      </div>
+    </div>
+
+    <h4>Cómo sincronizar</h4>
+    <div class="grid2">
+      <div class="card amber-l">
+        <div class="card-title"><i class="ti ti-world" aria-hidden="true"></i> Sync global</div>
+        <div class="card-body">Botón en la Vista Agentes. Propaga <strong>todos</strong> los cambios pendientes a <strong>todos</strong> los proyectos de una vez.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title"><i class="ti ti-folder" aria-hidden="true"></i> Sync por proyecto</div>
+        <div class="card-body">Botón en la card de cada proyecto (solo aparece si tiene actualizaciones). Actualiza solo ese proyecto.</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El sync sobrescribe las copias en el proyecto</div>
+        <div class="callout-text">Si has editado manualmente un agente copiado directamente en la carpeta del proyecto (no desde el manager), esos cambios se perderán al sincronizar. Usa el nivel 4 para personalizaciones permanentes de un proyecto.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Sugerencias ── -->
+  <div class="section" id="sugerencias">
+    <div class="section-badge">tareas frecuentes</div>
+    <h2 class="section-title">Sugerencias <span>de IA</span></h2>
+    <p class="section-intro">En cada nivel del árbol de agentes aparecen 2-4 cards sugeridas por Claude, adaptadas al contexto y sin repetir lo que ya existe.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">→</div>
+        <div class="step-body">
+          <div class="step-title">Navega a cualquier nivel</div>
+          <div class="step-desc">Al entrar a un nivel (global, categoría, tech o proyecto), las sugerencias aparecen automáticamente con borde discontinuo junto a los agentes existentes.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">→</div>
+        <div class="step-body">
+          <div class="step-title">Haz clic en una sugerencia para crearla</div>
+          <div class="step-desc">Se abre el formulario pre-rellenado con nombre, descripción, herramientas y system prompt generado por IA. Edita lo que necesites y guarda.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">→</div>
+        <div class="step-body">
+          <div class="step-title">"Sugerir más" para nuevas propuestas</div>
+          <div class="step-desc">El botón <strong>↻ Sugerir más</strong> reemplaza las sugerencias actuales por un nuevo lote. Las sugerencias se cachean — no gasta tokens en cada visita.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Ajustes ── -->
+  <div class="section" id="ajustes">
+    <div class="section-badge">tareas frecuentes</div>
+    <h2 class="section-title"><span>Ajustes</span></h2>
+    <p class="section-intro">Pantalla de configuración accesible desde la barra de navegación superior. Contiene dos secciones.</p>
+
+    <div class="grid2">
+      <div class="card coral-l">
+        <div class="card-title"><i class="ti ti-key" aria-hidden="true"></i> API key de Anthropic</div>
+        <div class="card-body">Muestra la key enmascarada con un botón para cambiarla. Necesaria para el modo asistido de creación de agentes y las sugerencias automáticas.</div>
+      </div>
+      <div class="card coral-l">
+        <div class="card-title"><i class="ti ti-category" aria-hidden="true"></i> Categorías y tecnologías</div>
+        <div class="card-body">Crea nuevas categorías o añade tecnologías a las existentes. Al crear una nueva, la IA propondrá agentes base que aparecerán como sugerencias en ese nivel.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <i class="ti ti-bulb" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Añade tus propias tecnologías</div>
+        <div class="callout-text">¿Empiezas un proyecto con una tecnología no incluida por defecto? Añádela en Ajustes, y el manager generará agentes base específicos para ella mediante IA.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── FAQ ── -->
+  <div class="section" id="faq">
+    <div class="section-badge">referencia</div>
+    <h2 class="section-title">Preguntas <span>frecuentes</span></h2>
+
+    <div class="faq">
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Necesito tener Claude Code instalado?</div>
+        <div class="faq-a">Sí. Claude Dev Manager gestiona los agentes de Claude Code. Necesitas la extensión de Claude Code instalada en VS Code o la CLI de Claude Code para que los agentes funcionen.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Puedo usar la app sin API key?</div>
+        <div class="faq-a">Sí. El modo manual para crear agentes siempre está disponible. Solo el modo asistido por IA y las sugerencias automáticas requieren una API key de Anthropic.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Los cambios en agentes se sincronizan automáticamente?</div>
+        <div class="faq-a">No. Los cambios quedan como "pendientes" y tú decides cuándo sincronizar — por proyecto o todos a la vez con el botón global. Esto evita cambios inesperados mientras estás trabajando.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Qué pasa si edito un agente directamente en la carpeta del proyecto?</div>
+        <div class="faq-a">El manager no detectará ese cambio. La próxima vez que sincronices ese proyecto, la versión del manager sobreescribirá tu edición manual. Para hacer cambios permanentes en un proyecto, créalos como agentes de nivel 4 desde el manager.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Puedo mover la app a otra carpeta?</div>
+        <div class="faq-a">Sí, mueve la carpeta completa (no solo el .exe). Las rutas de los proyectos registrados son absolutas — si también mueves los proyectos, actualiza sus rutas desde la vista Proyectos → editar proyecto.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Cómo actualizo la app a una nueva versión?</div>
+        <div class="faq-a">Descarga el nuevo <code>claude-dev-manager.exe</code> desde el repositorio de GitHub y reemplaza el actual en tu carpeta. La configuración y los agentes se conservan porque están en ficheros separados.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> El botón "Abrir en VS Code" no funciona</div>
+        <div class="faq-a">El comando <code>code</code> necesita estar en el PATH del sistema. Abre VS Code → Command Palette (<code>Ctrl+Shift+P</code>) → "Shell Command: Install 'code' command in PATH". Reinicia la app y vuelve a intentarlo.</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+</main>
+</div><!-- /shell -->
+
+<script>
+const items = document.querySelectorAll('.nav-item');
+const sections = document.querySelectorAll('.section,[id]');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      items.forEach(i => i.classList.remove('active'));
+      const match = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      if(match) match.classList.add('active');
+    }
+  });
+}, {threshold:0.3});
+document.querySelectorAll('[id]').forEach(s => obs.observe(s));
+items.forEach(item => item.addEventListener('click', function(){
+  items.forEach(i => i.classList.remove('active'));
+  this.classList.add('active');
+}));
+</script>
+</body>
+</html>
