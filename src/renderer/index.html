@@ -1253,6 +1253,15 @@ async function renderSettingsView() {
     </div>
   </div>`;
 
+  // Updates
+  h += `<div class="settings-section">
+    <div class="settings-head">Actualizaciones</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="flex:1;font-size:12px;color:var(--text2)" id="update-settings-status">Versión actual: v${S.appVersion||'—'}</div>
+      <button class="btn sm" onclick="checkUpdateManual()"><i class="ti ti-refresh"></i> Buscar actualizaciones</button>
+    </div>
+  </div>`;
+
   // Categories management
   h += `<div class="settings-section">
     <div class="settings-head">Categorías y tecnologías</div>
@@ -1378,6 +1387,22 @@ async function deleteTech(catId, techId) {
   toast('Tecnología eliminada'); renderSettingsView();
 }
 function setSettingsTab(tab) { S.settingsTab = tab; renderSettingsView(); }
+
+async function checkUpdateManual() {
+  const el = document.getElementById('update-settings-status');
+  if (el) el.textContent = 'Buscando…';
+  if (!window.api?.checkForUpdate) {
+    if (el) el.textContent = 'Auto-update solo disponible en la versión empaquetada.';
+    return;
+  }
+  const result = await window.api.checkForUpdate();
+  if (result?.error) {
+    if (el) el.textContent = 'Error: ' + result.error;
+    toast('Error: ' + result.error, 'err');
+  } else {
+    if (el) el.textContent = 'Comprobando… (el banner aparecerá si hay nueva versión)';
+  }
+}
 
 async function importAgentFromUrl() {
   const url = document.getElementById('import-agent-url')?.value?.trim();
@@ -1783,8 +1808,10 @@ init();
   });
 
   window.api.onUpdateError((msg) => {
-    console.warn('[update] error:', msg);
+    toast('Error al buscar actualización: ' + msg, 'err');
     banner.style.display = 'none';
+    const el = document.getElementById('update-settings-status');
+    if (el) el.textContent = 'Error: ' + msg;
   });
 })();
 </script>
