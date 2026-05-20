@@ -6,6 +6,7 @@ publish:
   provider: github
   owner: adanoliva
   repo: cdm
+  private: true
 
 directories:
   buildResources: assets

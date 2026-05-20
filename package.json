@@ -1,6 +1,6 @@
 {
   "name": "claude-dev-manager",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Visual manager for Claude Code agents and dev projects",
   "main": "src/main/main.js",
   "scripts": {
