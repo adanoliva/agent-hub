@@ -1,0 +1,4 @@
+provider: github
+owner: adanoliva
+repo: cdm
+updaterCacheDirName: claude-dev-manager-updater

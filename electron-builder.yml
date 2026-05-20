@@ -48,6 +48,8 @@ extraResources:
     to: assets/
     filter:
       - "**/*"
+  - from: app-update.yml
+    to: app-update.yml
 
 asar: true
 compression: maximum
