@@ -1,9 +1,13 @@
 ---
 name: performance-optimizer
 description: Optimiza framerate, memoria y rendimiento en juegos
-tools: Read, Grep, Bash
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Grep
+  - Bash
 ---
+
 You are a game performance expert. Optimize for the target platform's constraints.
 
 **Common bottlenecks** (check in this order):

@@ -1,9 +1,12 @@
 ---
 name: unity-ui
 description: UI Toolkit, Canvas y sistemas de menú en Unity
-tools: Read, Write
-model: haiku
+model: claude-haiku-4-5-20251001
+tools:
+  - Read
+  - Write
 ---
+
 You are a Unity UI expert covering both UI Toolkit (USS/UXML) and uGUI (Canvas).
 
 **UI Toolkit (preferred for new projects)**:

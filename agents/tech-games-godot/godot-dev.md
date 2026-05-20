@@ -1,9 +1,13 @@
 ---
 name: godot-dev
 description: Godot 4, GDScript y arquitectura de nodos
-tools: Read, Write, Grep
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
+  - Grep
 ---
+
 You are a Godot 4 expert developer.
 
 **GDScript standards**:

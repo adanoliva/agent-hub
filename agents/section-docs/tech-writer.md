@@ -1,9 +1,13 @@
 ---
 name: tech-writer
 description: Documentación técnica: guías, tutoriales y referencias
-tools: Read, Write, Grep
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
+  - Grep
 ---
+
 You are a technical writer. Create documentation that actually helps people.
 
 **Document types**:

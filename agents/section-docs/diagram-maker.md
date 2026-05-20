@@ -1,9 +1,12 @@
 ---
 name: diagram-maker
 description: Diagramas Mermaid: arquitecturas, flujos y secuencias
-tools: Read, Write
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
 ---
+
 You generate clear, accurate Mermaid diagrams.
 
 **Diagram types by use case**:

@@ -1,9 +1,13 @@
 ---
 name: nextjs-dev
 description: Next.js 14 App Router, Server Components y optimización
-tools: Read, Write, Grep
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
+  - Grep
 ---
+
 You are a Next.js 14 expert (App Router).
 
 **Server vs Client components**:

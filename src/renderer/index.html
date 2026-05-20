@@ -1120,10 +1120,17 @@ async function renderSettingsView() {
   try { aiStatus = await req('GET','/ai/status'); } catch {}
 
   const cats = S.config?.categories || [];
+  if (!S.settingsTab) S.settingsTab = 'general';
   document.getElementById('tb-actions').innerHTML = '';
   document.getElementById('tb-sub').textContent = '';
 
-  let h = '<div class="settings-view">';
+  let h = `<div class="settings-view">
+  <div class="drawer-tabs" style="margin:-32px -32px 24px;padding-left:32px">
+    <div class="drawer-tab ${S.settingsTab==='general'?'active':''}" onclick="setSettingsTab('general')">General</div>
+    <div class="drawer-tab ${S.settingsTab==='ext-agents'?'active':''}" onclick="setSettingsTab('ext-agents')">Agentes externos</div>
+  </div>`;
+
+  if (S.settingsTab === 'general') {
 
   // AI Provider
   h += `<div class="settings-section">
@@ -1147,7 +1154,7 @@ async function renderSettingsView() {
         </div>`:''}
     </div>
 
-    <div class="provider-option ${S.config?.aiProvider==='github'?'selected':''}" onclick="selectProvider('github')">
+    <div class="provider-option ${S.config?.aiProvider==='github'?'selected':''}" onclick="selectProvider('github')" style="display:none">
       <div class="provider-option-head">
         <div class="provider-radio ${S.config?.aiProvider==='github'?'on':''}"></div>
         <div style="flex:1">
@@ -1259,6 +1266,24 @@ async function renderSettingsView() {
     <button class="btn sm" onclick="openAddCategory()" style="margin-top:8px"><i class="ti ti-plus"></i> Nueva categoría</button>
   </div>`;
 
+  } // end general tab
+
+  if (S.settingsTab === 'ext-agents') {
+  const cats = S.config?.categories || [];
+  h += `<div class="settings-section">
+    <div class="settings-head">Importar agente externo</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Introduce la URL de un archivo de agente (<code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">.md</code> con frontmatter). CDM lo descargará, lo mostrará para revisión y lo guardará como un agente real en la categoría que elijas.</div>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <div class="field" style="flex:1;margin-bottom:0">
+        <label>URL del agente</label>
+        <input id="import-agent-url" placeholder="https://ejemplo.com/mi-agente.md" style="font-family:var(--mono);font-size:12px"/>
+      </div>
+      <button class="btn" onclick="importAgentFromUrl()" style="flex-shrink:0;margin-bottom:0"><i class="ti ti-download"></i> Importar</button>
+    </div>
+    <div id="import-agent-status" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>
+  </div>`;
+  } // end ext-agents tab
+
   h += '</div>';
   document.getElementById('view-settings').innerHTML = h;
 }
@@ -1341,6 +1366,93 @@ async function deleteTech(catId, techId) {
   await req('DELETE',`/categories/${catId}/technologies/${techId}`);
   S.config = await req('GET','/config');
   toast('Tecnología eliminada'); renderSettingsView();
+}
+function setSettingsTab(tab) { S.settingsTab = tab; renderSettingsView(); }
+
+async function importAgentFromUrl() {
+  const url = document.getElementById('import-agent-url')?.value?.trim();
+  if (!url) { toast('Introduce una URL','err'); return; }
+  const status = document.getElementById('import-agent-status');
+  if (status) status.textContent = 'Descargando…';
+  try {
+    const { agent } = await req('POST', '/agents/import-url', { url });
+    if (status) status.textContent = '';
+    _showImportAgentModal(agent);
+  } catch(e) {
+    if (status) status.textContent = '';
+    toast(e.message || 'Error al importar el agente', 'err');
+  }
+}
+
+function _showImportAgentModal(agent) {
+  const cats = S.config?.categories || [];
+  const MODEL_OPTS = ['sonnet','haiku','opus'].map(m =>
+    `<option value="${m}" ${agent.model===m?'selected':''}>${m}</option>`
+  ).join('');
+  const ALL_TOOLS = ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','MultiEdit','TodoRead','TodoWrite'];
+  const toolChecks = ALL_TOOLS.map(t =>
+    `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin:2px 6px 2px 0;cursor:pointer">
+      <input type="checkbox" value="${t}" ${(agent.tools||[]).includes(t)?'checked':''}> ${t}
+    </label>`
+  ).join('');
+
+  let catOptions = `<option value="global">Global (disponible en todos los proyectos)</option>`;
+  for (const cat of cats) {
+    catOptions += `<option value="section:${cat.id}">Sección: ${esc(cat.name)}</option>`;
+    for (const tech of (cat.technologies||[])) {
+      catOptions += `<option value="tech:${cat.id}:${tech.id}">Tech: ${esc(cat.name)} › ${esc(tech.name)}</option>`;
+    }
+  }
+
+  showModal('Revisar e importar agente', '', `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field" style="margin-bottom:0"><label>Nombre</label>
+        <input id="ia-name" value="${esc(agent.name||'')}"/>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>Descripción</label>
+        <input id="ia-desc" value="${esc(agent.description||'')}"/>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>Modelo</label>
+        <select id="ia-model">${MODEL_OPTS}</select>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>Herramientas</label>
+        <div style="background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:8px">${toolChecks}</div>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>System prompt</label>
+        <textarea id="ia-system" rows="6" style="font-family:var(--mono);font-size:11px;resize:vertical">${esc(agent.system||'')}</textarea>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>Guardar en</label>
+        <select id="ia-dest">${catOptions}</select>
+      </div>
+    </div>
+  `, async () => {
+    const name   = document.getElementById('ia-name')?.value?.trim();
+    const desc   = document.getElementById('ia-desc')?.value?.trim();
+    const model  = document.getElementById('ia-model')?.value;
+    const system = document.getElementById('ia-system')?.value?.trim();
+    const dest   = document.getElementById('ia-dest')?.value;
+    const tools  = [...document.querySelectorAll('.modal-body input[type=checkbox][value]')].filter(cb=>cb.checked).map(cb=>cb.value);
+
+    if (!name) { toast('El nombre es obligatorio','err'); return false; }
+
+    let level='global', categoryId=undefined, techId=undefined;
+    if (dest === 'global') { level = 'global'; }
+    else if (dest.startsWith('tech:')) { const [,c,t]=dest.split(':'); level='tech'; categoryId=c; techId=t; }
+    else if (dest.startsWith('section:')) { const [,c]=dest.split(':'); level='section'; categoryId=c; }
+
+    try {
+      await req('POST','/agents',{ level, categoryId, techId, agent:{ name, description:desc, model, tools, system } });
+      toast(`Agente "${name}" importado`);
+      S.agents = null;
+      if (window._reloadAgentsView) window._reloadAgentsView();
+    } catch(e) { toast(e.message,'err'); return false; }
+  });
+
+  // Fix tool checkboxes — re-query after modal renders
+  requestAnimationFrame(() => {
+    const boxes = document.querySelectorAll('.modal-body input[type=checkbox][value]');
+    boxes.forEach(cb => { if ((agent.tools||[]).includes(cb.value)) cb.checked = true; });
+  });
 }
 
 // ══════════════════════════════════════════

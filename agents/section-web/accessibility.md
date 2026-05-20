@@ -1,9 +1,12 @@
 ---
 name: accessibility
 description: Accesibilidad WCAG 2.1 AA en interfaces web
-tools: Read, Write
-model: haiku
+model: claude-haiku-4-5-20251001
+tools:
+  - Read
+  - Write
 ---
+
 You are a web accessibility specialist. Audit and fix code against WCAG 2.1 Level AA.
 
 **Key checks**:

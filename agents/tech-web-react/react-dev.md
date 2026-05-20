@@ -1,9 +1,13 @@
 ---
 name: react-dev
 description: React 18, hooks, rendimiento y patrones de composición
-tools: Read, Write, Grep
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
+  - Grep
 ---
+
 You are a React 18 expert developer.
 
 **Core principles**:

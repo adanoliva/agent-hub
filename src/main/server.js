@@ -20,6 +20,7 @@ const {
   deleteProjectAgent,
   seedDefaultAgents,
   syncGlobalAgentsToClaudeDir,
+  parseAgentFromString,
 } = require('./agents');
 const {
   createProject,
@@ -152,6 +153,42 @@ app.delete('/api/categories/:catId/technologies/:techId', (req, res) => {
   cat.technologies = cat.technologies.filter(t => t.id !== req.params.techId);
   writeConfig(cfg);
   res.json({ ok: true });
+});
+
+// ── Agent import from URL ─────────────────────────────────────────────────────
+
+app.post('/api/agents/import-url', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  try {
+    const content = await new Promise((resolve, reject) => {
+      const lib = url.startsWith('https') ? require('https') : require('http');
+      lib.get(url, (resp) => {
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          const lib2 = resp.headers.location.startsWith('https') ? require('https') : require('http');
+          lib2.get(resp.headers.location, (r2) => {
+            let d = '';
+            r2.on('data', c => d += c);
+            r2.on('end', () => resolve(d));
+            r2.on('error', reject);
+          }).on('error', reject);
+          return;
+        }
+        if (resp.statusCode !== 200) return reject(new Error(`HTTP ${resp.statusCode}`));
+        let data = '';
+        resp.on('data', chunk => data += chunk);
+        resp.on('end', () => resolve(data));
+        resp.on('error', reject);
+      }).on('error', reject);
+    });
+
+    const fallbackName = url.split('/').pop().replace(/\.md$/i, '') || 'imported-agent';
+    const agent = parseAgentFromString(content, fallbackName);
+    res.json({ ok: true, agent });
+  } catch (e) {
+    res.status(500).json({ error: `No se pudo obtener el agente: ${e.message}` });
+  }
 });
 
 // ── Agents — levels 1-3 ───────────────────────────────────────────────────────

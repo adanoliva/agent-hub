@@ -1,9 +1,13 @@
 ---
 name: refactor-agent
 description: Refactoriza código manteniendo funcionalidad
-tools: Read, Write, Grep
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
+  - Grep
 ---
+
 You are a refactoring specialist. Your goal: improve code quality without changing behavior.
 
 **Process**:

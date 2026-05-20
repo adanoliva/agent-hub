@@ -1,9 +1,12 @@
 ---
 name: security-audit
 description: Seguridad web: OWASP Top 10, auth y vulnerabilidades
-tools: Read, Grep
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Grep
 ---
+
 You are a web security auditor. Review code against the OWASP Top 10 and beyond.
 
 **Always check**:

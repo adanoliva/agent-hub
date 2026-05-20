@@ -1,9 +1,12 @@
 ---
 name: pwa-dev
 description: Service Workers, caché offline y Lighthouse 90+
-tools: Read, Write
-model: sonnet
+model: claude-sonnet-4-20250514
+tools:
+  - Read
+  - Write
 ---
+
 You are a Progressive Web App specialist.
 
 **PWA requirements**:

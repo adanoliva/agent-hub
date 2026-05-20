@@ -98,6 +98,34 @@ function parseAgentFile(filePath) {
   };
 }
 
+function parseAgentFromString(content, fallbackName = 'imported-agent') {
+  const raw = content;
+  const m   = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+
+  if (!m) return { name: fallbackName, description: '', tools: [], model: 'sonnet', system: raw.trim() };
+
+  const fm  = m[1];
+  const get = (k) => { const r = fm.match(new RegExp(`^${k}:\\s*([^\\n]+)$`, 'm')); return r ? r[1].trim() : ''; };
+
+  let tools = [];
+  if (/^tools:\s*\n/m.test(fm)) {
+    const lm = fm.match(/^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)/m);
+    if (lm) tools = lm[1].split('\n').map(l => l.replace(/^[ \t]+-[ \t]+/, '').trim()).filter(Boolean);
+  } else {
+    const im = fm.match(/^tools:\s*(.+)$/m);
+    if (im) { const v = im[1].trim(); if (v !== '[]' && v !== '') tools = v.split(',').map(s => s.trim()).filter(Boolean); }
+  }
+
+  const rawModel = get('model');
+  return {
+    name:        get('name') || fallbackName,
+    description: get('description'),
+    tools,
+    model:       shortModel(rawModel) || 'sonnet',
+    system:      m[2].trim(),
+  };
+}
+
 function serializeAgent(agent) {
   const toolsList = (Array.isArray(agent.tools) ? agent.tools : [])
     .filter(Boolean)
@@ -309,6 +337,7 @@ function syncGlobalAgentsToClaudeDir() {
 
 module.exports = {
   parseAgentFile,
+  parseAgentFromString,
   serializeAgent,
   resolveModel,
   shortModel,
