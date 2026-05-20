@@ -1,0 +1,49 @@
+appId: com.tuusuario.claude-dev-manager
+productName: Claude Dev Manager
+copyright: Copyright © 2025
+
+directories:
+  buildResources: assets
+  output: dist
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.ico
+  # Request admin rights only if needed (not required for portable)
+  requestedExecutionLevel: asInvoker
+
+portable:
+  artifactName: claude-dev-manager.exe
+  # electron-builder sets PORTABLE_EXECUTABLE_DIR at runtime
+  # so config.js can find the correct data directory next to the .exe
+
+files:
+  # Source files
+  - src/**/*
+  - package.json
+  # All node_modules (asar bundles them efficiently)
+  - node_modules/**/*
+  # Exclude things that bloat the build
+  - "!node_modules/.bin/**"
+  - "!node_modules/**/{test,tests,__tests__,spec,specs}/**"
+  - "!node_modules/**/*.{md,markdown,txt,log}"
+  - "!node_modules/**/LICENSE*"
+  - "!node_modules/**/CHANGELOG*"
+  - "!node_modules/**/README*"
+  - "!node_modules/**/{example,examples,demo,demos}/**"
+  - "!**/.git/**"
+  - "!**/.github/**"
+
+# Assets are available at process.resourcesPath/assets/ in production
+extraResources:
+  - from: assets/
+    to: assets/
+    filter:
+      - "**/*"
+
+asar: true
+compression: maximum
+nodeGypRebuild: false
