@@ -1,6 +1,11 @@
-appId: com.tuusuario.claude-dev-manager
+appId: com.adanoliva.claude-dev-manager
 productName: Claude Dev Manager
 copyright: Copyright © 2025
+
+publish:
+  provider: github
+  owner: adanoliva
+  repo: cdm
 
 directories:
   buildResources: assets

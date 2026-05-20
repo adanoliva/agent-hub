@@ -9,11 +9,13 @@
     "prebuild": "node scripts/generate-icon.js",
     "build": "electron-builder --win portable",
     "build:dir": "electron-builder --win dir",
-    "postbuild": "node scripts/post-build.js"
+    "postbuild": "node scripts/post-build.js",
+    "release": "electron-builder --win portable --publish always"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
     "cors": "^2.8.5",
+    "electron-updater": "^6.8.3",
     "express": "^4.18.2"
   },
   "devDependencies": {
