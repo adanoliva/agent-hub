@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Dev Manager — Especificación Completa</title>
+<title>Claude Dev Manager — Especificación Completa v1.2.4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -443,577 +443,983 @@ h4 {
 
   <!-- ── Cover ── -->
   <div class="cover">
-    <div class="cover-tag"><i class="ti ti-file-description" aria-hidden="true"></i> ESPECIFICACIÓN COMPLETA v1.0</div>
+    <div class="cover-tag"><i class="ti ti-file-description" aria-hidden="true"></i> ESPECIFICACIÓN COMPLETA v1.2.4</div>
     <h1 class="cover-title">Claude <span>Dev</span> Manager</h1>
-    <p class="cover-sub">Aplicación Electron de escritorio para gestionar agentes de Claude Code, organizar proyectos de desarrollo y mantener contexto CLAUDE.md por proyecto, con asistencia de IA integrada.</p>
+    <p class="cover-sub">Especificación técnica completa de la arquitectura, el modelo de datos, la API REST embebida, el sistema de agentes, el auto-update y el proceso de build para la versión 1.2.4.</p>
     <div class="cover-pills">
-      <span class="pill"><i class="ti ti-brand-windows" aria-hidden="true"></i> Windows</span>
-      <span class="pill"><i class="ti ti-atom" aria-hidden="true"></i> Electron</span>
-      <span class="pill accent"><i class="ti ti-robot" aria-hidden="true"></i> Claude API</span>
-      <span class="pill green"><i class="ti ti-check" aria-hidden="true"></i> Spec cerrada</span>
-      <span class="pill"><i class="ti ti-calendar" aria-hidden="true"></i> Mayo 2025</span>
+      <span class="pill green"><i class="ti ti-check" aria-hidden="true"></i> v1.2.4</span>
+      <span class="pill"><i class="ti ti-brand-electron" aria-hidden="true"></i> Electron 29</span>
+      <span class="pill"><i class="ti ti-server" aria-hidden="true"></i> Express 4 · puerto 3737</span>
+      <span class="pill accent"><i class="ti ti-robot" aria-hidden="true"></i> electron-updater 6</span>
+      <span class="pill blue"><i class="ti ti-brand-github" aria-hidden="true"></i> GitHub Releases</span>
     </div>
   </div>
 
   <!-- ── TOC ── -->
   <div class="toc">
-    <div class="toc-title">Índice</div>
+    <div class="toc-title">Contenidos</div>
     <div class="toc-grid">
-      <a class="toc-item" href="#s01"><span class="toc-num">01</span> Plataforma e infraestructura</a>
-      <a class="toc-item" href="#s02"><span class="toc-num">02</span> Estructura de ficheros</a>
-      <a class="toc-item" href="#s03"><span class="toc-num">03</span> Categorías y tecnologías</a>
-      <a class="toc-item" href="#s04"><span class="toc-num">04</span> Jerarquía de agentes</a>
-      <a class="toc-item" href="#s05"><span class="toc-num">05</span> Sistema de sincronización</a>
-      <a class="toc-item" href="#s06"><span class="toc-num">06</span> Creación de agentes</a>
-      <a class="toc-item" href="#s07"><span class="toc-num">07</span> Sugerencias de agentes por IA</a>
-      <a class="toc-item" href="#s08"><span class="toc-num">08</span> Gestión de proyectos</a>
-      <a class="toc-item" href="#s09"><span class="toc-num">09</span> Navegación e interfaz</a>
-      <a class="toc-item" href="#s10"><span class="toc-num">10</span> Primer arranque y ajustes</a>
-      <a class="toc-item" href="#s11"><span class="toc-num">11</span> Agentes incluidos por defecto</a>
-      <a class="toc-item" href="#s12"><span class="toc-num">12</span> Flujos de vida completos</a>
+      <a class="toc-item" href="#s1"><span class="toc-num">01</span> Visión general y arquitectura</a>
+      <a class="toc-item" href="#s2"><span class="toc-num">02</span> Estructura de directorios</a>
+      <a class="toc-item" href="#s3"><span class="toc-num">03</span> Proceso principal (main.js)</a>
+      <a class="toc-item" href="#s4"><span class="toc-num">04</span> Formato de agentes</a>
+      <a class="toc-item" href="#s5"><span class="toc-num">05</span> Sistema de hashes y sync</a>
+      <a class="toc-item" href="#s6"><span class="toc-num">06</span> API REST — referencia completa</a>
+      <a class="toc-item" href="#s7"><span class="toc-num">07</span> Proveedores de IA</a>
+      <a class="toc-item" href="#s8"><span class="toc-num">08</span> Auto-update</a>
+      <a class="toc-item" href="#s9"><span class="toc-num">09</span> Importación de agentes externos</a>
+      <a class="toc-item" href="#s10"><span class="toc-num">10</span> Renderer y context bridge</a>
+      <a class="toc-item" href="#s11"><span class="toc-num">11</span> Config.json — esquema</a>
+      <a class="toc-item" href="#s12"><span class="toc-num">12</span> Build y release</a>
     </div>
   </div>
 
-  <!-- ── 01 ── -->
-  <div class="section" id="s01">
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 01 · Visión general                            -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s1">
     <div class="section-header">
       <span class="section-num">01</span>
-      <h2 class="section-title">Plataforma e <span>infraestructura</span></h2>
+      <h2 class="section-title">Visión general y <span>arquitectura</span></h2>
     </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      Claude Dev Manager (CDM) es una aplicación Electron que actúa como panel de control para agentes de Claude Code. Todo el estado persiste en disco — no hay base de datos. El proceso principal levanta un servidor Express en <code>localhost:3737</code> que sirve tanto los assets del renderer como la API REST. El renderer es un SPA de fichero único en HTML/vanilla JS.
+    </p>
+
+    <div class="flow">
+      <div class="flow-step"><strong>Renderer</strong>index.html · vanilla JS</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Context Bridge</strong>window.api (IPC)</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Main Process</strong>main.js · Electron</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Express :3737</strong>API REST</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Disco</strong>agents/ · config.json</div>
+    </div>
+
+    <div class="divider"></div>
+
     <div class="grid3">
-      <div class="card accent-l"><div class="card-label">Runtime</div><div class="card-value">Electron (Node.js embebido, Chromium para UI)</div></div>
-      <div class="card accent-l"><div class="card-label">Distribución</div><div class="card-value">Portable <code>.exe</code> — sin instalador, sin Node.js requerido</div></div>
-      <div class="card accent-l"><div class="card-label">Sistema operativo</div><div class="card-value">Windows (objetivo principal)</div></div>
-      <div class="card"><div class="card-label">Backend</div><div class="card-value">Express embebido en el proceso principal de Electron</div></div>
-      <div class="card"><div class="card-label">Puerto</div><div class="card-value mono">localhost:3737</div></div>
-      <div class="card"><div class="card-label">Actualizaciones</div><div class="card-value">Manual — descargar nuevo <code>.exe</code> de GitHub privado y reemplazar</div></div>
-    </div>
-    <div class="grid2">
       <div class="card green-l">
-        <div class="card-label">System tray</div>
-        <div class="card-value">La app vive en la bandeja del sistema. Minimizar cierra la ventana pero la app sigue activa. Click derecho en el icono → menú contextual (Abrir, Reiniciar, Salir).</div>
+        <div class="card-label">Runtime</div>
+        <div class="card-value">Electron 29 + Node.js embebido. Portable — sin instalador.</div>
       </div>
-      <div class="card green-l">
-        <div class="card-label">Rutas portables</div>
-        <div class="card-value">Toda la configuración, agentes y caché se generan en la carpeta donde se ejecuta el <code>.exe</code>. El proyecto es 100% portable — mueve la carpeta y funciona.</div>
+      <div class="card accent-l">
+        <div class="card-label">Servidor</div>
+        <div class="card-value">Express 4 en <code>127.0.0.1:3737</code>. Solo accesible localmente.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-label">Persistencia</div>
+        <div class="card-value">Ficheros <code>.md</code> con frontmatter YAML. <code>config.json</code> para metadatos.</div>
       </div>
     </div>
-    <div class="alert info">
-      <i class="ti ti-info-circle" aria-hidden="true"></i>
-      <div class="alert-body">
-        <div class="alert-title">Rutas de proyectos externas</div>
-        <div class="alert-sub">Los proyectos de desarrollo (Unity, React, etc.) pueden estar en cualquier ruta del sistema — no necesitan estar dentro de la carpeta de la app. Solo se registra la ruta en la configuración.</div>
+
+    <h4>Módulos principales</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>main.js</code> — Ciclo de vida de Electron, ventana, IPC handlers, tray, auto-updater.<div class="sub">Single-instance lock. Inicia Express, crea ventana y tray, configura electron-updater.</div></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--blue-dim);color:var(--blue)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>server.js</code> — Servidor Express embebido. Define todos los endpoints de la API REST.<div class="sub">Sirve el renderer como archivos estáticos. Catch-all redirige a index.html.</div></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim);color:var(--green)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>agents.js</code> — Parse, serialización, CRUD, hashes SHA-256, seeding de defaults, mirror a <code>~/.claude/agents/</code>.<div class="sub">parseAgentFromString() también se usa para importación de agentes externos por URL.</div></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--amber-dim);color:var(--amber)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>projects.js</code> — Crear, importar, actualizar, eliminar proyectos. Sync de agentes. Lectura/escritura de CLAUDE.md.<div class="sub">syncProject() copia agentes aplicables y actualiza agentHashes en config.json.</div></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--coral-dim);color:var(--coral)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>ai.js</code> — Abstracción sobre los tres proveedores. getProviderStatus(), generateAgentPrompt(), getSuggestions().<div class="sub">Las sugerencias se cachean en cache/suggestions.json por clave de nivel.</div></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--bg3);color:var(--text2)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>config.js</code> — readConfig(), writeConfig(), bootstrapDirectories(), APP_DIR, getAgentDir().<div class="sub">APP_DIR es el directorio del .exe en producción (PORTABLE_EXECUTABLE_DIR) o la raíz del proyecto en dev.</div></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--bg3);color:var(--text2)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>preload.js</code> — Context bridge. Expone <code>window.api</code> al renderer con contextIsolation habilitado.<div class="sub">nodeIntegration: false. El renderer no tiene acceso directo a Node.js.</div></div>
       </div>
     </div>
   </div>
 
   <div class="section-sep"></div>
 
-  <!-- ── 02 ── -->
-  <div class="section" id="s02">
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 02 · Estructura de directorios                 -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s2">
     <div class="section-header">
       <span class="section-num">02</span>
-      <h2 class="section-title">Estructura de <span>ficheros</span></h2>
+      <h2 class="section-title">Estructura de <span>directorios</span></h2>
     </div>
-    <div class="code-block">
-<span class="hi">Carpeta de la app (donde está el .exe)</span>
-claude-dev-manager/
-  <span class="acc">claude-dev-manager.exe</span>
-  config.json              <span class="dim">← configuración, proyectos registrados, hashes</span>
-  agents/
-    <span class="grn">global/</span>                  <span class="dim">← nivel 1: agentes para todos los proyectos</span>
-      code-reviewer.md
-      git-helper.md
-      ...
-    <span class="blu">section-games/</span>           <span class="dim">← nivel 2: agentes por categoría</span>
-    <span class="blu">section-web/</span>
-    <span class="blu">section-mobile/</span>
-    <span class="blu">section-docs/</span>
-    <span class="amb">tech-games-unity/</span>        <span class="dim">← nivel 3: agentes por tecnología</span>
-    <span class="amb">tech-web-react/</span>
-    <span class="amb">tech-mobile-react-native/</span>
-    ...
-  cache/
-    suggestions.json       <span class="dim">← sugerencias cacheadas de IA por nivel</span>
 
-<span class="hi">Cada proyecto (en cualquier ruta del sistema)</span>
-C:/ruta/al/proyecto/
-  <span class="acc">CLAUDE.md</span>                <span class="dim">← contexto del proyecto para Claude Code</span>
-  .claude/
-    agents/                <span class="dim">← nivel 4: agentes propios + copias de 1-3</span>
-      code-reviewer.md     <span class="dim">← copia del global</span>
-      unity-dev.md         <span class="dim">← copia del tech</span>
-      mi-agente-custom.md  <span class="dim">← exclusivo del proyecto</span>
+    <h4>Directorio de la aplicación (APP_DIR)</h4>
+    <div class="code-block">
+<span class="dim"># Producción: junto al .exe (PORTABLE_EXECUTABLE_DIR)</span>
+<span class="dim"># Desarrollo: raíz del proyecto</span>
+
+<span class="grn">APP_DIR/</span>
+├── <span class="hi">config.json</span>              <span class="dim">← config global, proyectos, hashes</span>
+├── agents/
+│   ├── <span class="acc">global/</span>              <span class="dim">← nivel 1 — todos los proyectos</span>
+│   │   ├── code-reviewer.md
+│   │   ├── git-helper.md
+│   │   ├── test-writer.md
+│   │   ├── doc-writer.md
+│   │   ├── refactor-agent.md
+│   │   └── debugger.md
+│   ├── section-{catId}/      <span class="dim">← nivel 2 — categoría</span>
+│   └── tech-{catId}-{techId}/ <span class="dim">← nivel 3 — tecnología</span>
+└── cache/
+    └── <span class="amb">suggestions.json</span>     <span class="dim">← sugerencias cacheadas por nivel</span></div>
+
+    <h4>Directorio de cada proyecto</h4>
+    <div class="code-block">
+<span class="grn">{projectPath}/</span>
+├── <span class="hi">CLAUDE.md</span>                <span class="dim">← contexto del proyecto para Claude Code</span>
+└── .claude/
+    └── agents/               <span class="dim">← nivel 4 — copia de aplicables + propios</span>
+        ├── code-reviewer.md  <span class="dim">← copia global (hash en config.json)</span>
+        ├── unity-dev.md      <span class="dim">← copia tech (hash en config.json)</span>
+        └── mi-agente.md      <span class="dim">← exclusivo del proyecto, no participa en sync</span></div>
+
+    <h4>Mirror de globales a ~/.claude/agents/</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65;margin-bottom:10px">
+      Cada vez que se crea, actualiza o elimina un agente de nivel global, <code>syncGlobalAgentsToClaudeDir()</code> copia todos los ficheros de <code>agents/global/</code> a <code>~/.claude/agents/</code>. Esto hace que los agentes globales estén disponibles en cualquier proyecto desde la CLI de Claude Code sin necesidad de sync manual.
+    </p>
+
+    <h4>Nomenclatura de directorios de agentes</h4>
+    <div class="grid3">
+      <div class="card">
+        <div class="card-label">Nivel 1 — Global</div>
+        <div class="card-value mono">agents/global/</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Nivel 2 — Categoría</div>
+        <div class="card-value mono">agents/section-{catId}/</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Nivel 3 — Tecnología</div>
+        <div class="card-value mono">agents/tech-{catId}-{techId}/</div>
+      </div>
     </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 03 · Proceso principal                         -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2 class="section-title">Proceso principal <span>(main.js)</span></h2>
+    </div>
+
+    <h4>Ciclo de arranque</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>app.whenReady</strong>readConfig · bootstrapDirs</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Agents</strong>migrate · seed · syncToClaudeDir</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>startServer()</strong>Express :3737</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>createWindow</strong>BrowserWindow</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>createTray</strong>setupAutoUpdater</div>
+    </div>
+
+    <h4>Ventana principal</h4>
+    <div class="code-block">
+<span class="hi">BrowserWindow</span> {
+  width: <span class="amb">1280</span>, height: <span class="amb">800</span>,
+  minWidth: <span class="amb">900</span>, minHeight: <span class="amb">600</span>,
+  backgroundColor: <span class="acc">'#0d0d0f'</span>,
+  autoHideMenuBar: <span class="grn">true</span>,
+  webPreferences: {
+    nodeIntegration: <span class="grn">false</span>,
+    contextIsolation: <span class="grn">true</span>,
+    preload: <span class="acc">'preload.js'</span>,
+    devTools: <span class="acc">isDev</span>,
+  }
+}
+<span class="dim">// Cierre minimiza a tray en lugar de salir</span>
+mainWindow.on(<span class="acc">'close'</span>, e => {
+  if (!app.isQuiting) { e.preventDefault(); mainWindow.hide(); }
+});</div>
+
+    <h4>IPC handlers expuestos</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>app:version</code> · <code>app:appDir</code> · <code>app:isDev</code> — información de la app.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>window:minimize</code> · <code>window:hide</code> — control de ventana.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>shell:openPath</code> · <code>shell:openExternal</code> · <code>shell:openVSCode</code> — apertura de rutas y URLs.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>update:check</code> · <code>update:download</code> · <code>update:install</code> — ciclo de actualización.</div>
+      </div>
+    </div>
+
+    <h4>Eventos IPC del auto-updater (renderer ← main)</h4>
+    <div class="code-block">
+<span class="grn">update-available</span>  <span class="dim">→ { version, releaseDate }</span>
+<span class="grn">update-progress</span>   <span class="dim">→ percent (number)</span>
+<span class="grn">update-ready</span>      <span class="dim">→ (sin payload) descarga completada</span>
+<span class="grn">update-error</span>      <span class="dim">→ message (string)</span></div>
+
+    <h4>Single-instance lock</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      La app usa <code>app.requestSingleInstanceLock()</code>. Si ya hay una instancia corriendo, el segundo intento la enfoca y termina.
+    </p>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 04 · Formato de agentes                        -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s4">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2 class="section-title">Formato de <span>agentes</span></h2>
+    </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      Cada agente es un fichero <code>.md</code> con un bloque de frontmatter YAML delimitado por <code>---</code>. CDM siempre serializa el campo <code>model</code> con el ID completo de Claude. La UI muestra el alias corto.
+    </p>
+
+    <h4>Estructura del fichero</h4>
+    <div class="code-block">
+<span class="dim">---</span>
+<span class="acc">name:</span> <span class="hi">unity-dev</span>
+<span class="acc">description:</span> <span class="hi">Experto en Unity, C# y arquitectura de GameObjects</span>
+<span class="acc">model:</span> <span class="grn">claude-sonnet-4-20250514</span>
+<span class="acc">tools:</span>
+  - <span class="amb">Bash</span>
+  - <span class="amb">Read</span>
+  - <span class="amb">Write</span>
+  - <span class="amb">Grep</span>
+<span class="dim">---</span>
+
+Eres un experto en Unity 2023 LTS. Dominas MonoBehaviour,
+ScriptableObjects, prefabs y URP...</div>
+
+    <h4>Campos del frontmatter</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>name</code> — identificador único dentro del nivel. Solo minúsculas, guiones. Coincide con el nombre del fichero.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>description</code> — texto corto. Claude Code lo usa para la delegación automática de tareas.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>model</code> — ID completo del modelo Claude. CDM acepta aliases cortos en la UI y los resuelve al serializar.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>tools</code> — lista YAML de herramientas habilitadas para el agente.</div>
+      </div>
+    </div>
+
+    <h4>Aliases de modelo</h4>
+    <div class="grid3">
+      <div class="card">
+        <div class="card-label">haiku</div>
+        <div class="card-value mono">claude-haiku-4-5-20251001</div>
+      </div>
+      <div class="card">
+        <div class="card-label">sonnet</div>
+        <div class="card-value mono">claude-sonnet-4-20250514</div>
+      </div>
+      <div class="card">
+        <div class="card-label">opus</div>
+        <div class="card-value mono">claude-opus-4-20250514</div>
+      </div>
+    </div>
+
+    <h4>Herramientas disponibles</h4>
+    <div class="tag-cluster">
+      <span class="tag">Bash</span>
+      <span class="tag">Read</span>
+      <span class="tag">Write</span>
+      <span class="tag">Edit</span>
+      <span class="tag">MultiEdit</span>
+      <span class="tag">Grep</span>
+      <span class="tag">WebFetch</span>
+      <span class="tag">WebSearch</span>
+      <span class="tag">TodoRead</span>
+      <span class="tag">TodoWrite</span>
+    </div>
+
+    <h4>parseAgentFromString(content, fallbackName)</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65;margin-bottom:10px">
+      Función exportada de <code>agents.js</code> que parsea un string de texto en lugar de un fichero. Acepta tanto la sintaxis de lista YAML como la sintaxis inline para el campo <code>tools</code>. Se usa para la importación de agentes externos por URL antes de que se guarden en disco.
+    </p>
+    <div class="code-block">
+<span class="dim">// Retorna:</span>
+{
+  name:        <span class="grn">string</span>,
+  description: <span class="grn">string</span>,
+  model:       <span class="grn">string</span>,  <span class="dim">// alias corto</span>
+  tools:       <span class="grn">string[]</span>,
+  system:      <span class="grn">string</span>,
+}</div>
+
+    <h4>Agentes incluidos por defecto (nivel global)</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-robot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>code-reviewer</code> — Revisa código buscando bugs, antipatrones y mejoras. Modelo: <span class="chip green">sonnet</span></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-robot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>git-helper</code> — Commits, ramas y resolución de conflictos. Modelo: <span class="chip gray">haiku</span></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-robot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>test-writer</code> — Genera tests unitarios e integración. Modelo: <span class="chip green">sonnet</span></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-robot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>doc-writer</code> — Documentación técnica en Markdown. Modelo: <span class="chip green">sonnet</span></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-robot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>refactor-agent</code> — Refactoriza código manteniendo funcionalidad. Modelo: <span class="chip green">sonnet</span></div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-robot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>debugger</code> — Diagnóstico y corrección de errores. Modelo: <span class="chip green">sonnet</span></div>
+      </div>
+    </div>
+
+    <div class="alert info" style="margin-top:12px">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">Migración automática de formato</div>
+        <div class="alert-sub"><code>migrateAgentFiles()</code> se ejecuta en cada arranque. Si detecta agentes en formato antiguo (model como alias corto, tools inline), los reescribe al formato canónico. Los agentes seeded también se actualizan si están en formato antiguo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 05 · Sistema de hashes y sync                  -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s5">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2 class="section-title">Sistema de hashes <span>y sync</span></h2>
+    </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      CDM usa hashes SHA-256 para detectar si los agentes copiados en un proyecto están desactualizados respecto a la versión maestra en el manager. El hash se calcula sobre el contenido serializado del agente (no sobre el fichero en disco directamente) para evitar diferencias de CRLF/LF.
+    </p>
+
+    <h4>Flujo de sync</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>getApplicableAgents</strong>global + section + tech</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>hashAgent()</strong>SHA-256 del serializado</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Comparar</strong>hash vs config.agentHashes</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Copiar</strong>si hash difiere o no existe</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Guardar</strong>nuevo hash en config.json</div>
+    </div>
+
+    <h4>Estado de cada agente en un proyecto</h4>
+    <div class="grid2">
+      <div class="card green-l">
+        <div class="card-label"><span class="chip green">ok</span></div>
+        <div class="card-value">El hash del fichero copiado coincide con el maestro. No hay cambios pendientes.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-label"><span class="chip amber">outdated</span></div>
+        <div class="card-value">El agente maestro cambió desde la última sync. El proyecto muestra badge <code>↑N</code>.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-label"><span class="chip" style="background:var(--blue-dim);border-color:rgba(96,165,250,0.25);color:var(--blue)">new</span></div>
+        <div class="card-value">Agente aplicable que aún no existe en el proyecto (nunca fue copiado).</div>
+      </div>
+      <div class="card">
+        <div class="card-label"><span class="chip gray">local</span></div>
+        <div class="card-value">Agente de nivel 4 (propio del proyecto). CDM no lo toca durante el sync.</div>
+      </div>
+    </div>
+
+    <h4>Endpoints de sync</h4>
+    <div class="code-block">
+<span class="blu">POST</span> /api/projects/<span class="acc">:id</span>/sync     <span class="dim">→ sync un proyecto individual</span>
+<span class="blu">POST</span> /api/sync-all               <span class="dim">→ sync todos los proyectos</span>
+<span class="blu">GET</span>  /api/projects/<span class="acc">:id</span>/sync-status <span class="dim">→ estado actual sin modificar nada</span></div>
+
+    <h4>hashAgent() vs hashFile()</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      <code>hashAgent(agent)</code> serializa el objeto agente a string y hace SHA-256. <code>hashFile(filePath)</code> lee el fichero y hace SHA-256 del contenido crudo. CDM usa <code>hashAgent()</code> para calcular el hash de la versión maestra y lo guarda en <code>config.json</code>. Para comparar, calcula el hash del agente maestro y lo compara con el almacenado.
+    </p>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 06 · API REST                                  -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s6">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2 class="section-title">API REST — <span>referencia completa</span></h2>
+    </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      El servidor Express escucha en <code>http://127.0.0.1:3737</code>. Todos los endpoints retornan JSON. Los errores retornan <code>{ "error": "mensaje" }</code> con el código HTTP apropiado.
+    </p>
+
+    <h4>Health</h4>
+    <div class="code-block">
+<span class="blu">GET</span>  /api/health
+<span class="dim">→ { status: "ok", version: "1.0.0", appDir: string }</span></div>
+
+    <h4>Config</h4>
+    <div class="code-block">
+<span class="blu">GET</span>  /api/config
+<span class="dim">→ config.json completo</span>
+
+<span class="blu">PUT</span>  /api/config
+<span class="hi">Body:</span> { apiKey?, aiProvider?, githubToken?, githubModel? }
+<span class="dim">→ { ok: true }</span></div>
+
+    <h4>Detección de Claude CLI</h4>
+    <div class="code-block">
+<span class="blu">GET</span>  /api/detect-cli
+<span class="dim">→ { found: boolean, path: string|null }</span></div>
+
+    <h4>Wizard setup</h4>
+    <div class="code-block">
+<span class="blu">POST</span> /api/setup
+<span class="hi">Body:</span> { apiKey?, aiProvider? }
+<span class="dim">→ { ok: true, appDir: string, agentsCreated: number }</span></div>
+
+    <h4>Categorías y tecnologías</h4>
+    <div class="code-block">
+<span class="blu">GET</span>    /api/categories
+<span class="blu">POST</span>   /api/categories
+  <span class="hi">Body:</span> { id, name, icon?, color?, technologies? }
+<span class="blu">PUT</span>    /api/categories/<span class="acc">:id</span>
+  <span class="hi">Body:</span> campos a actualizar
+<span class="blu">DELETE</span> /api/categories/<span class="acc">:id</span>
+
+<span class="blu">POST</span>   /api/categories/<span class="acc">:catId</span>/technologies
+  <span class="hi">Body:</span> { id, name }
+<span class="blu">DELETE</span> /api/categories/<span class="acc">:catId</span>/technologies/<span class="acc">:techId</span></div>
+
+    <h4>Agentes — niveles 1-3</h4>
+    <div class="code-block">
+<span class="dim">Query params: level=global|section|tech  categoryId?  techId?</span>
+
+<span class="blu">GET</span>    /api/agents?level=&categoryId=&techId=
+<span class="dim">→ Agent[]</span>
+
+<span class="blu">GET</span>    /api/agents/applicable?categoryId=&techId=
+<span class="dim">→ Agent[] (global + section + tech combinados)</span>
+
+<span class="blu">POST</span>   /api/agents
+  <span class="hi">Body:</span> { level, categoryId?, techId?, agent: AgentData }
+<span class="dim">→ Agent creado  |  409 si ya existe</span>
+
+<span class="blu">PUT</span>    /api/agents
+  <span class="hi">Body:</span> { level, categoryId?, techId?, oldName, agent: AgentData }
+<span class="dim">→ Agent actualizado</span>
+
+<span class="blu">DELETE</span> /api/agents
+  <span class="hi">Body:</span> { level, categoryId?, techId?, name }
+<span class="dim">→ { ok: true }</span></div>
+
+    <h4>Importación de agente externo por URL</h4>
+    <div class="code-block">
+<span class="blu">POST</span>   /api/agents/import-url
+  <span class="hi">Body:</span> { url: string }
+<span class="dim">→ { ok: true, agent: AgentData }
+   Descarga el .md, lo parsea con parseAgentFromString()
+   y retorna el objeto sin guardar en disco todavía.</span></div>
+
+    <h4>Agentes — nivel 4 (proyecto)</h4>
+    <div class="code-block">
+<span class="blu">GET</span>    /api/projects/<span class="acc">:id</span>/agents
+<span class="blu">POST</span>   /api/projects/<span class="acc">:id</span>/agents
+  <span class="hi">Body:</span> { agent: AgentData }
+<span class="blu">PUT</span>    /api/projects/<span class="acc">:id</span>/agents
+  <span class="hi">Body:</span> { oldName, agent: AgentData }
+<span class="blu">DELETE</span> /api/projects/<span class="acc">:id</span>/agents/<span class="acc">:name</span></div>
+
+    <h4>Proyectos</h4>
+    <div class="code-block">
+<span class="blu">GET</span>    /api/projects
+<span class="dim">→ Project[] con pendingUpdates y pathExists calculados</span>
+
+<span class="blu">POST</span>   /api/projects
+  <span class="hi">Body:</span> { name, categoryId, techId?, projectPath, description?, status? }
+<span class="dim">→ Crea la carpeta + .claude/agents/ + copia agentes aplicables</span>
+
+<span class="blu">POST</span>   /api/projects/import
+  <span class="hi">Body:</span> { name, categoryId, techId?, projectPath, description?, status? }
+<span class="dim">→ Registra carpeta existente + copia agentes aplicables  |  404 si no existe</span>
+
+<span class="blu">PUT</span>    /api/projects/<span class="acc">:id</span>
+  <span class="hi">Body:</span> campos a actualizar
+<span class="blu">DELETE</span> /api/projects/<span class="acc">:id</span>?deleteFolder=true|false</div>
+
+    <h4>Sync</h4>
+    <div class="code-block">
+<span class="blu">GET</span>  /api/projects/<span class="acc">:id</span>/sync-status
+<span class="dim">→ { [agentName]: { status: "ok"|"outdated"|"new"|"local", agent: AgentData } }</span>
+
+<span class="blu">POST</span> /api/projects/<span class="acc">:id</span>/sync
+<span class="dim">→ { updated: number, added: number }</span>
+
+<span class="blu">POST</span> /api/sync-all
+<span class="dim">→ Array de resultados por proyecto</span></div>
+
+    <h4>CLAUDE.md</h4>
+    <div class="code-block">
+<span class="blu">GET</span> /api/projects/<span class="acc">:id</span>/context
+<span class="dim">→ { content: string }</span>
+
+<span class="blu">PUT</span> /api/projects/<span class="acc">:id</span>/context
+  <span class="hi">Body:</span> { content: string }
+<span class="dim">→ { ok: true, filePath: string }</span></div>
+
+    <h4>IA</h4>
+    <div class="code-block">
+<span class="blu">GET</span>  /api/ai/status
+<span class="dim">→ { provider: "cli"|"api"|"github", ready: boolean, ... }</span>
+
+<span class="blu">POST</span> /api/ai/generate-prompt
+  <span class="hi">Body:</span> { description, name?, level?, categoryId?, techId?,
+          tools?, language?, existingAgents? }
+<span class="dim">→ { system: string }  — system prompt generado</span>
+
+<span class="blu">GET</span>  /api/ai/suggestions?level=&categoryId=&techId=&force=
+<span class="dim">→ AgentSuggestion[]  — cacheado por clave de nivel</span>
+
+<span class="blu">POST</span> /api/ai/suggestions/refresh
+  <span class="hi">Body:</span> { level, categoryId?, techId? }
+<span class="dim">→ AgentSuggestion[]  — regenera forzando sin cache</span>
+
+<span class="blu">DELETE</span> /api/ai/suggestions/cache
+<span class="dim">→ { ok: true }  — elimina todo el cache de sugerencias</span></div>
+
+    <h4>AgentData — tipo común</h4>
+    <div class="code-block">
+{
+  name:        <span class="grn">string</span>,
+  description: <span class="grn">string</span>,
+  model:       <span class="grn">"haiku" | "sonnet" | "opus"</span>,
+  tools:       <span class="grn">string[]</span>,
+  system:      <span class="grn">string</span>,
+  <span class="dim">// campos añadidos por el servidor al listar:</span>
+  level:       <span class="grn">"global" | "section" | "tech" | "project"</span>,
+  categoryId:  <span class="grn">string | null</span>,
+  techId:      <span class="grn">string | null</span>,
+  filePath:    <span class="grn">string</span>,
+}</div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 07 · Proveedores de IA                         -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s7">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2 class="section-title">Proveedores <span>de IA</span></h2>
+    </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      CDM abstrae tres proveedores distintos detrás de una interfaz común en <code>ai.js</code>. El proveedor activo se guarda en <code>config.aiProvider</code>.
+    </p>
+
+    <div class="decision">
+      <div class="decision-icon" style="background:var(--green-dim)"><i class="ti ti-terminal" style="color:var(--green)"></i></div>
+      <div class="decision-body">
+        <div class="decision-q">Proveedor: cli</div>
+        <div class="decision-a">Claude CLI — suscripción claude.ai</div>
+        <div class="decision-sub">Llama a la CLI de Claude Code instalada en el sistema. Sin coste adicional. Requiere <code>claude</code> en PATH. CDM detecta la CLI con <code>where claude</code> (Windows) o <code>which claude</code>. El token de acceso del usuario lo gestiona la propia CLI.</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-icon" style="background:var(--purple-dim)"><i class="ti ti-key" style="color:var(--accent)"></i></div>
+      <div class="decision-body">
+        <div class="decision-q">Proveedor: api</div>
+        <div class="decision-a">API key de Anthropic</div>
+        <div class="decision-sub">Usa el SDK oficial <code>@anthropic-ai/sdk</code>. Requiere una API key de <code>console.anthropic.com</code> almacenada en <code>config.apiKey</code>. Tiene coste por token.</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-icon" style="background:var(--blue-dim)"><i class="ti ti-brand-github" style="color:var(--blue)"></i></div>
+      <div class="decision-body">
+        <div class="decision-q">Proveedor: github</div>
+        <div class="decision-a">GitHub Copilot Models API</div>
+        <div class="decision-sub">Oculto en la UI de ajustes (hidden en el DOM) pero funcional. Requiere un Personal Access Token con permiso <code>models:read</code> y un modelo seleccionado (<code>gpt-4o-mini</code>, <code>gpt-4o</code> u <code>o1-mini</code>). Token en <code>config.githubToken</code>, modelo en <code>config.githubModel</code>. Disponible en el wizard.</div>
+      </div>
+    </div>
+
+    <h4>Funciones exportadas de ai.js</h4>
+    <div class="code-block">
+<span class="hi">getProviderStatus()</span>
+<span class="dim">→ { provider, ready, ... }  — comprueba si el proveedor activo está operativo</span>
+
+<span class="hi">generateAgentPrompt</span>({ description, name, level, categoryId, techId,
+                       tools, language, existingAgents })
+<span class="dim">→ string  — system prompt generado</span>
+
+<span class="hi">getSuggestions</span>({ level, categoryId, techId, existingAgents }, force)
+<span class="dim">→ AgentSuggestion[]  — lee del cache o genera nuevo si force=true</span>
+
+<span class="hi">clearSuggestionsCache()</span>
+<span class="dim">→ void  — elimina cache/suggestions.json</span></div>
+
+    <h4>Cache de sugerencias</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      Las sugerencias se cachean en <code>cache/suggestions.json</code> con clave compuesta <code>{level}:{categoryId}:{techId}</code>. Incluyen timestamp y lista de agentes sugeridos con nombre, descripción y herramientas propuestas. La UI ofrece el botón "Sugerir más" que llama a <code>POST /api/ai/suggestions/refresh</code> para forzar regeneración. Las sugerencias nunca repiten agentes que ya existen en ese nivel.
+    </p>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 08 · Auto-update                               -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s8">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <h2 class="section-title"><span>Auto-update</span></h2>
+    </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      CDM usa <code>electron-updater</code> v6 con GitHub Releases como provider. El mecanismo es opt-in: la descarga no empieza hasta que el usuario pulsa el botón en el banner.
+    </p>
+
+    <h4>Configuración (app-update.yml)</h4>
+    <div class="code-block">
+<span class="hi">provider:</span> <span class="grn">github</span>
+<span class="hi">owner:</span>    <span class="acc">adanoliva</span>
+<span class="hi">repo:</span>     <span class="acc">cdm</span>
+<span class="hi">private:</span>  <span class="grn">true</span>
+<span class="hi">updaterCacheDirName:</span> claude-dev-manager-updater</div>
+
+    <h4>Opciones del auto-updater</h4>
+    <div class="code-block">
+autoUpdater.<span class="acc">token</span>                = <span class="dim">'ghp_...'</span>  <span class="dim">// token read-only para repo privado</span>
+autoUpdater.<span class="acc">autoDownload</span>        = <span class="grn">false</span>
+autoUpdater.<span class="acc">autoInstallOnAppQuit</span> = <span class="grn">false</span>
+autoUpdater.<span class="acc">logger</span>              = <span class="grn">null</span></div>
+
+    <h4>Ciclo de actualización</h4>
+    <div class="flow">
+      <div class="flow-step"><strong>Arranque +8s</strong>checkForUpdates()</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>update-available</strong>Banner en UI</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Usuario pulsa</strong>downloadUpdate()</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>update-downloaded</strong>Botón "Reiniciar"</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>quitAndInstall</strong>Reemplaza .exe</div>
+    </div>
+
+    <h4>IPC del updater</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>update:check</code> → invoca <code>autoUpdater.checkForUpdates()</code>. Usado por el botón manual de ajustes.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>update:download</code> → invoca <code>autoUpdater.downloadUpdate()</code>.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>update:install</code> → invoca <code>autoUpdater.quitAndInstall(false, true)</code>.</div>
+      </div>
+    </div>
+
     <div class="alert warn">
       <i class="ti ti-alert-triangle" aria-hidden="true"></i>
       <div class="alert-body">
-        <div class="alert-title">Los proyectos son autónomos</div>
-        <div class="alert-sub">Claude Code solo lee <code>{proyecto}/.claude/agents/</code>. Todos los agentes aplicables (niveles 1-3) se copian físicamente ahí al crear o importar el proyecto. No hay dependencias externas.</div>
+        <div class="alert-title">Solo en producción</div>
+        <div class="alert-sub"><code>setupAutoUpdater()</code> retorna inmediatamente si <code>isDev === true</code>. El auto-update no se ejecuta con <code>npm run dev</code>.</div>
       </div>
     </div>
+
+    <h4>Banner de actualización (renderer)</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      El banner es un <code>div</code> fijo en la esquina inferior derecha (<code>position:fixed; bottom:28px; right:16px</code>), oculto por defecto. Cuando llega el evento <code>update-available</code> via <code>window.api.onUpdateAvailable()</code>, el banner se muestra con el número de versión y el botón de descarga. Al completarse la descarga (<code>update-ready</code>), el botón cambia a "Reiniciar ahora".
+    </p>
   </div>
 
   <div class="section-sep"></div>
 
-  <!-- ── 03 ── -->
-  <div class="section" id="s03">
-    <div class="section-header">
-      <span class="section-num">03</span>
-      <h2 class="section-title">Categorías y <span>tecnologías</span></h2>
-    </div>
-    <div class="grid2">
-      <div class="card">
-        <div class="card-label"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i> Juegos</div>
-        <div class="tag-cluster">
-          <span class="tag accent">Unity</span>
-          <span class="tag">Godot</span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-label"><i class="ti ti-world" aria-hidden="true"></i> Aplicaciones Web</div>
-        <div class="tag-cluster">
-          <span class="tag blue">React</span>
-          <span class="tag blue">Fullstack</span>
-          <span class="tag blue">Next.js</span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-label"><i class="ti ti-device-mobile" aria-hidden="true"></i> Apps Móviles</div>
-        <div class="tag-cluster">
-          <span class="tag amber">React Native</span>
-          <span class="tag amber">PWA</span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-label"><i class="ti ti-file-description" aria-hidden="true"></i> Documentación</div>
-        <div class="tag-cluster">
-          <span class="tag coral">Markdown/MDX</span>
-          <span class="tag coral">Docusaurus</span>
-        </div>
-      </div>
-    </div>
-    <div class="alert ok">
-      <i class="ti ti-puzzle" aria-hidden="true"></i>
-      <div class="alert-body">
-        <div class="alert-title">Categorías y tecnologías son extensibles desde Ajustes</div>
-        <div class="alert-sub">Se definen en <code>config.json</code>. Al añadir una nueva categoría o tecnología desde Ajustes, la IA propone agentes base directamente en la vista del nivel creado.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-sep"></div>
-
-  <!-- ── 04 ── -->
-  <div class="section" id="s04">
-    <div class="section-header">
-      <span class="section-num">04</span>
-      <h2 class="section-title">Jerarquía de <span>agentes</span></h2>
-    </div>
-    <div class="grid4">
-      <div class="card green-l">
-        <div class="card-label">Nivel 1</div>
-        <div class="card-value" style="font-weight:600;margin-bottom:4px">Global</div>
-        <div class="card-value" style="font-size:11px;color:var(--text1)">Aplica a todos los proyectos sin excepción</div>
-      </div>
-      <div class="card blue-l">
-        <div class="card-label">Nivel 2</div>
-        <div class="card-value" style="font-weight:600;margin-bottom:4px">Categoría</div>
-        <div class="card-value" style="font-size:11px;color:var(--text1)">Aplica a todos los proyectos de esa categoría</div>
-      </div>
-      <div class="card amber-l">
-        <div class="card-label">Nivel 3</div>
-        <div class="card-value" style="font-weight:600;margin-bottom:4px">Tecnología</div>
-        <div class="card-value" style="font-size:11px;color:var(--text1)">Aplica a proyectos con esa tech concreta</div>
-      </div>
-      <div class="card coral-l">
-        <div class="card-label">Nivel 4</div>
-        <div class="card-value" style="font-weight:600;margin-bottom:4px">Proyecto</div>
-        <div class="card-value" style="font-size:11px;color:var(--text1)">Exclusivo del proyecto, no se propaga</div>
-      </div>
-    </div>
-    <h4>Formato de cada agente (.md)</h4>
-    <div class="code-block">
----
-name: unity-dev
-description: Experto en Unity, C# y arquitectura de GameObjects
-tools: Bash, Read, Write, Grep
-model: sonnet
----
-Eres un experto en Unity 2023 LTS. Dominas MonoBehaviour,
-ScriptableObjects, prefabs y URP. Escribes C# limpio usando
-[SerializeField] en lugar de campos public...
-    </div>
-    <h4>Herramientas disponibles</h4>
-    <div class="tag-cluster">
-      <span class="tag">Bash</span><span class="tag">Read</span><span class="tag">Write</span>
-      <span class="tag">Grep</span><span class="tag">Edit</span><span class="tag">MultiEdit</span>
-      <span class="tag">WebFetch</span><span class="tag">WebSearch</span>
-      <span class="tag">TodoRead</span><span class="tag">TodoWrite</span>
-    </div>
-    <h4>Modelos disponibles</h4>
-    <div class="tag-cluster">
-      <span class="tag green">haiku — rápido y económico</span>
-      <span class="tag amber">sonnet — equilibrado (recomendado)</span>
-      <span class="tag accent">opus — máxima capacidad</span>
-    </div>
-  </div>
-
-  <div class="section-sep"></div>
-
-  <!-- ── 05 ── -->
-  <div class="section" id="s05">
-    <div class="section-header">
-      <span class="section-num">05</span>
-      <h2 class="section-title">Sistema de <span>sincronización</span></h2>
-    </div>
-    <div class="row-list">
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-copy" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Copia física al crear/importar proyecto</strong> — todos los agentes de niveles 1-3 aplicables se copian a <code>{proyecto}/.claude/agents/</code>. El manager guarda un hash SHA-256 del contenido de cada copia en <code>config.json</code>.
-          <div class="sub">Los agentes de nivel 4 (propios del proyecto) nunca participan en el sync — son intocables.</div>
-        </div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--amber-dim)"><i class="ti ti-alert-triangle" style="font-size:11px;color:var(--amber)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Detección de cambios</strong> — al editar un agente en niveles 1-3 o crear uno nuevo, el manager compara el hash actual con el de cada copia en cada proyecto. Si difieren → estado "Actualización disponible".
-          <div class="sub">Los agentes nuevos aparecen como "pendiente de copiar" en proyectos que deberían tenerlos.</div>
-        </div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--blue-dim)"><i class="ti ti-eye" style="font-size:11px;color:var(--blue)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Estados visibles por agente en la vista de proyecto:</strong>
-          <div class="status-row" style="margin-top:8px">
-            <span class="chip green"><i class="ti ti-check" aria-hidden="true"></i> Al día</span>
-            <span class="chip amber"><i class="ti ti-arrow-up" aria-hidden="true"></i> Actualización disponible</span>
-            <span class="chip gray"><i class="ti ti-user" aria-hidden="true"></i> Solo este proyecto</span>
-          </div>
-        </div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-refresh" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Sincronización — opción C (global + por proyecto)</strong>
-          <div class="sub">Botón "Sync todos" en la vista de Agentes → propaga todos los cambios a todos los proyectos.<br>Botón "Sync" en cada proyecto → solo ese proyecto. Ambas opciones siempre disponibles.</div>
-        </div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--bg3)"><i class="ti ti-bell" style="font-size:11px;color:var(--text2)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Badge de pendientes en la vista de Proyectos</strong> — cada card de proyecto muestra un badge numérico con las actualizaciones pendientes. A golpe de vista sabes qué proyectos necesitan sync sin entrar en ellos.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-sep"></div>
-
-  <!-- ── 06 ── -->
-  <div class="section" id="s06">
-    <div class="section-header">
-      <span class="section-num">06</span>
-      <h2 class="section-title">Creación de <span>agentes</span></h2>
-    </div>
-    <div class="grid2">
-      <div class="card blue-l">
-        <div class="card-label">Modo manual</div>
-        <div class="card-value">Rellenas todos los campos directamente: nombre, descripción, modelo, herramientas y system prompt. Control total sobre el resultado.</div>
-      </div>
-      <div class="card accent-l">
-        <div class="card-label">Modo asistido por IA</div>
-        <div class="card-value">Escribes una descripción breve. La app llama a Claude con contexto del nivel actual y genera un system prompt completo, optimizado y listo para editar antes de guardar.</div>
-      </div>
-    </div>
-    <h4>Flujo modo asistido</h4>
-    <div class="flow">
-      <div class="flow-step"><strong>Descripción breve</strong>Ej: "Experto en UI/UX que genera interfaces con HTML y CSS"</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Selector idioma</strong>ES · EN</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Claude genera</strong>System prompt completo adaptado al nivel y categoría</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Revisar y guardar</strong>Editable antes de confirmar</div>
-    </div>
-    <div class="alert info">
-      <i class="ti ti-language" aria-hidden="true"></i>
-      <div class="alert-body">
-        <div class="alert-title">Idioma del system prompt: ES o EN</div>
-        <div class="alert-sub">El meta-prompt enviado a Claude incluye: nivel del agente, categoría/tech, herramientas seleccionadas, agentes ya existentes en ese nivel (para no duplicar) e idioma elegido.</div>
-      </div>
-    </div>
-    <div class="alert warn">
-      <i class="ti ti-key" aria-hidden="true"></i>
-      <div class="alert-body">
-        <div class="alert-title">Requiere API key de Anthropic</div>
-        <div class="alert-sub">Se configura en el wizard del primer arranque. Guardada en <code>config.json</code>. Editable desde Ajustes. Sin API key, el modo manual siempre está disponible.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-sep"></div>
-
-  <!-- ── 07 ── -->
-  <div class="section" id="s07">
-    <div class="section-header">
-      <span class="section-num">07</span>
-      <h2 class="section-title">Sugerencias de agentes <span>por IA</span></h2>
-    </div>
-    <div class="row-list">
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-sparkles" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Aparecen en todos los niveles</strong> — al navegar a cualquier nivel en la vista de Agentes (global, categoría, tech o proyecto), se muestran 2-4 cards de sugerencias junto a los agentes existentes. Visualmente diferenciadas: borde discontinuo, ligeramente atenuadas.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-database" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Cacheadas</strong> — las sugerencias se generan una sola vez por nivel y se guardan en <code>cache/suggestions.json</code>. No se gasta tokens en cada visita.
-          <div class="sub">El botón "Sugerir más" reemplaza las sugerencias cacheadas por un nuevo lote. No es acumulativo.</div>
-        </div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--amber-dim)"><i class="ti ti-brain" style="font-size:11px;color:var(--amber)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Contextuales y no repetitivas</strong> — el prompt incluye la lista de agentes ya existentes en ese nivel. Claude no propone nada que ya esté creado ni variantes redundantes.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--blue-dim)"><i class="ti ti-click" style="font-size:11px;color:var(--blue)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Click para crear</strong> — al pulsar una card sugerida, se abre el formulario pre-rellenado con los datos de la sugerencia. El usuario puede editar antes de confirmar. Al guardar, la sugerencia desaparece del panel.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-sep"></div>
-
-  <!-- ── 08 ── -->
-  <div class="section" id="s08">
-    <div class="section-header">
-      <span class="section-num">08</span>
-      <h2 class="section-title">Gestión de <span>proyectos</span></h2>
-    </div>
-    <div class="grid2">
-      <div class="card">
-        <div class="card-label">Crear nuevo proyecto</div>
-        <div class="card-value">Elige nombre, categoría y tecnología. La app crea la carpeta en la ruta indicada, genera la estructura base, copia los agentes aplicables y escribe el CLAUDE.md con plantilla según la tech elegida.</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Importar proyecto existente</div>
-        <div class="card-value">Apunta a una carpeta ya existente. La app registra el proyecto, crea <code>.claude/agents/</code> si no existe, copia los agentes y actualiza el CLAUDE.md si no lo tiene.</div>
-      </div>
-    </div>
-    <h4>Metadatos por proyecto</h4>
-    <div class="grid4">
-      <div class="card"><div class="card-label">Nombre</div><div class="card-value mono">string</div></div>
-      <div class="card"><div class="card-label">Categoría</div><div class="card-value mono">games|web|mobile|docs</div></div>
-      <div class="card"><div class="card-label">Tecnología</div><div class="card-value mono">unity|react|rn|...</div></div>
-      <div class="card"><div class="card-label">Estado</div><div class="card-value mono">active|paused|archived</div></div>
-    </div>
-    <h4>Acciones dentro de un proyecto</h4>
-    <div class="row-list">
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text">Editar agentes del nivel 4 (propios). Ver agentes de niveles 1-3 copiados con su estado de sync.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text">Editar CLAUDE.md con editor de texto integrado. Guardado directo al fichero.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text">Botón "Abrir en VS Code" → ejecuta <code>code {ruta}</code>. Si <code>code</code> no está en PATH, muestra instrucciones.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text">Botón "Abrir carpeta" → abre el Explorador de Windows en la ruta del proyecto.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--green-dim)"><i class="ti ti-check" style="font-size:11px;color:var(--green)" aria-hidden="true"></i></div>
-        <div class="row-text">Botón "Sync" → sincroniza solo este proyecto con los agentes actualizados de niveles 1-3.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-sep"></div>
-
-  <!-- ── 09 ── -->
-  <div class="section" id="s09">
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 09 · Importación de agentes externos           -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="s9">
     <div class="section-header">
       <span class="section-num">09</span>
-      <h2 class="section-title">Navegación e <span>interfaz</span></h2>
+      <h2 class="section-title">Importación de agentes <span>externos</span></h2>
     </div>
-    <div class="grid2">
-      <div class="card accent-l">
-        <div class="card-label">Vista Proyectos</div>
-        <div class="card-value">Cards agrupadas por categoría. Badge de sync pendientes. Filtro por estado. Click → panel de detalle del proyecto con todas las acciones.</div>
-      </div>
-      <div class="card accent-l">
-        <div class="card-label">Vista Agentes</div>
-        <div class="card-value">Árbol colapsable estilo VS Code en sidebar. Panel central con cards del nivel activo + sugerencias. Panel lateral con editor al seleccionar un agente.</div>
-      </div>
-    </div>
-    <h4>Árbol de navegación — Vista Agentes</h4>
-    <div class="code-block">
-<span class="grn">▼ Global</span>                    <span class="dim">← nivel 1</span>
-    code-reviewer
-    git-helper
-    <span class="dim">+ [2 sugeridos]</span>
 
-<span class="blu">▼ Categorías</span>
-  <span class="blu">▼ Juegos</span>                 <span class="dim">← nivel 2</span>
-    <span class="amb">▼ Unity</span>               <span class="dim">← nivel 3</span>
-        unity-dev
-        unity-shader
-        <span class="dim">+ [2 sugeridos]</span>
-    <span class="amb">▶ Godot</span>
-  <span class="blu">▶ Web</span>
-  <span class="blu">▶ Móvil</span>
-  <span class="blu">▶ Docs</span>
+    <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
+      Desde <strong>Ajustes → Agentes externos</strong> se puede importar cualquier fichero <code>.md</code> con frontmatter publicado en una URL. El flujo completo es:
+    </p>
 
-<span class="acc">▼ Proyectos</span>               <span class="dim">← nivel 4 (por proyecto)</span>
-  <span class="acc">▶ Mi RPG (Unity)  ↑2</span>   <span class="dim">← badge de actualizaciones</span>
-  <span class="acc">▶ Mi App Web (React)</span>
+    <div class="flow">
+      <div class="flow-step"><strong>URL</strong>Ajustes → Agentes externos</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>POST /api/agents/import-url</strong>Descarga + parse</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Preview modal</strong>Revisión editable</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>Elige destino</strong>Global/Sección/Tech</div>
+      <div class="flow-sep"></div>
+      <div class="flow-step"><strong>POST /api/agents</strong>Guarda en disco</div>
     </div>
-    <div class="grid2">
-      <div class="card">
-        <div class="card-label">Tema visual</div>
-        <div class="card-value">Oscuro fijo, estilo VS Code. <code>#0d0d0f</code> fondo, <code>#141416</code> sidebar, acentos en violeta/verde/ámbar según nivel de jerarquía.</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Tipografía</div>
-        <div class="card-value">UI general en <code>Syne</code>. Código, nombres de agentes y rutas en <code>JetBrains Mono</code>.</div>
-      </div>
-    </div>
+
+    <h4>Endpoint POST /api/agents/import-url</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65;margin-bottom:10px">
+      El servidor descarga el contenido de la URL usando los módulos <code>http</code>/<code>https</code> de Node.js (sigue redirecciones 3xx). Pasa el string resultante a <code>parseAgentFromString(content, fallbackName)</code> donde <code>fallbackName</code> se extrae del último segmento de la URL sin extensión. Retorna el objeto <code>agent</code> sin guardarlo en disco — el guardado lo hace el renderer en un segundo paso con <code>POST /api/agents</code>.
+    </p>
+
+    <h4>Preview editable</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      El modal de revisión muestra todos los campos del agente parseado: nombre, descripción, modelo, herramientas (checkboxes) y system prompt (textarea). El usuario puede editar cualquier campo antes de guardar. El selector de destino permite elegir entre Global, cualquier Sección o cualquier Tecnología existente en la configuración.
+    </p>
   </div>
 
   <div class="section-sep"></div>
 
-  <!-- ── 10 ── -->
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 10 · Renderer y context bridge                 -->
+  <!-- ══════════════════════════════════════════════ -->
   <div class="section" id="s10">
     <div class="section-header">
       <span class="section-num">10</span>
-      <h2 class="section-title">Primer arranque <span>y ajustes</span></h2>
+      <h2 class="section-title">Renderer y <span>context bridge</span></h2>
     </div>
-    <h4>Wizard de primer arranque</h4>
-    <div class="flow">
-      <div class="flow-step"><strong>Paso 1</strong>Bienvenida + explicación rápida</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Paso 2</strong>Introducir API key de Anthropic</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Paso 3</strong>Generar estructura base + agentes por defecto</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Listo</strong>App operativa con agentes pre-cargados</div>
-    </div>
-    <h4>Pantalla de ajustes (mínima)</h4>
-    <div class="row-list">
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-key" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>API key de Anthropic</strong> — mostrada enmascarada, botón para cambiarla. Necesaria para modo asistido y sugerencias.</div>
-      </div>
-      <div class="row-item">
-        <div class="row-dot" style="background:var(--purple-dim)"><i class="ti ti-category" style="font-size:11px;color:var(--accent)" aria-hidden="true"></i></div>
-        <div class="row-text"><strong>Gestión de categorías y tecnologías</strong> — crear, editar y borrar. Al añadir una nueva tech, la IA propone agentes base que aparecen como sugerencias en ese nivel.</div>
-      </div>
-    </div>
+
+    <h4>window.api — API expuesta al renderer</h4>
+    <div class="code-block">
+<span class="dim">// Información de la app</span>
+window.api.<span class="acc">getVersion()</span>       <span class="dim">→ Promise&lt;string&gt;</span>
+window.api.<span class="acc">getAppDir()</span>        <span class="dim">→ Promise&lt;string&gt;</span>
+window.api.<span class="acc">isDev()</span>             <span class="dim">→ Promise&lt;boolean&gt;</span>
+
+<span class="dim">// Ventana</span>
+window.api.<span class="acc">minimize()</span>
+window.api.<span class="acc">hide()</span>
+
+<span class="dim">// Shell</span>
+window.api.<span class="acc">openPath(path)</span>      <span class="dim">→ shell.openPath()</span>
+window.api.<span class="acc">openExternal(url)</span>   <span class="dim">→ shell.openExternal()</span>
+window.api.<span class="acc">openVSCode(path)</span>    <span class="dim">→ exec('code "path"')  →  { ok, error? }</span>
+
+<span class="dim">// Updates (invoke)</span>
+window.api.<span class="acc">checkForUpdate()</span>
+window.api.<span class="acc">downloadUpdate()</span>
+window.api.<span class="acc">installUpdate()</span>
+
+<span class="dim">// Updates (listeners)</span>
+window.api.<span class="acc">onUpdateAvailable</span>(cb)  <span class="dim">// cb({ version, releaseDate })</span>
+window.api.<span class="acc">onUpdateProgress</span>(cb)   <span class="dim">// cb(percent)</span>
+window.api.<span class="acc">onUpdateReady</span>(cb)       <span class="dim">// cb()</span>
+window.api.<span class="acc">onUpdateError</span>(cb)        <span class="dim">// cb(message)</span></div>
+
+    <h4>Arquitectura del renderer</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65;margin-bottom:10px">
+      El renderer es principalmente un SPA de fichero único en <code>src/renderer/index.html</code> con todo el CSS y JS embebido. Las vistas modernas están en <code>src/renderer/views/</code> y el código de app en <code>src/renderer/app.js</code>. Express sirve el directorio <code>src/renderer/</code> como estáticos con un catch-all que redirige a <code>index.html</code>.
+    </p>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      El estado global de la UI vive en el objeto <code>S</code>. Todas las peticiones a la API se hacen mediante <code>fetch()</code> a <code>http://localhost:3737/api/...</code> a través de la función <code>req(method, endpoint, body)</code>.
+    </p>
+
+    <h4>Seguridad del renderer</h4>
+    <div class="code-block">
+<span class="hi">Content-Security-Policy:</span>
+  default-src 'self' http://localhost:3737;
+  script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+  style-src  'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
+  font-src   https://fonts.gstatic.com https://cdn.jsdelivr.net data:;</div>
   </div>
 
   <div class="section-sep"></div>
 
-  <!-- ── 11 ── -->
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 11 · config.json                               -->
+  <!-- ══════════════════════════════════════════════ -->
   <div class="section" id="s11">
     <div class="section-header">
       <span class="section-num">11</span>
-      <h2 class="section-title">Agentes incluidos <span>por defecto</span></h2>
+      <h2 class="section-title">config.json — <span>esquema</span></h2>
     </div>
-    <h4>Global (nivel 1)</h4>
-    <div class="tag-cluster">
-      <span class="tag green">code-reviewer</span>
-      <span class="tag green">git-helper</span>
-      <span class="tag green">test-writer</span>
-      <span class="tag green">doc-writer</span>
-      <span class="tag green">refactor-agent</span>
-    </div>
-    <h4>Juegos — categoría (nivel 2)</h4>
-    <div class="tag-cluster">
-      <span class="tag blue">game-designer</span>
-      <span class="tag blue">performance-optimizer</span>
-    </div>
-    <h4>Unity — tecnología (nivel 3)</h4>
-    <div class="tag-cluster">
-      <span class="tag amber">unity-dev</span>
-      <span class="tag amber">unity-shader</span>
-      <span class="tag amber">unity-ui</span>
-    </div>
-    <h4>Godot — tecnología (nivel 3)</h4>
-    <div class="tag-cluster">
-      <span class="tag amber">godot-dev</span>
-    </div>
-    <h4>Web — categoría (nivel 2)</h4>
-    <div class="tag-cluster">
-      <span class="tag blue">api-designer</span>
-      <span class="tag blue">security-audit</span>
-      <span class="tag blue">accessibility</span>
-    </div>
-    <h4>React / Fullstack / Next.js — tecnología (nivel 3)</h4>
-    <div class="tag-cluster">
-      <span class="tag amber">react-dev</span>
-      <span class="tag amber">css-designer</span>
-      <span class="tag amber">backend-dev</span>
-      <span class="tag amber">nextjs-dev</span>
-    </div>
-    <h4>Móvil — categoría (nivel 2)</h4>
-    <div class="tag-cluster">
-      <span class="tag blue">mobile-ux</span>
-    </div>
-    <h4>React Native / PWA — tecnología (nivel 3)</h4>
-    <div class="tag-cluster">
-      <span class="tag amber">rn-dev</span>
-      <span class="tag amber">pwa-dev</span>
-    </div>
-    <h4>Docs — categoría (nivel 2)</h4>
-    <div class="tag-cluster">
-      <span class="tag blue">tech-writer</span>
-      <span class="tag blue">diagram-maker</span>
+
+    <div class="code-block">
+{
+  <span class="acc">"version"</span>:      <span class="grn">"1.2.4"</span>,
+  <span class="acc">"aiProvider"</span>:   <span class="grn">"cli"</span>,          <span class="dim">// "cli" | "api" | "github"</span>
+  <span class="acc">"apiKey"</span>:       <span class="grn">""</span>,             <span class="dim">// Anthropic API key</span>
+  <span class="acc">"githubToken"</span>:  <span class="grn">""</span>,             <span class="dim">// GitHub PAT con models:read</span>
+  <span class="acc">"githubModel"</span>:  <span class="grn">"gpt-4o-mini"</span>,  <span class="dim">// modelo para GitHub Models API</span>
+  <span class="acc">"categories"</span>: [
+    {
+      <span class="acc">"id"</span>:     <span class="grn">"games"</span>,
+      <span class="acc">"name"</span>:   <span class="grn">"Juegos"</span>,
+      <span class="acc">"icon"</span>:   <span class="grn">"ti-device-gamepad-2"</span>,
+      <span class="acc">"color"</span>:  <span class="grn">"#3ecf8e"</span>,
+      <span class="acc">"technologies"</span>: [
+        { <span class="acc">"id"</span>: <span class="grn">"unity"</span>, <span class="acc">"name"</span>: <span class="grn">"Unity"</span> }
+      ]
+    }
+  ],
+  <span class="acc">"projects"</span>: [
+    {
+      <span class="acc">"id"</span>:          <span class="grn">"p1234567890"</span>,
+      <span class="acc">"name"</span>:        <span class="grn">"Mi RPG"</span>,
+      <span class="acc">"categoryId"</span>:  <span class="grn">"games"</span>,
+      <span class="acc">"techId"</span>:      <span class="grn">"unity"</span>,
+      <span class="acc">"status"</span>:      <span class="grn">"active"</span>,   <span class="dim">// "active" | "paused" | "archived"</span>
+      <span class="acc">"path"</span>:        <span class="grn">"C:/Proyectos/mi-rpg"</span>,
+      <span class="acc">"description"</span>: <span class="grn">""</span>,
+      <span class="acc">"createdAt"</span>:   <span class="grn">"2025-05-01T10:00:00.000Z"</span>,
+      <span class="acc">"agentHashes"</span>: {
+        <span class="acc">"code-reviewer"</span>: <span class="grn">"abc123..."</span>,
+        <span class="acc">"unity-dev"</span>:     <span class="grn">"def456..."</span>
+      }
+    }
+  ]
+}</div>
+
+    <div class="alert warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="alert-body">
+        <div class="alert-title">config.json en .gitignore</div>
+        <div class="alert-sub">El fichero puede contener API keys y tokens. Nunca debe commitearse. Ya está añadido a <code>.gitignore</code>.</div>
+      </div>
     </div>
   </div>
 
   <div class="section-sep"></div>
 
-  <!-- ── 12 ── -->
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- 12 · Build y release                           -->
+  <!-- ══════════════════════════════════════════════ -->
   <div class="section" id="s12">
     <div class="section-header">
       <span class="section-num">12</span>
-      <h2 class="section-title">Flujos de vida <span>completos</span></h2>
+      <h2 class="section-title">Build <span>y release</span></h2>
     </div>
-    <h4>Crear un proyecto nuevo</h4>
-    <div class="flow">
-      <div class="flow-step"><strong>Nuevo proyecto</strong>Nombre + categoría + tech + ruta</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>App genera</strong>Carpeta + CLAUDE.md con plantilla + .claude/agents/</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Copia agentes</strong>Global + sección + tech → .claude/agents/ + hashes</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Listo</strong>Abrir en VS Code → Claude Code operativo</div>
+
+    <h4>Scripts npm</h4>
+    <div class="row-list">
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>npm run dev</code> — Arranca Electron en modo desarrollo (<code>NODE_ENV=development</code>). Las DevTools se abren automáticamente.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>npm run build</code> — Ejecuta el prebuild (genera icono), compila con <code>electron-builder --win portable</code> y el postbuild. Genera <code>dist/claude-dev-manager.exe</code>.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>npm run build:dir</code> — Compila sin empaquetar en asar. Útil para depurar la estructura de archivos del build.</div>
+      </div>
+      <div class="row-item">
+        <div class="row-dot" style="background:var(--green-dim);color:var(--green)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
+        <div class="row-text"><code>npm run release</code> — <code>electron-builder --win portable --publish always</code>. Sube el <code>.exe</code> y el <code>latest.yml</code> a GitHub Releases. Requiere <code>GH_TOKEN</code> en el entorno.</div>
+      </div>
     </div>
-    <h4>Editar un agente global</h4>
-    <div class="flow">
-      <div class="flow-step"><strong>Editar agente</strong>En Vista Agentes → nivel Global</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Hash cambia</strong>Manager detecta diferencia en todos los proyectos</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Badges aparecen</strong>↑ en cards de proyectos afectados</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Sync</strong>Global o por proyecto según decida el usuario</div>
+
+    <h4>electron-builder.yml — puntos clave</h4>
+    <div class="code-block">
+<span class="hi">appId:</span>       com.adanoliva.claude-dev-manager
+<span class="hi">publish:</span>
+  provider: <span class="grn">github</span>
+  owner:    <span class="acc">adanoliva</span>
+  repo:     <span class="acc">cdm</span>
+  private:  <span class="grn">true</span>
+
+<span class="hi">portable:</span>
+  artifactName: <span class="grn">claude-dev-manager.exe</span>
+
+<span class="hi">extraResources:</span>
+  - from: assets/       <span class="dim">→ process.resourcesPath/assets/</span>
+  - from: app-update.yml <span class="dim">→ incluido en el bundle para electron-updater</span>
+
+<span class="hi">asar:</span>         <span class="grn">true</span>
+<span class="hi">compression:</span>  maximum</div>
+
+    <h4>Artifacts generados por npm run release</h4>
+    <div class="grid2">
+      <div class="card green-l">
+        <div class="card-label">claude-dev-manager.exe</div>
+        <div class="card-value">Ejecutable portable para el usuario final. Se sube a GitHub Releases como asset descargable.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-label">latest.yml</div>
+        <div class="card-value">Manifiesto de versión con SHA-512 del .exe. electron-updater lo consulta para detectar nuevas versiones.</div>
+      </div>
     </div>
-    <h4>Crear un agente nuevo en nivel 3</h4>
-    <div class="flow">
-      <div class="flow-step"><strong>Crear agente</strong>Manual o asistido por IA en tech-web-react/</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Se guarda</strong>En la carpeta del nivel correspondiente</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>"Pendiente"</strong>Proyectos React muestran badge ↑</div>
-      <div class="flow-sep"></div>
-      <div class="flow-step"><strong>Sync</strong>Se copia al proyecto cuando el usuario sincroniza</div>
-    </div>
+
+    <h4>Proceso de release paso a paso</h4>
+    <div class="code-block">
+<span class="dim"># 1. Actualizar versión</span>
+npm version patch  <span class="dim"># o minor / major</span>
+
+<span class="dim"># 2. Commitear y pushear</span>
+git add package.json
+git commit -m <span class="grn">"chore: bump v1.2.x"</span>
+git push
+
+<span class="dim"># 3. Publicar</span>
+<span class="acc">$env:GH_TOKEN</span> = <span class="grn">"ghp_..."</span>
+npm run release
+
+<span class="dim"># electron-builder crea el tag, sube .exe y latest.yml</span>
+<span class="dim"># Los usuarios con versiones anteriores ven el banner</span>
+<span class="dim"># de actualización en su próximo arranque.</span></div>
+
+    <h4>APP_DIR en producción</h4>
+    <p style="font-size:12px;color:var(--text1);line-height:1.65">
+      En un portable de Electron, <code>process.env.PORTABLE_EXECUTABLE_DIR</code> apunta al directorio donde está el <code>.exe</code>. <code>config.js</code> lo usa como <code>APP_DIR</code> para que <code>config.json</code>, <code>agents/</code> y <code>cache/</code> vivan junto al ejecutable, haciendo la app completamente portable.
+    </p>
   </div>
 
   <!-- ── Footer ── -->
   <div class="footer">
-    <div class="footer-left">claude-dev-manager / spec v1.0 / mayo 2025</div>
-    <span class="closed-badge"><i class="ti ti-lock" aria-hidden="true"></i> Spec cerrada — lista para construir</span>
+    <div class="footer-left">Claude Dev Manager · Especificación técnica · v1.2.4 · 2025</div>
+    <div class="closed-badge"><i class="ti ti-check" aria-hidden="true"></i> Privado — adanoliva/cdm</div>
   </div>
 
 </div>

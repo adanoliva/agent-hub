@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Dev Manager — Manual de uso</title>
+<title>Claude Dev Manager — Manual de uso v1.2.4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -178,7 +178,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 <nav class="nav">
   <div class="nav-logo">
     <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Claude Dev Manager</div>
-    <div class="nav-logo-sub">Manual de uso · v1.0</div>
+    <div class="nav-logo-sub">Manual de uso · v1.2.4</div>
   </div>
 
   <div class="nav-section">Primeros pasos</div>
@@ -197,9 +197,12 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <a class="nav-item" href="#crear-agente"><i class="ti ti-plus" aria-hidden="true"></i> Crear un agente</a>
   <a class="nav-item" href="#sync"><i class="ti ti-refresh" aria-hidden="true"></i> Sincronizar cambios</a>
   <a class="nav-item" href="#sugerencias"><i class="ti ti-sparkles" aria-hidden="true"></i> Sugerencias de IA</a>
+  <a class="nav-item" href="#importar-externo"><i class="ti ti-cloud-download" aria-hidden="true"></i> Importar agente externo</a>
   <a class="nav-item" href="#ajustes"><i class="ti ti-settings" aria-hidden="true"></i> Ajustes</a>
+  <a class="nav-item" href="#autoupdate"><i class="ti ti-refresh-alert" aria-hidden="true"></i> Actualizaciones</a>
 
   <div class="nav-section">Referencia</div>
+  <a class="nav-item" href="#vscode"><i class="ti ti-brand-vscode" aria-hidden="true"></i> Usar en VS Code</a>
   <a class="nav-item" href="#faq"><i class="ti ti-help-circle" aria-hidden="true"></i> Preguntas frecuentes</a>
 
   <div class="nav-spacer"></div>
@@ -212,75 +215,94 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
   <!-- Hero -->
   <div class="hero" id="inicio">
-    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO</div>
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v1.2.4</div>
     <h1 class="hero-title">Claude <span>Dev</span> Manager</h1>
     <p class="hero-sub">Guía completa para gestionar tus agentes de Claude Code, organizar proyectos y mantener contexto por proyecto — todo desde una interfaz visual.</p>
   </div>
 
-  <!-- ── Instalación ── -->
+  <!-- ══════════════════════ -->
+  <!-- Instalación            -->
+  <!-- ══════════════════════ -->
   <div class="section" id="instalacion">
-    <div class="section-badge">primeros pasos</div>
+    <div class="section-badge">Primeros pasos</div>
     <h2 class="section-title">Instalación</h2>
-    <p class="section-intro">Claude Dev Manager es un ejecutable portable — no requiere instalador ni Node.js.</p>
+    <p class="section-intro">CDM es un ejecutable portable. No requiere instalador ni Node.js en el sistema.</p>
 
     <div class="steps">
       <div class="step">
         <div class="step-num accent">1</div>
         <div class="step-body">
-          <div class="step-title">Descarga el ejecutable</div>
-          <div class="step-desc">Descarga <code>claude-dev-manager.exe</code> desde la sección <strong>Releases</strong> del repositorio privado de GitHub.</div>
+          <div class="step-title">Descargar el ejecutable</div>
+          <div class="step-desc">Ve a la sección <strong>Releases</strong> del repositorio y descarga <code>claude-dev-manager.exe</code>.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">2</div>
         <div class="step-body">
-          <div class="step-title">Colócalo en su carpeta definitiva</div>
-          <div class="step-desc">Crea una carpeta para la app y mueve el <code>.exe</code> ahí. Toda la configuración y los agentes se generarán en esa misma carpeta. Ej: <code>C:\Tools\ClaudeDevManager\</code></div>
-          <div class="callout warn">
-            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
-            <div class="callout-body">
-              <div class="callout-title">Elige bien la carpeta desde el principio</div>
-              <div class="callout-text">Si mueves el <code>.exe</code> después, la configuración y los agentes se quedan en la carpeta original. Lo más seguro es moverla carpeta completa.</div>
-            </div>
-          </div>
+          <div class="step-title">Elige una ubicación permanente</div>
+          <div class="step-desc">Mueve el <code>.exe</code> a la carpeta donde quieras que viva la app — por ejemplo <code>C:\Tools\ClaudeDevManager\</code>. Todos los datos (agentes, configuración, caché) se crean en esa misma carpeta.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num green">3</div>
+        <div class="step-num accent">3</div>
         <div class="step-body">
-          <div class="step-title">Ejecuta y sigue el wizard</div>
-          <div class="step-desc">Haz doble clic en el <code>.exe</code>. El wizard de primer arranque te guía en la configuración inicial.</div>
+          <div class="step-title">Ejecuta el .exe</div>
+          <div class="step-desc">La primera vez arranca el wizard de configuración. En ejecuciones posteriores carga directamente la vista de Proyectos.</div>
         </div>
+      </div>
+    </div>
+
+    <div class="callout info" style="margin-top:16px">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Portabilidad</div>
+        <div class="callout-text">Puedes mover toda la carpeta a otro lugar — la app funciona desde cualquier ubicación. Las rutas de los proyectos registrados son absolutas; si mueves los proyectos en disco, actualiza sus rutas desde la app.</div>
       </div>
     </div>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Wizard ── -->
+  <!-- ══════════════════════ -->
+  <!-- Wizard                 -->
+  <!-- ══════════════════════ -->
   <div class="section" id="wizard">
-    <div class="section-badge">primeros pasos</div>
-    <h2 class="section-title">Primer <span>arranque</span></h2>
-    <p class="section-intro">La primera vez que ejecutas la app, un wizard de 3 pasos configura todo lo necesario.</p>
+    <div class="section-badge">Primeros pasos</div>
+    <h2 class="section-title">Primer arranque — <span>Wizard</span></h2>
+    <p class="section-intro">Al ejecutar CDM por primera vez aparece el wizard de tres pasos. Puedes saltarlo en cualquier momento y configurar todo después desde Ajustes.</p>
 
     <div class="steps">
       <div class="step">
-        <div class="step-num accent">1</div>
+        <div class="step-num green">1</div>
         <div class="step-body">
           <div class="step-title">Bienvenida</div>
-          <div class="step-desc">Presentación de la app y resumen de lo que puedes hacer con ella. Haz clic en <strong>Comenzar</strong>.</div>
+          <div class="step-desc">Resumen de las capacidades de CDM: jerarquía de agentes, IA integrada, sync inteligente y proyectos autónomos.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num accent">2</div>
+        <div class="step-num green">2</div>
         <div class="step-body">
-          <div class="step-title">API key de Anthropic</div>
-          <div class="step-desc">Introduce tu API key de Anthropic. La necesitas para el modo asistido por IA y las sugerencias de agentes. Si no la tienes ahora, puedes saltarte este paso y configurarla más tarde desde Ajustes.</div>
-          <div class="callout info">
+          <div class="step-title">Conectar con Claude</div>
+          <div class="step-desc">Elige el proveedor de IA que usará CDM para generar system prompts y sugerencias de agentes.</div>
+          <div class="grid3" style="margin-top:10px">
+            <div class="card accent-l">
+              <div class="card-title">Claude CLI</div>
+              <div class="card-body">Usa tu suscripción de Claude.ai. Sin coste adicional. CDM detecta automáticamente si está instalado.</div>
+            </div>
+            <div class="card blue-l">
+              <div class="card-title">GitHub Copilot</div>
+              <div class="card-body">Introduce un Personal Access Token con permiso <code>models:read</code>. Capa gratuita disponible.</div>
+            </div>
+            <div class="card amber-l">
+              <div class="card-title">API key Anthropic</div>
+              <div class="card-body">Acceso directo a la API. Requiere cuenta en <code>console.anthropic.com</code>.</div>
+            </div>
+          </div>
+          <div class="callout note">
             <i class="ti ti-info-circle" aria-hidden="true"></i>
             <div class="callout-body">
-              <div class="callout-title">¿Dónde consigo mi API key?</div>
-              <div class="callout-text">En <code>console.anthropic.com</code> → API Keys → Create Key. La key tiene el formato <code>sk-ant-api03-...</code></div>
+              <div class="callout-title">Opcional</div>
+              <div class="callout-text">Si saltas este paso, CDM funciona en modo manual: puedes crear y editar agentes sin IA, pero no podrás usar la generación automática de prompts ni las sugerencias contextuales hasta configurar un proveedor.</div>
             </div>
           </div>
         </div>
@@ -289,66 +311,53 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="step-num green">3</div>
         <div class="step-body">
           <div class="step-title">Generación de estructura base</div>
-          <div class="step-desc">La app crea todas las carpetas necesarias y carga los agentes por defecto en todos los niveles. Este proceso tarda unos segundos. Al terminar, la app está lista para usar.</div>
+          <div class="step-desc">CDM crea las carpetas de agentes y carga los agentes por defecto (code-reviewer, git-helper, test-writer, doc-writer, refactor-agent, debugger y todos los agentes de categorías y tecnologías predefinidas).</div>
         </div>
       </div>
     </div>
-
-    <div class="callout tip">
-      <i class="ti ti-check" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">Agentes pre-cargados desde el primer minuto</div>
-        <div class="callout-text">Tras el wizard, ya tienes 20+ agentes listos — globales, por categoría y por tecnología. No necesitas crear nada para empezar a trabajar con Claude Code.</div>
-      </div>
-    </div>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Tray ── -->
+  <!-- ══════════════════════ -->
+  <!-- Tray                   -->
+  <!-- ══════════════════════ -->
   <div class="section" id="tray">
-    <div class="section-badge">primeros pasos</div>
+    <div class="section-badge">Primeros pasos</div>
     <h2 class="section-title">Bandeja del <span>sistema</span></h2>
-    <p class="section-intro">Claude Dev Manager vive en la bandeja del sistema de Windows (esquina inferior derecha), siempre disponible sin ocupar la barra de tareas.</p>
+    <p class="section-intro">CDM vive en la bandeja del sistema de Windows. Cerrar la ventana no termina la app — la minimiza a la bandeja.</p>
 
     <div class="tray-bar">
       <div class="tray-icon"><i class="ti ti-robot" style="font-size:13px;color:var(--accent)" aria-hidden="true"></i></div>
-      <span>Claude Dev Manager está activo en la bandeja del sistema</span>
+      <span style="font-size:11px;color:var(--text2)">Claude Dev Manager · doble clic para abrir</span>
     </div>
 
-    <h4>Menú del icono (clic derecho)</h4>
     <div class="tray-menu">
-      <div class="tray-item"><i class="ti ti-layout-grid" style="margin-right:8px" aria-hidden="true"></i>Abrir</div>
-      <div class="tray-item"><i class="ti ti-refresh" style="margin-right:8px" aria-hidden="true"></i>Reiniciar</div>
-      <div class="tray-item danger"><i class="ti ti-power" style="margin-right:8px" aria-hidden="true"></i>Salir</div>
+      <div class="tray-item">Abrir Claude Dev Manager</div>
+      <div class="tray-item danger">Salir</div>
     </div>
 
-    <div class="grid2">
-      <div class="card">
-        <div class="card-title">Cerrar la ventana</div>
-        <div class="card-body">Al pulsar la X de la ventana, la app <strong>no se cierra</strong> — se minimiza a la bandeja. Sigue corriendo en segundo plano.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Cerrar completamente</div>
-        <div class="card-body">Clic derecho en el icono de la bandeja → <strong>Salir</strong>. Esto detiene el proceso por completo.</div>
-      </div>
-    </div>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65">
+      Haz doble clic en el icono de la bandeja para abrir la ventana. Si ya está abierta, la trae al frente. El menú contextual (clic derecho) ofrece <strong>Abrir Claude Dev Manager</strong> y <strong>Salir</strong>.
+    </p>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Vista Proyectos ── -->
+  <!-- ══════════════════════ -->
+  <!-- Vista Proyectos        -->
+  <!-- ══════════════════════ -->
   <div class="section" id="proyectos">
-    <div class="section-badge">la aplicación</div>
+    <div class="section-badge">La aplicación</div>
     <h2 class="section-title">Vista <span>Proyectos</span></h2>
-    <p class="section-intro">Panel principal de gestión de proyectos. Muestra todos tus proyectos agrupados por categoría con su estado de sincronización.</p>
+    <p class="section-intro">La vista principal. Muestra todos tus proyectos agrupados por categoría en tarjetas. Desde aquí gestionas el ciclo de vida de cada proyecto.</p>
 
     <div class="mockup">
       <div class="mockup-bar">
         <div class="mockup-dot" style="background:#ff5f57"></div>
         <div class="mockup-dot" style="background:#febc2e"></div>
         <div class="mockup-dot" style="background:#28c840"></div>
-        <span class="mockup-title">Claude Dev Manager — Proyectos</span>
+        <div class="mockup-title">Claude Dev Manager · Proyectos</div>
       </div>
       <div class="mockup-body">
         <div class="mock-nav">
@@ -356,450 +365,607 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
           <div class="mock-tab">Agentes</div>
           <div class="mock-tab">Ajustes</div>
         </div>
-        <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">🎮 Juegos</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
-          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-              <span style="font-size:12px;font-weight:600;color:var(--text0)">Mi RPG</span>
-              <span class="mock-badge pending">↑ 2</span>
-            </div>
-            <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:6px">Unity · activo</div>
-            <div style="display:flex;gap:4px">
-              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">VS Code</button>
-              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">Carpeta</button>
-              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid rgba(124,106,247,0.3);background:var(--purple-dim);color:var(--accent);cursor:default">Sync ↑</button>
-            </div>
+        <div style="font-size:10px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;font-family:var(--mono)">JUEGOS · 2</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div class="mock-card">
+            <div class="mock-card-name">Mi RPG <span class="mock-badge pending">↑3</span></div>
+            <div class="mock-card-desc" style="display:flex;gap:4px;margin-top:4px"><span class="mock-badge amber">Unity</span><span class="mock-badge green">active</span></div>
           </div>
-          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-              <span style="font-size:12px;font-weight:600;color:var(--text0)">Puzzle Game</span>
-              <span class="mock-badge green">✓</span>
-            </div>
-            <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:6px">Godot · activo</div>
-            <div style="display:flex;gap:4px">
-              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">VS Code</button>
-              <button style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">Carpeta</button>
-            </div>
+          <div class="mock-card">
+            <div class="mock-card-name">Plataformas</div>
+            <div class="mock-card-desc" style="display:flex;gap:4px;margin-top:4px"><span class="mock-badge gray">Godot</span><span class="mock-badge green">active</span></div>
           </div>
-        </div>
-        <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">🌐 Web</div>
-        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px;max-width:240px">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span style="font-size:12px;font-weight:600;color:var(--text0)">Dashboard App</span>
-            <span class="mock-badge green">✓</span>
+          <div class="mock-card" style="border-style:dashed;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;opacity:.5">
+            <div style="font-size:18px;color:var(--text3)">+</div>
+            <div style="font-size:10px;color:var(--text3)">Nuevo proyecto</div>
           </div>
-          <div style="font-size:10px;color:var(--text2);font-family:var(--mono)">React · activo</div>
         </div>
       </div>
     </div>
 
-    <h4>Acciones disponibles en cada proyecto</h4>
+    <h4>Tarjeta de proyecto</h4>
     <div class="grid2">
-      <div class="card green-l"><div class="card-title"><i class="ti ti-brand-vscode" aria-hidden="true"></i> Abrir en VS Code</div><div class="card-body">Abre la carpeta del proyecto directamente en VS Code con Claude Code listo.</div></div>
-      <div class="card green-l"><div class="card-title"><i class="ti ti-folder-open" aria-hidden="true"></i> Abrir carpeta</div><div class="card-body">Abre el Explorador de Windows en la ruta del proyecto.</div></div>
-      <div class="card green-l"><div class="card-title"><i class="ti ti-refresh" aria-hidden="true"></i> Sync</div><div class="card-body">Sincroniza los agentes de niveles 1-3 con los cambios pendientes. Solo aparece cuando hay actualizaciones.</div></div>
-      <div class="card green-l"><div class="card-title"><i class="ti ti-edit" aria-hidden="true"></i> Editar proyecto</div><div class="card-body">Cambia el nombre, estado o edita el CLAUDE.md del proyecto.</div></div>
+      <div class="card">
+        <div class="card-title">Badge <span class="chip amber">↑N</span></div>
+        <div class="card-body">Indica que N agentes tienen actualizaciones pendientes. Pulsa el botón <strong>Sync</strong> de la tarjeta o abre el proyecto y sincroniza desde el drawer.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Badge <span class="chip" style="background:var(--coral-dim);border-color:rgba(251,113,133,0.25);color:var(--coral)">ruta no encontrada</span></div>
+        <div class="card-body">La carpeta del proyecto ya no existe en la ruta registrada. Actualiza la ruta desde el drawer del proyecto.</div>
+      </div>
     </div>
 
-    <h4>Badge de actualizaciones</h4>
-    <p style="font-size:13px;color:var(--text1);margin-bottom:10px">El número en naranja (<span class="mock-badge pending" style="font-size:11px">↑ 2</span>) indica cuántos agentes tienen una versión más nueva disponible en sus niveles fuente. Haz clic en <strong>Sync ↑</strong> para actualizar.</p>
+    <h4>Botones de la tarjeta</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Cada tarjeta tiene tres botones de acción: abrir en <strong>VS Code</strong> (<i class="ti ti-brand-vscode" style="color:var(--blue)"></i>), abrir la <strong>carpeta</strong> en el explorador (<i class="ti ti-folder-open" style="color:var(--amber)"></i>) y, si hay actualizaciones pendientes, un botón <strong>Sync</strong> directo.
+    </p>
+
+    <h4>Botones de la barra superior</h4>
+    <div class="grid3">
+      <div class="card accent-l">
+        <div class="card-title">Nuevo proyecto</div>
+        <div class="card-body">CDM crea la carpeta del proyecto, genera <code>CLAUDE.md</code> vacío y copia todos los agentes aplicables.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Importar</div>
+        <div class="card-body">Registra una carpeta existente en CDM. Copia los agentes aplicables sin tocar los archivos que ya existen.</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-title">Sync todos</div>
+        <div class="card-body">Propaga todos los cambios pendientes a todos los proyectos de una vez.</div>
+      </div>
+    </div>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Vista Agentes ── -->
+  <!-- ══════════════════════ -->
+  <!-- Drawer de proyecto     -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="crear-proyecto">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Gestionar un <span>proyecto</span></h2>
+    <p class="section-intro">Haz clic en cualquier tarjeta de proyecto para abrir el drawer lateral con todas las opciones de ese proyecto.</p>
+
+    <h4>Pestaña CLAUDE.md</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Editor de texto completo para el fichero <code>CLAUDE.md</code> del proyecto. Este fichero es el contexto que Claude Code carga automáticamente al trabajar en ese proyecto. Describe la arquitectura, convenciones, dependencias y cualquier información relevante que quieras que Claude Code tenga en cuenta.
+    </p>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Pulsa <strong>Guardar</strong> para escribir los cambios en disco en <code>{ruta-proyecto}/CLAUDE.md</code>.
+    </p>
+
+    <h4>Pestaña Agentes</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Lista todos los agentes que están en <code>.claude/agents/</code> del proyecto con su estado de sincronización:
+    </p>
+    <div class="grid2">
+      <div class="card green-l">
+        <div class="card-title"><span class="chip green">ok</span></div>
+        <div class="card-body">El agente está actualizado. El hash del fichero coincide con el maestro en CDM.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title"><span class="chip amber">actualizar</span></div>
+        <div class="card-body">El agente maestro cambió. Hay una versión más reciente disponible.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><span class="chip" style="background:var(--blue-dim);border-color:rgba(96,165,250,0.25);color:var(--blue)">nuevo</span></div>
+        <div class="card-body">Agente aplicable al proyecto que aún no fue copiado. Aparecerá tras la siguiente sync.</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="chip gray">local</span></div>
+        <div class="card-body">Agente de nivel 4 propio del proyecto. CDM no lo modifica durante el sync.</div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Pulsa <strong>Sync este proyecto</strong> para aplicar todas las actualizaciones pendientes del drawer, o usa el botón Sync directo de la tarjeta en la vista principal.
+    </p>
+
+    <h4>Crear un proyecto nuevo</h4>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Nuevo proyecto"</div>
+          <div class="step-desc">En la barra superior de la vista Proyectos.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Rellena el formulario</div>
+          <div class="step-desc">Nombre del proyecto, categoría, tecnología (opcional) y la ruta donde crear la carpeta. CDM genera un slug a partir del nombre y crea la subcarpeta.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">CDM lo configura</div>
+          <div class="step-desc">Crea la estructura de carpetas, un <code>CLAUDE.md</code> vacío y copia todos los agentes aplicables (global + categoría + tecnología) a <code>.claude/agents/</code>.</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Importar un proyecto existente</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Pulsa <strong>Importar</strong>. Introduce el nombre, categoría y la ruta exacta de la carpeta existente. CDM registra el proyecto y copia los agentes aplicables sin modificar los archivos que ya existen. Si la carpeta ya tiene un <code>.claude/agents/</code> con agentes propios, los detecta como agentes de nivel 4 (<code>local</code>).
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Vista Agentes          -->
+  <!-- ══════════════════════ -->
   <div class="section" id="agentes">
-    <div class="section-badge">la aplicación</div>
+    <div class="section-badge">La aplicación</div>
     <h2 class="section-title">Vista <span>Agentes</span></h2>
-    <p class="section-intro">Gestión completa de agentes en los cuatro niveles de jerarquía. Árbol de navegación estilo VS Code en el sidebar.</p>
+    <p class="section-intro">Panel de tres columnas: árbol de navegación, cuadrícula de agentes y editor lateral. Desde aquí creas, editas y organizas todos los agentes de la jerarquía.</p>
 
     <div class="mockup">
       <div class="mockup-bar">
         <div class="mockup-dot" style="background:#ff5f57"></div>
         <div class="mockup-dot" style="background:#febc2e"></div>
         <div class="mockup-dot" style="background:#28c840"></div>
-        <span class="mockup-title">Claude Dev Manager — Agentes</span>
+        <div class="mockup-title">Claude Dev Manager · Agentes</div>
       </div>
-      <div class="mockup-body" style="display:flex;gap:16px;min-height:280px">
-        <div style="width:180px;flex-shrink:0;border-right:1px solid var(--border);padding-right:12px">
+      <div class="mockup-body" style="display:grid;grid-template-columns:160px 1fr;gap:12px">
+        <div>
           <div class="mock-tree">
-            <div><span class="grn">▼ Global</span></div>
-            <div style="padding-left:12px;color:var(--text2)">  code-reviewer</div>
-            <div style="padding-left:12px;color:var(--text2)">  git-helper</div>
-            <div style="padding-left:12px;color:var(--text2)">  ...</div>
-            <div><span class="blu">▼ Categorías</span></div>
-            <div style="padding-left:12px"><span class="blu">▼ Juegos</span></div>
-            <div style="padding-left:24px"><span class="sel">▼ Unity</span></div>
-            <div style="padding-left:36px;color:var(--text2)">unity-dev</div>
-            <div style="padding-left:36px;color:var(--text2)">unity-shader</div>
-            <div style="padding-left:24px"><span class="amb">▶ Godot</span></div>
-            <div style="padding-left:12px"><span class="blu">▶ Web</span></div>
-            <div><span class="acc">▼ Proyectos</span></div>
-            <div style="padding-left:12px;color:var(--text1)">▶ Mi RPG <span style="color:var(--amber)">↑2</span></div>
+            <div><span class="mock-tree grn sel">● Global</span></div>
+            <div style="padding-left:8px"><i class="ti ti-chevron-right" style="font-size:10px"></i> Categorías</div>
+            <div style="padding-left:16px"><span class="mock-tree blu">⬡ Web</span></div>
+            <div style="padding-left:24px"><span class="mock-tree dim">⟨⟩ React</span></div>
+            <div style="padding-left:8px"><i class="ti ti-chevron-right" style="font-size:10px"></i> Proyectos</div>
           </div>
         </div>
-        <div style="flex:1">
-          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:10px;text-transform:uppercase">Unity — Nivel 3 · Tecnología</div>
+        <div>
           <div class="mock-cards">
             <div class="mock-card">
-              <div class="mock-card-name"><i class="ti ti-device-gamepad-2" style="color:var(--amber)" aria-hidden="true"></i> unity-dev <span class="mock-badge amber">tech</span></div>
-              <div class="mock-card-desc">Unity, C# y arquitectura de GameObjects</div>
+              <div class="mock-card-name"><i class="ti ti-eye" style="font-size:11px;color:var(--green)"></i> code-reviewer</div>
+              <div class="mock-card-desc">Revisa código: bugs, antipatrones y mejoras</div>
             </div>
             <div class="mock-card">
-              <div class="mock-card-name"><i class="ti ti-eye" style="color:var(--amber)" aria-hidden="true"></i> unity-shader <span class="mock-badge amber">tech</span></div>
-              <div class="mock-card-desc">Shaders HLSL y Shader Graph URP/HDRP</div>
+              <div class="mock-card-name"><i class="ti ti-git-branch" style="font-size:11px;color:var(--green)"></i> git-helper</div>
+              <div class="mock-card-desc">Commits, ramas y resolución de conflictos</div>
             </div>
             <div class="mock-card suggested">
-              <div class="mock-card-name"><i class="ti ti-sparkles" style="color:var(--text2)" aria-hidden="true"></i> unity-audio <span class="mock-badge suggested">sugerido</span></div>
-              <div class="mock-card-desc">Sistema de audio, AudioMixer y FMOD</div>
+              <div class="mock-card-name"><i class="ti ti-robot" style="font-size:11px;color:var(--text2)"></i> security-scan <span class="mock-badge suggested">sugerido</span></div>
+              <div class="mock-card-desc">Análisis de vulnerabilidades en el código</div>
             </div>
-            <div class="mock-card suggested">
-              <div class="mock-card-name"><i class="ti ti-sparkles" style="color:var(--text2)" aria-hidden="true"></i> unity-physics <span class="mock-badge suggested">sugerido</span></div>
-              <div class="mock-card-desc">Físicas, Rigidbody y colisiones</div>
-            </div>
-          </div>
-          <div style="margin-top:10px;display:flex;gap:6px">
-            <button style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid rgba(124,106,247,0.3);background:var(--purple-dim);color:var(--accent);cursor:default">+ Nuevo agente</button>
-            <button style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:default">↻ Sugerir más</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="callout note">
-      <i class="ti ti-info-circle" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">Cards en gris discontinuo = sugerencias de IA</div>
-        <div class="callout-text">Las cards con borde discontinuo son propuestas generadas por Claude basadas en lo que ya existe en ese nivel. Haz clic para crear el agente con esa propuesta pre-rellenada.</div>
+    <h4>Árbol de navegación</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      El árbol de la izquierda tiene tres secciones: <strong>Global</strong> (nivel 1), <strong>Categorías</strong> (niveles 2 y 3 anidados) y <strong>Proyectos</strong> (nivel 4). Haz clic en cualquier nodo para cargar sus agentes en la cuadrícula central. Los nodos de categoría son expandibles para ver sus tecnologías.
+    </p>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Los proyectos con actualizaciones pendientes muestran el badge <span class="chip amber">↑N</span> en el árbol.
+    </p>
+
+    <h4>Cuadrícula de agentes</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Muestra los agentes existentes del nivel seleccionado y, en tarjetas punteadas con estilo diferenciado, las <strong>sugerencias de IA</strong>. Haz clic en un agente existente para abrirlo en el editor lateral. Haz clic en una sugerencia para pre-rellenar el editor con sus datos — después puedes editarlos y guardarlos.
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Jerarquía              -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="jerarquia">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Jerarquía de <span>niveles</span></h2>
+    <p class="section-intro">Los agentes se organizan en cuatro niveles. Los tres primeros participan en el sistema de sync; el cuarto es exclusivo del proyecto.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Global</div>
+          <div class="step-desc">Aplica a todos los proyectos sin excepción. Estos agentes también se sincronizan automáticamente a <code>~/.claude/agents/</code> para que estén disponibles en cualquier proyecto desde la CLI de Claude Code, aunque no esté registrado en CDM.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Categoría</div>
+          <div class="step-desc">Aplica a todos los proyectos de esa categoría (Juegos, Web, Móvil, Docs, etc.). Útil para agentes específicos del dominio pero no de una tecnología concreta.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">Tecnología</div>
+          <div class="step-desc">Aplica solo a proyectos con esa tecnología específica dentro de la categoría (Unity, React, React Native, etc.).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--bg3)">4</div>
+        <div class="step-body">
+          <div class="step-title">Proyecto</div>
+          <div class="step-desc">Exclusivo de ese proyecto. Se crea y edita desde el árbol de agentes seleccionando el proyecto, o desde el drawer del proyecto. Nunca participa en el sistema de sync — CDM no lo toca al sincronizar.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Jerarquía ── -->
-  <div class="section" id="jerarquia">
-    <div class="section-badge">la aplicación</div>
-    <h2 class="section-title">Jerarquía de <span>niveles</span></h2>
-    <p class="section-intro">Los agentes se organizan en cuatro niveles. Cada proyecto hereda físicamente los agentes de los niveles superiores que le aplican.</p>
+  <!-- ══════════════════════ -->
+  <!-- Crear un agente        -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="crear-agente">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Crear un <span>agente</span></h2>
+    <p class="section-intro">Desde la vista Agentes, selecciona el nivel donde quieres crear el agente y pulsa "Nuevo agente".</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Selecciona el nivel en el árbol</div>
+          <div class="step-desc">Haz clic en Global, en una categoría, en una tecnología o en un proyecto según dónde deba vivir el agente.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Nuevo agente"</div>
+          <div class="step-desc">El editor lateral se abre en blanco. Rellena el nombre (identificador en kebab-case), la descripción y el modelo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Elige las herramientas</div>
+          <div class="step-desc">Marca las herramientas que el agente necesita. Usa solo las imprescindibles — menos herramientas hace al agente más predecible.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Escribe o genera el system prompt</div>
+          <div class="step-desc">Puedes escribir el system prompt manualmente, o usar la sección <strong>Generar con IA</strong>: describe el agente en una frase y pulsa "Generar system prompt". CDM llama al proveedor de IA configurado y rellena el textarea con el prompt generado.</div>
+          <div class="callout tip" style="margin-top:8px">
+            <i class="ti ti-bulb" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">Idioma del prompt</div>
+              <div class="callout-text">Usa el selector ES/EN para que el prompt generado esté en español o inglés. La descripción que escribes puede estar en cualquier idioma.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Guarda el agente</div>
+          <div class="step-desc">Pulsa "Guardar". CDM escribe el fichero <code>{nombre}.md</code> en el directorio del nivel seleccionado y actualiza los hashes de los proyectos afectados.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Sync                   -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="sync">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Sincronizar <span>cambios</span></h2>
+    <p class="section-intro">Cuando editas un agente de los niveles 1-3, los proyectos que lo tienen copiado quedan marcados con actualizaciones pendientes. El sync copia la versión actualizada a esos proyectos.</p>
+
+    <div class="callout note">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El sync es manual y explícito</div>
+        <div class="callout-text">CDM nunca sobrescribe los ficheros de tus proyectos sin que lo pidas. Tú decides cuándo sincronizar. Esto evita cambios inesperados mientras trabajas.</div>
+      </div>
+    </div>
+
+    <h4>Opciones de sync</h4>
+    <div class="grid3" style="margin-top:12px">
+      <div class="card green-l">
+        <div class="card-title">Sync todos</div>
+        <div class="card-body">Botón en la barra superior de la vista Proyectos. Propaga todos los cambios pendientes a todos los proyectos de una vez.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title">Sync proyecto</div>
+        <div class="card-body">Botón en la tarjeta de un proyecto concreto (visible solo cuando hay pendientes). Sincroniza únicamente ese proyecto.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Sync desde drawer</div>
+        <div class="card-body">Botón "Sync este proyecto" en el drawer del proyecto, pestaña Agentes. Muestra además el estado detallado de cada agente.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Sugerencias            -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="sugerencias">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Sugerencias <span>de IA</span></h2>
+    <p class="section-intro">Cada vez que seleccionas un nivel en la vista Agentes, CDM consulta al proveedor de IA configurado para sugerir 2-4 agentes que podrían ser útiles en ese contexto.</p>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Las sugerencias aparecen en la cuadrícula como tarjetas punteadas con la etiqueta <span class="chip gray">sugerido</span>. Haz clic en una para pre-rellenar el editor con su nombre, descripción y herramientas sugeridas. Puedes editarlos antes de guardar.
+    </p>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Las sugerencias se <strong>cachean</strong> para no gastar tokens en cada visita. CDM nunca sugiere agentes que ya existen en ese nivel. Pulsa <strong>"Sugerir más"</strong> en la barra del panel para forzar una nueva generación, descartando el caché para ese nivel.
+    </p>
+
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Requiere proveedor de IA</div>
+        <div class="callout-text">Si no hay proveedor configurado, las sugerencias no aparecen. Los agentes existentes sí se muestran siempre.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Importar externo       -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="importar-externo">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Importar agente <span>externo</span></h2>
+    <p class="section-intro">CDM puede descargar e importar cualquier agente publicado como fichero <code>.md</code> con frontmatter. Accede desde Ajustes → pestaña "Agentes externos".</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Introduce la URL</div>
+          <div class="step-desc">Pega la URL directa al fichero <code>.md</code> del agente. Puede ser un raw de GitHub, un Gist o cualquier URL que devuelva el texto del fichero.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Importar"</div>
+          <div class="step-desc">CDM descarga el fichero y lo parsea. Si el fichero tiene frontmatter válido, extrae nombre, descripción, modelo, herramientas y system prompt automáticamente.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Revisa el preview</div>
+          <div class="step-desc">Aparece un modal con todos los campos del agente parseado. Puedes editar cualquier campo antes de guardarlo — cambia el nombre, ajusta las herramientas o modifica el system prompt.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Elige el destino</div>
+          <div class="step-desc">Selecciona en qué nivel guardar el agente: Global (disponible en todos los proyectos), una Sección o una Tecnología específica.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Confirma</div>
+          <div class="step-desc">CDM guarda el agente en disco como un agente real. Queda disponible en la vista Agentes y participará en el sistema de sync como cualquier otro agente del nivel elegido.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Ajustes                -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="ajustes">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title"><span>Ajustes</span></h2>
+    <p class="section-intro">La pantalla de Ajustes tiene dos pestañas: General y Agentes externos.</p>
+
+    <h4>Pestaña General</h4>
+
+    <div class="card accent-l" style="margin-bottom:10px">
+      <div class="card-title">Proveedor de IA</div>
+      <div class="card-body">
+        <p style="margin-bottom:8px">Cambia el proveedor que CDM usa para generar prompts y sugerencias. Tres opciones:</p>
+        <ul style="padding-left:16px;display:flex;flex-direction:column;gap:4px">
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Claude CLI</strong> — detectado automáticamente. Si no aparece como "detectado", instala la CLI desde <code>claude.ai/code</code> o pulsa "Instalar CLI".</li>
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">API key de Anthropic</strong> — introduce tu clave <code>sk-ant-api03-…</code> y guarda.</li>
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">GitHub Copilot Models API</strong> — introduce tu Personal Access Token con permiso <code>models:read</code> y selecciona el modelo.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card blue-l" style="margin-bottom:10px">
+      <div class="card-title">Cómo usar los agentes en VS Code</div>
+      <div class="card-body">
+        Guía de referencia rápida sobre los tres modos de uso de agentes en Claude Code: listar con <code>/agents</code>, invocar directamente con <code>@nombre-del-agente</code> y delegación automática. También muestra dónde viven los agentes en disco (global en <code>~/.claude/agents/</code>, proyecto en <code>{proyecto}/.claude/agents/</code>).
+      </div>
+    </div>
+
+    <div class="card green-l" style="margin-bottom:10px">
+      <div class="card-title">Actualizaciones</div>
+      <div class="card-body">Muestra la versión actual instalada y el botón <strong>Buscar actualizaciones</strong> para comprobar manualmente si hay una versión nueva disponible en GitHub Releases.</div>
+    </div>
+
+    <div class="card amber-l" style="margin-bottom:10px">
+      <div class="card-title">Categorías y tecnologías</div>
+      <div class="card-body">
+        Gestiona la estructura de categorías y tecnologías que organiza tus proyectos y agentes.
+        <ul style="padding-left:16px;margin-top:8px;display:flex;flex-direction:column;gap:4px">
+          <li style="font-size:12px;color:var(--text1)">Añadir una nueva categoría con su ID, nombre y color.</li>
+          <li style="font-size:12px;color:var(--text1)">Añadir tecnologías a una categoría existente.</li>
+          <li style="font-size:12px;color:var(--text1)">Eliminar categorías y tecnologías (los ficheros de agentes de sus carpetas no se borran del disco).</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>Pestaña Agentes externos</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65">
+      Campo de URL para importar agentes desde internet. Consulta la sección <a href="#importar-externo" style="color:var(--accent)">Importar agente externo</a> para el flujo completo.
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Auto-update            -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="autoupdate">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title"><span>Actualizaciones</span> automáticas</h2>
+    <p class="section-intro">CDM comprueba si hay una nueva versión cada vez que arranca. La actualización es opt-in — nada se descarga ni instala sin tu confirmación.</p>
 
     <div class="steps">
       <div class="step">
         <div class="step-num green">1</div>
         <div class="step-body">
-          <div class="step-title">Global</div>
-          <div class="step-desc">Agentes que aplican a <strong>todos los proyectos</strong> sin excepción. Aquí viven los agentes de uso universal: revisor de código, ayudante de Git, escritor de tests, escritor de documentación y el agente de refactorización.</div>
+          <div class="step-title">Comprobación automática al arrancar</div>
+          <div class="step-desc">Unos 8 segundos después de arrancar, CDM consulta en silencio si hay una nueva versión publicada en GitHub Releases.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num" style="background:var(--blue-dim);border-color:rgba(96,165,250,0.3);color:var(--blue)">2</div>
+        <div class="step-num green">2</div>
         <div class="step-body">
-          <div class="step-title">Categoría</div>
-          <div class="step-desc">Agentes que aplican a todos los proyectos de una categoría (Juegos, Web, Móvil, Docs). Por ejemplo, el agente <code>game-designer</code> solo tiene sentido en proyectos de la categoría Juegos.</div>
+          <div class="step-title">Banner de actualización</div>
+          <div class="step-desc">Si hay una versión nueva, aparece un banner en la esquina inferior derecha con el número de versión disponible y el botón <strong>Descargar</strong>. Puedes cerrarlo con la X y actualizar más tarde.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num amber">3</div>
+        <div class="step-num green">3</div>
         <div class="step-body">
-          <div class="step-title">Tecnología</div>
-          <div class="step-desc">Agentes específicos de una tecnología concreta. <code>unity-dev</code> solo aplica a proyectos Unity, <code>react-dev</code> solo a proyectos React, etc.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num" style="background:var(--coral-dim);border-color:rgba(251,113,133,0.3);color:var(--coral)">4</div>
-        <div class="step-body">
-          <div class="step-title">Proyecto</div>
-          <div class="step-desc">Agentes exclusivos de un proyecto concreto. <strong>Nunca participan en el sync</strong> — son intocables y solo tú los gestionas. Úsalos para lógica muy específica de ese proyecto.</div>
-          <div class="callout tip">
-            <i class="ti ti-shield" aria-hidden="true"></i>
-            <div class="callout-body">
-              <div class="callout-title">Los agentes de nivel 4 son tuyos</div>
-              <div class="callout-text">Ninguna sincronización global puede modificarlos ni eliminarlos. Son 100% independientes.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="sep"></div>
-
-  <!-- ── Crear proyecto ── -->
-  <div class="section" id="crear-proyecto">
-    <div class="section-badge">tareas frecuentes</div>
-    <h2 class="section-title">Crear un <span>proyecto</span></h2>
-
-    <div class="grid2">
-      <div class="card accent-l">
-        <div class="card-title"><i class="ti ti-folder-plus" aria-hidden="true"></i> Proyecto nuevo</div>
-        <div class="card-body">La app crea la carpeta, la estructura base y el <code>CLAUDE.md</code> con plantilla según la tecnología elegida. Los agentes aplicables se copian automáticamente.</div>
-      </div>
-      <div class="card accent-l">
-        <div class="card-title"><i class="ti ti-folder-open" aria-hidden="true"></i> Importar existente</div>
-        <div class="card-body">Apunta a una carpeta que ya existe en tu sistema. La app añade <code>.claude/agents/</code> si no existe y copia los agentes correspondientes.</div>
-      </div>
-    </div>
-
-    <h4>Pasos — Proyecto nuevo</h4>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num accent">1</div>
-        <div class="step-body">
-          <div class="step-title">En Vista Proyectos → botón "Nuevo proyecto"</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">2</div>
-        <div class="step-body">
-          <div class="step-title">Rellena el formulario</div>
-          <div class="step-desc">Nombre del proyecto, categoría, tecnología concreta y ruta donde crear la carpeta.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">3</div>
-        <div class="step-body">
-          <div class="step-title">La app genera todo automáticamente</div>
-          <div class="step-desc">Carpeta del proyecto, <code>CLAUDE.md</code> con plantilla adaptada a tu tecnología y copia de todos los agentes aplicables en <code>.claude/agents/</code>.</div>
+          <div class="step-title">Descarga</div>
+          <div class="step-desc">Pulsa <strong>Descargar</strong>. El banner muestra el progreso en porcentaje mientras se descarga el nuevo <code>.exe</code>.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num green">4</div>
         <div class="step-body">
-          <div class="step-title">Abre en VS Code y empieza</div>
-          <div class="step-desc">Desde la card del proyecto → botón <strong>VS Code</strong>. Claude Code ya tiene acceso a todos los agentes y al contexto del CLAUDE.md.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="sep"></div>
-
-  <!-- ── Crear agente ── -->
-  <div class="section" id="crear-agente">
-    <div class="section-badge">tareas frecuentes</div>
-    <h2 class="section-title">Crear un <span>agente</span></h2>
-    <p class="section-intro">Navega al nivel donde quieres crear el agente en la Vista Agentes y pulsa "+ Nuevo agente".</p>
-
-    <div class="grid2">
-      <div class="card blue-l">
-        <div class="card-title"><i class="ti ti-pencil" aria-hidden="true"></i> Modo manual</div>
-        <div class="card-body">Rellenas todos los campos directamente. Tienes control total sobre el nombre, descripción, modelo, herramientas y system prompt.</div>
-      </div>
-      <div class="card accent-l">
-        <div class="card-title"><i class="ti ti-sparkles" aria-hidden="true"></i> Modo asistido por IA</div>
-        <div class="card-body">Describes el agente en una frase. Claude genera el system prompt completo teniendo en cuenta el nivel y los agentes existentes.</div>
-      </div>
-    </div>
-
-    <h4>Modo asistido — paso a paso</h4>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num accent">1</div>
-        <div class="step-body">
-          <div class="step-title">Escribe una descripción breve</div>
-          <div class="step-desc">Ejemplo: <em>"Experto en animaciones Unity con Animator, AnimationTree y Timeline"</em></div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">2</div>
-        <div class="step-body">
-          <div class="step-title">Selecciona el idioma del system prompt</div>
-          <div class="step-desc">Elige <strong>ES</strong> (español) o <strong>EN</strong> (inglés). Los system prompts en inglés suelen obtener mejores resultados con Claude.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">3</div>
-        <div class="step-body">
-          <div class="step-title">Pulsa "Generar con IA"</div>
-          <div class="step-desc">Claude genera un system prompt completo y bien estructurado. El resultado aparece en el campo de texto, listo para editar antes de guardar.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num green">4</div>
-        <div class="step-body">
-          <div class="step-title">Revisa, ajusta y guarda</div>
-          <div class="step-desc">El agente se crea en el nivel correspondiente. Si es nivel 1-3, aparecerá como <span class="chip amber"><i class="ti ti-arrow-up" aria-hidden="true"></i> pendiente</span> en los proyectos que lo necesiten.</div>
+          <div class="step-title">Instalar</div>
+          <div class="step-desc">Una vez descargada la actualización, el banner cambia a <strong>Reiniciar ahora</strong>. Al pulsar, CDM se cierra y se relanza con la versión nueva instalada.</div>
         </div>
       </div>
     </div>
 
-    <div class="callout info">
-      <i class="ti ti-info-circle" aria-hidden="true"></i>
+    <div class="callout tip">
+      <i class="ti ti-refresh" aria-hidden="true"></i>
       <div class="callout-body">
-        <div class="callout-title">Herramientas disponibles para los agentes</div>
-        <div class="callout-text" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
-          <span class="tag">Bash</span><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Grep</span><span class="tag">Edit</span><span class="tag">MultiEdit</span><span class="tag">WebFetch</span><span class="tag">WebSearch</span><span class="tag">TodoRead</span><span class="tag">TodoWrite</span>
-        </div>
+        <div class="callout-title">Buscar manualmente</div>
+        <div class="callout-text">Ve a <strong>Ajustes → General → Actualizaciones</strong> y pulsa <strong>Buscar actualizaciones</strong> para comprobar en cualquier momento sin esperar al próximo arranque.</div>
       </div>
     </div>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Sync ── -->
-  <div class="section" id="sync">
-    <div class="section-badge">tareas frecuentes</div>
-    <h2 class="section-title">Sincronizar <span>cambios</span></h2>
-    <p class="section-intro">Cuando editas un agente de nivel 1-3 o creas uno nuevo, los proyectos muestran una notificación de actualización. Tú decides cuándo aplicarla.</p>
+  <!-- ══════════════════════ -->
+  <!-- VS Code                -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="vscode">
+    <div class="section-badge">Referencia</div>
+    <h2 class="section-title">Usar agentes en <span>VS Code</span></h2>
+    <p class="section-intro">Los agentes gestionados por CDM se usan directamente en Claude Code dentro de VS Code. No necesitas ningún paso adicional — CDM ya los ha copiado en los lugares correctos.</p>
 
-    <h4>Estados de un agente en un proyecto</h4>
-    <div class="grid3" style="margin-bottom:20px">
-      <div class="card">
-        <div style="margin-bottom:6px"><span class="chip green"><i class="ti ti-check" aria-hidden="true"></i> Al día</span></div>
-        <div class="card-body">La copia en el proyecto es idéntica a la fuente. No hay nada que hacer.</div>
-      </div>
-      <div class="card">
-        <div style="margin-bottom:6px"><span class="chip amber"><i class="ti ti-arrow-up" aria-hidden="true"></i> Actualización</span></div>
-        <div class="card-body">La fuente ha cambiado desde la última copia. El agente puede mejorarse.</div>
-      </div>
-      <div class="card">
-        <div style="margin-bottom:6px"><span class="chip gray"><i class="ti ti-user" aria-hidden="true"></i> Solo proyecto</span></div>
-        <div class="card-body">Agente de nivel 4. No tiene fuente superior. Nunca se toca en sync.</div>
-      </div>
-    </div>
+    <h4>Ver agentes disponibles</h4>
+    <div class="code-block">
+<span class="grn">/agents</span></div>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Escribe <code>/agents</code> en el chat de Claude Code para ver la lista completa de agentes disponibles en el proyecto actual y los globales de <code>~/.claude/agents/</code>.</p>
 
-    <h4>Cómo sincronizar</h4>
+    <h4>Invocar un agente directamente</h4>
+    <div class="code-block">
+<span class="grn">@code-reviewer</span> revisa PlayerController.cs
+<span class="grn">@unity-dev</span> crea un sistema de inventario con ScriptableObjects
+<span class="grn">@test-writer</span> genera tests para AuthService.ts</div>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Escribe <code>@nombre-del-agente</code> seguido de la tarea. Claude Code carga automáticamente el system prompt del agente y trabaja con ese contexto especializado.</p>
+
+    <h4>Delegación automática</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">Si describes una tarea sin <code>@</code>, Claude Code puede seleccionar el agente más apropiado basándose en el campo <strong>description</strong> de cada agente. Por eso es importante que las descripciones sean precisas y concretas.</p>
+
+    <h4>Dónde viven los agentes</h4>
     <div class="grid2">
-      <div class="card amber-l">
-        <div class="card-title"><i class="ti ti-world" aria-hidden="true"></i> Sync global</div>
-        <div class="card-body">Botón en la Vista Agentes. Propaga <strong>todos</strong> los cambios pendientes a <strong>todos</strong> los proyectos de una vez.</div>
+      <div class="card green-l">
+        <div class="card-title"><span class="chip green">global</span></div>
+        <div class="card-body"><code>~/.claude/agents/</code> — disponibles en cualquier proyecto, aunque no esté registrado en CDM.</div>
       </div>
       <div class="card amber-l">
-        <div class="card-title"><i class="ti ti-folder" aria-hidden="true"></i> Sync por proyecto</div>
-        <div class="card-body">Botón en la card de cada proyecto (solo aparece si tiene actualizaciones). Actualiza solo ese proyecto.</div>
+        <div class="card-title"><span class="chip amber">proyecto</span></div>
+        <div class="card-body"><code>{proyecto}/.claude/agents/</code> — disponibles solo cuando trabajas en ese proyecto.</div>
       </div>
     </div>
 
     <div class="callout warn">
       <i class="ti ti-alert-triangle" aria-hidden="true"></i>
       <div class="callout-body">
-        <div class="callout-title">El sync sobrescribe las copias en el proyecto</div>
-        <div class="callout-text">Si has editado manualmente un agente copiado directamente en la carpeta del proyecto (no desde el manager), esos cambios se perderán al sincronizar. Usa el nivel 4 para personalizaciones permanentes de un proyecto.</div>
+        <div class="callout-title">Requiere Claude Code en VS Code</div>
+        <div class="callout-text">Para usar agentes necesitas tener la extensión Claude Code instalada en VS Code o la CLI de Claude Code. CDM gestiona los ficheros pero no instala Claude Code por ti.</div>
       </div>
     </div>
   </div>
 
   <div class="sep"></div>
 
-  <!-- ── Sugerencias ── -->
-  <div class="section" id="sugerencias">
-    <div class="section-badge">tareas frecuentes</div>
-    <h2 class="section-title">Sugerencias <span>de IA</span></h2>
-    <p class="section-intro">En cada nivel del árbol de agentes aparecen 2-4 cards sugeridas por Claude, adaptadas al contexto y sin repetir lo que ya existe.</p>
-
-    <div class="steps">
-      <div class="step">
-        <div class="step-num accent">→</div>
-        <div class="step-body">
-          <div class="step-title">Navega a cualquier nivel</div>
-          <div class="step-desc">Al entrar a un nivel (global, categoría, tech o proyecto), las sugerencias aparecen automáticamente con borde discontinuo junto a los agentes existentes.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">→</div>
-        <div class="step-body">
-          <div class="step-title">Haz clic en una sugerencia para crearla</div>
-          <div class="step-desc">Se abre el formulario pre-rellenado con nombre, descripción, herramientas y system prompt generado por IA. Edita lo que necesites y guarda.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">→</div>
-        <div class="step-body">
-          <div class="step-title">"Sugerir más" para nuevas propuestas</div>
-          <div class="step-desc">El botón <strong>↻ Sugerir más</strong> reemplaza las sugerencias actuales por un nuevo lote. Las sugerencias se cachean — no gasta tokens en cada visita.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="sep"></div>
-
-  <!-- ── Ajustes ── -->
-  <div class="section" id="ajustes">
-    <div class="section-badge">tareas frecuentes</div>
-    <h2 class="section-title"><span>Ajustes</span></h2>
-    <p class="section-intro">Pantalla de configuración accesible desde la barra de navegación superior. Contiene dos secciones.</p>
-
-    <div class="grid2">
-      <div class="card coral-l">
-        <div class="card-title"><i class="ti ti-key" aria-hidden="true"></i> API key de Anthropic</div>
-        <div class="card-body">Muestra la key enmascarada con un botón para cambiarla. Necesaria para el modo asistido de creación de agentes y las sugerencias automáticas.</div>
-      </div>
-      <div class="card coral-l">
-        <div class="card-title"><i class="ti ti-category" aria-hidden="true"></i> Categorías y tecnologías</div>
-        <div class="card-body">Crea nuevas categorías o añade tecnologías a las existentes. Al crear una nueva, la IA propondrá agentes base que aparecerán como sugerencias en ese nivel.</div>
-      </div>
-    </div>
-
-    <div class="callout tip">
-      <i class="ti ti-bulb" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">Añade tus propias tecnologías</div>
-        <div class="callout-text">¿Empiezas un proyecto con una tecnología no incluida por defecto? Añádela en Ajustes, y el manager generará agentes base específicos para ella mediante IA.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="sep"></div>
-
-  <!-- ── FAQ ── -->
+  <!-- ══════════════════════ -->
+  <!-- FAQ                    -->
+  <!-- ══════════════════════ -->
   <div class="section" id="faq">
-    <div class="section-badge">referencia</div>
+    <div class="section-badge">Referencia</div>
     <h2 class="section-title">Preguntas <span>frecuentes</span></h2>
 
     <div class="faq">
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Necesito tener Claude Code instalado?</div>
-        <div class="faq-a">Sí. Claude Dev Manager gestiona los agentes de Claude Code. Necesitas la extensión de Claude Code instalada en VS Code o la CLI de Claude Code para que los agentes funcionen.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Necesito tener Claude Code instalado?</div>
+        <div class="faq-a">Sí. CDM gestiona los agentes de Claude Code. Para usarlos necesitas tener la CLI de Claude Code instalada y configurada (<code>~/.claude/</code>). CDM puede usarse en modo manual sin proveedor de IA, pero los agentes solo tienen efecto si Claude Code está instalado.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Puedo usar la app sin API key?</div>
-        <div class="faq-a">Sí. El modo manual para crear agentes siempre está disponible. Solo el modo asistido por IA y las sugerencias automáticas requieren una API key de Anthropic.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo usar CDM sin configurar ningún proveedor de IA?</div>
+        <div class="faq-a">Sí. El modo manual siempre está disponible: puedes crear, editar, organizar y sincronizar agentes sin ningún proveedor. Solo las funciones de generación automática de system prompts y sugerencias contextuales requieren un proveedor configurado.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Los cambios en agentes se sincronizan automáticamente?</div>
-        <div class="faq-a">No. Los cambios quedan como "pendientes" y tú decides cuándo sincronizar — por proyecto o todos a la vez con el botón global. Esto evita cambios inesperados mientras estás trabajando.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Los agentes se sincronizan automáticamente cuando los modifico?</div>
+        <div class="faq-a">No. CDM marca los proyectos afectados con el badge de actualizaciones pendientes, pero tú decides cuándo aplicar el sync. Esto evita que cambios en los agentes lleguen a tus proyectos mientras estás trabajando en ellos.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Qué pasa si edito un agente directamente en la carpeta del proyecto?</div>
-        <div class="faq-a">El manager no detectará ese cambio. La próxima vez que sincronices ese proyecto, la versión del manager sobreescribirá tu edición manual. Para hacer cambios permanentes en un proyecto, créalos como agentes de nivel 4 desde el manager.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué pasa si borro un agente de nivel global?</div>
+        <div class="faq-a">El fichero se elimina del directorio <code>agents/global/</code> del manager. La copia que existe en <code>~/.claude/agents/</code> también se elimina en el siguiente sync global de agentes. En los proyectos que tenían ese agente, la copia en <code>.claude/agents/</code> queda intacta hasta que ejecutes un sync de ese proyecto.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Puedo mover la app a otra carpeta?</div>
-        <div class="faq-a">Sí, mueve la carpeta completa (no solo el .exe). Las rutas de los proyectos registrados son absolutas — si también mueves los proyectos, actualiza sus rutas desde la vista Proyectos → editar proyecto.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo mover la carpeta del .exe a otro lugar?</div>
+        <div class="faq-a">Sí, CDM es completamente portable. Mueve toda la carpeta (con <code>config.json</code>, <code>agents/</code> y <code>cache/</code>) al nuevo lugar y ejecuta el .exe. Las rutas de los proyectos son absolutas — si también mueves los proyectos, actualiza sus rutas desde la app.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> ¿Cómo actualizo la app a una nueva versión?</div>
-        <div class="faq-a">Descarga el nuevo <code>claude-dev-manager.exe</code> desde el repositorio de GitHub y reemplaza el actual en tu carpeta. La configuración y los agentes se conservan porque están en ficheros separados.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Por qué el agente code-reviewer usa sonnet y no haiku?</div>
+        <div class="faq-a">Desde la versión 1.2.4, <code>code-reviewer</code> usa el modelo <code>sonnet</code> para ofrecer revisiones más detalladas y precisas. Si prefieres haiku (más rápido), puedes cambiarlo editando el agente en la vista Agentes.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help-circle" aria-hidden="true"></i> El botón "Abrir en VS Code" no funciona</div>
-        <div class="faq-a">El comando <code>code</code> necesita estar en el PATH del sistema. Abre VS Code → Command Palette (<code>Ctrl+Shift+P</code>) → "Shell Command: Install 'code' command in PATH". Reinicia la app y vuelve a intentarlo.</div>
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿El auto-update funciona con el .exe portable?</div>
+        <div class="faq-a">Sí. electron-updater soporta portables. Al instalar la actualización, reemplaza el .exe existente con el nuevo. Tus datos (config.json, agents/, cache/) no se tocan — están junto al .exe, no dentro de él.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Funciona en macOS o Linux?</div>
+        <div class="faq-a">La app está desarrollada y probada en Windows 10/11. Electron es multiplataforma, pero el build actual genera solo .exe. Con ajustes en electron-builder.yml podría compilarse para macOS (.dmg) o Linux (.AppImage). El auto-update y el servidor Express funcionarían igual.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué es el fichero CLAUDE.md?</div>
+        <div class="faq-a">Es el fichero de contexto que Claude Code carga automáticamente al trabajar en un proyecto. Documenta la arquitectura, convenciones de código, dependencias, estructura de carpetas y cualquier información que quieras que Claude Code tenga siempre presente. CDM te permite editarlo visualmente desde el drawer de cada proyecto.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué diferencia hay entre "Nuevo proyecto" e "Importar"?</div>
+        <div class="faq-a"><strong>Nuevo proyecto</strong> crea la carpeta en el sistema de ficheros desde cero. <strong>Importar</strong> registra una carpeta que ya existe — útil para proyectos que ya tienes en disco y quieres empezar a gestionar con CDM.</div>
       </div>
     </div>
   </div>
 
-</div><!-- /content -->
+</div>
 </main>
-</div><!-- /shell -->
-
-<script>
-const items = document.querySelectorAll('.nav-item');
-const sections = document.querySelectorAll('.section,[id]');
-const obs = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if(e.isIntersecting){
-      items.forEach(i => i.classList.remove('active'));
-      const match = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
-      if(match) match.classList.add('active');
-    }
-  });
-}, {threshold:0.3});
-document.querySelectorAll('[id]').forEach(s => obs.observe(s));
-items.forEach(item => item.addEventListener('click', function(){
-  items.forEach(i => i.classList.remove('active'));
-  this.classList.add('active');
-}));
-</script>
+</div>
 </body>
 </html>
