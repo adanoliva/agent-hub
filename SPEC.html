@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Dev Manager — Especificación Completa v1.2.4</title>
+<title>Agent Hub — Especificación Completa v1.2.4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -444,7 +444,7 @@ h4 {
   <!-- ── Cover ── -->
   <div class="cover">
     <div class="cover-tag"><i class="ti ti-file-description" aria-hidden="true"></i> ESPECIFICACIÓN COMPLETA v1.2.4</div>
-    <h1 class="cover-title">Claude <span>Dev</span> Manager</h1>
+    <h1 class="cover-title">Agent <span>Hub</span></h1>
     <p class="cover-sub">Especificación técnica completa de la arquitectura, el modelo de datos, la API REST embebida, el sistema de agentes, el auto-update y el proceso de build para la versión 1.2.4.</p>
     <div class="cover-pills">
       <span class="pill green"><i class="ti ti-check" aria-hidden="true"></i> v1.2.4</span>
@@ -484,11 +484,11 @@ h4 {
     </div>
 
     <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
-      Claude Dev Manager (CDM) es una aplicación Electron que actúa como panel de control para agentes de Claude Code. Todo el estado persiste en disco — no hay base de datos. El proceso principal levanta un servidor Express en <code>localhost:3737</code> que sirve tanto los assets del renderer como la API REST. El renderer es un SPA de fichero único en HTML/vanilla JS.
+      Agent Hub es una aplicación Electron que actúa como panel de control para agentes de Claude Code. Todo el estado persiste en disco — no hay base de datos. El proceso principal levanta un servidor Express en <code>localhost:3737</code> que sirve tanto los assets del renderer como la API REST. El renderer está dividido en módulos JS independientes cargados desde <code>src/renderer/js/</code>.
     </p>
 
     <div class="flow">
-      <div class="flow-step"><strong>Renderer</strong>index.html · vanilla JS</div>
+      <div class="flow-step"><strong>Renderer</strong>index.html · JS modules</div>
       <div class="flow-sep"></div>
       <div class="flow-step"><strong>Context Bridge</strong>window.api (IPC)</div>
       <div class="flow-sep"></div>
@@ -700,7 +700,7 @@ mainWindow.on(<span class="acc">'close'</span>, e => {
     </div>
 
     <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
-      Cada agente es un fichero <code>.md</code> con un bloque de frontmatter YAML delimitado por <code>---</code>. CDM siempre serializa el campo <code>model</code> con el ID completo de Claude. La UI muestra el alias corto.
+      Cada agente es un fichero <code>.md</code> con un bloque de frontmatter YAML delimitado por <code>---</code>. Agent Hub siempre serializa el campo <code>model</code> con el ID completo de Claude. La UI muestra el alias corto.
     </p>
 
     <h4>Estructura del fichero</h4>
@@ -832,7 +832,7 @@ ScriptableObjects, prefabs y URP...</div>
     </div>
 
     <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
-      CDM usa hashes SHA-256 para detectar si los agentes copiados en un proyecto están desactualizados respecto a la versión maestra en el manager. El hash se calcula sobre el contenido serializado del agente (no sobre el fichero en disco directamente) para evitar diferencias de CRLF/LF.
+      Agent Hub usa hashes SHA-256 para detectar si los agentes copiados en un proyecto están desactualizados respecto a la versión maestra en el manager. El hash se calcula sobre el contenido serializado del agente (no sobre el fichero en disco directamente) para evitar diferencias de CRLF/LF.
     </p>
 
     <h4>Flujo de sync</h4>
@@ -1057,7 +1057,7 @@ ScriptableObjects, prefabs y URP...</div>
     </div>
 
     <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
-      CDM abstrae tres proveedores distintos detrás de una interfaz común en <code>ai.js</code>. El proveedor activo se guarda en <code>config.aiProvider</code>.
+      Agent Hub abstrae tres proveedores distintos detrás de una interfaz común en <code>ai.js</code>. El proveedor activo se guarda en <code>config.aiProvider</code>.
     </p>
 
     <div class="decision">
@@ -1065,7 +1065,7 @@ ScriptableObjects, prefabs y URP...</div>
       <div class="decision-body">
         <div class="decision-q">Proveedor: cli</div>
         <div class="decision-a">Claude CLI — suscripción claude.ai</div>
-        <div class="decision-sub">Llama a la CLI de Claude Code instalada en el sistema. Sin coste adicional. Requiere <code>claude</code> en PATH. CDM detecta la CLI con <code>where claude</code> (Windows) o <code>which claude</code>. El token de acceso del usuario lo gestiona la propia CLI.</div>
+        <div class="decision-sub">Llama a la CLI de Claude Code instalada en el sistema. Sin coste adicional. Requiere <code>claude</code> en PATH. Agent Hub detecta la CLI con <code>where claude</code> (Windows) o <code>which claude</code>. El token de acceso del usuario lo gestiona la propia CLI.</div>
       </div>
     </div>
 
@@ -1120,7 +1120,7 @@ ScriptableObjects, prefabs y URP...</div>
     </div>
 
     <p style="font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:20px">
-      CDM usa <code>electron-updater</code> v6 con GitHub Releases como provider. El mecanismo es opt-in: la descarga no empieza hasta que el usuario pulsa el botón en el banner.
+      Agent Hub usa <code>electron-updater</code> v6 con GitHub Releases como provider. El mecanismo es opt-in: la descarga no empieza hasta que el usuario pulsa el botón en el banner.
     </p>
 
     <h4>Configuración (app-update.yml)</h4>
@@ -1129,7 +1129,7 @@ ScriptableObjects, prefabs y URP...</div>
 <span class="hi">owner:</span>    <span class="acc">adanoliva</span>
 <span class="hi">repo:</span>     <span class="acc">cdm</span>
 <span class="hi">private:</span>  <span class="grn">true</span>
-<span class="hi">updaterCacheDirName:</span> claude-dev-manager-updater</div>
+<span class="hi">updaterCacheDirName:</span> agent-hub-updater</div>
 
     <h4>Opciones del auto-updater</h4>
     <div class="code-block">
@@ -1259,7 +1259,7 @@ window.api.<span class="acc">onUpdateError</span>(cb)        <span class="dim">/
 
     <h4>Arquitectura del renderer</h4>
     <p style="font-size:12px;color:var(--text1);line-height:1.65;margin-bottom:10px">
-      El renderer es principalmente un SPA de fichero único en <code>src/renderer/index.html</code> con todo el CSS y JS embebido. Las vistas modernas están en <code>src/renderer/views/</code> y el código de app en <code>src/renderer/app.js</code>. Express sirve el directorio <code>src/renderer/</code> como estáticos con un catch-all que redirige a <code>index.html</code>.
+      El renderer sigue el principio de responsabilidad única: <code>src/renderer/index.html</code> es solo el shell HTML, <code>src/renderer/styles.css</code> contiene todo el CSS, y <code>src/renderer/js/</code> contiene los módulos JS (utils, state, api, toast, modal, category-helpers, view-manager, projects-view, agents-view, settings-view, wizard, update, init). Express sirve el directorio <code>src/renderer/</code> como estáticos.
     </p>
     <p style="font-size:12px;color:var(--text1);line-height:1.65">
       El estado global de la UI vive en el objeto <code>S</code>. Todas las peticiones a la API se hacen mediante <code>fetch()</code> a <code>http://localhost:3737/api/...</code> a través de la función <code>req(method, endpoint, body)</code>.
@@ -1349,7 +1349,7 @@ window.api.<span class="acc">onUpdateError</span>(cb)        <span class="dim">/
       </div>
       <div class="row-item">
         <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
-        <div class="row-text"><code>npm run build</code> — Ejecuta el prebuild (genera icono), compila con <code>electron-builder --win portable</code> y el postbuild. Genera <code>dist/claude-dev-manager.exe</code>.</div>
+        <div class="row-text"><code>npm run build</code> — Ejecuta el prebuild (genera icono), compila con <code>electron-builder --win portable</code> y el postbuild. Genera <code>dist/agent-hub.exe</code>.</div>
       </div>
       <div class="row-item">
         <div class="row-dot" style="background:var(--purple-dim);color:var(--accent)"><i class="ti ti-circle-dot" style="font-size:10px"></i></div>
@@ -1363,7 +1363,7 @@ window.api.<span class="acc">onUpdateError</span>(cb)        <span class="dim">/
 
     <h4>electron-builder.yml — puntos clave</h4>
     <div class="code-block">
-<span class="hi">appId:</span>       com.adanoliva.claude-dev-manager
+<span class="hi">appId:</span>       com.adanoliva.agent-hub
 <span class="hi">publish:</span>
   provider: <span class="grn">github</span>
   owner:    <span class="acc">adanoliva</span>
@@ -1371,7 +1371,7 @@ window.api.<span class="acc">onUpdateError</span>(cb)        <span class="dim">/
   private:  <span class="grn">true</span>
 
 <span class="hi">portable:</span>
-  artifactName: <span class="grn">claude-dev-manager.exe</span>
+  artifactName: <span class="grn">agent-hub.exe</span>
 
 <span class="hi">extraResources:</span>
   - from: assets/       <span class="dim">→ process.resourcesPath/assets/</span>
@@ -1383,7 +1383,7 @@ window.api.<span class="acc">onUpdateError</span>(cb)        <span class="dim">/
     <h4>Artifacts generados por npm run release</h4>
     <div class="grid2">
       <div class="card green-l">
-        <div class="card-label">claude-dev-manager.exe</div>
+        <div class="card-label">agent-hub.exe</div>
         <div class="card-value">Ejecutable portable para el usuario final. Se sube a GitHub Releases como asset descargable.</div>
       </div>
       <div class="card amber-l">
@@ -1418,7 +1418,7 @@ npm run release
 
   <!-- ── Footer ── -->
   <div class="footer">
-    <div class="footer-left">Claude Dev Manager · Especificación técnica · v1.2.4 · 2025</div>
+    <div class="footer-left">Agent Hub · Especificación técnica · v1.2.4 · 2025</div>
     <div class="closed-badge"><i class="ti ti-check" aria-hidden="true"></i> Privado — adanoliva/cdm</div>
   </div>
 

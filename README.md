@@ -1,6 +1,6 @@
-# Claude Dev Manager
+# Agent Hub
 
-> Aplicación de escritorio para gestionar agentes de [Claude Code](https://claude.ai/code), organizar proyectos de desarrollo y mantener contexto `CLAUDE.md` por proyecto — con asistencia de IA integrada.
+> Aplicación de escritorio para gestionar agentes de IA, organizar proyectos de desarrollo y mantener contexto por proyecto — con asistencia de IA integrada.
 
 ![Version](https://img.shields.io/badge/version-1.2.4-7c6af7)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
@@ -11,7 +11,7 @@
 
 ## ¿Qué es?
 
-**Claude Dev Manager** es una aplicación Electron portable para Windows que actúa como panel de control de tus agentes de Claude Code. Organiza los agentes en una jerarquía de cuatro niveles (global → categoría → tecnología → proyecto), los sincroniza automáticamente con tus proyectos, y te ayuda a crearlos con IA integrada.
+**Agent Hub** es una aplicación Electron portable para Windows que actúa como panel de control de tus agentes de Claude Code. Organiza los agentes en una jerarquía de cuatro niveles (global → categoría → tecnología → proyecto), los sincroniza automáticamente con tus proyectos, y te ayuda a crearlos con IA integrada.
 
 Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en el sistema.
 
@@ -56,16 +56,16 @@ Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en
 
 ## Instalación (usuario final)
 
-1. Descarga `claude-dev-manager.exe` desde la sección [Releases](../../releases) del repositorio
-2. Colócalo en la carpeta donde quieras que viva la app (ej: `C:\Tools\ClaudeDevManager\`)
+1. Descarga `agent-hub.exe` desde la sección [Releases](../../releases) del repositorio
+2. Colócalo en la carpeta donde quieras que viva la app (ej: `C:\Tools\AgentHub\`)
 3. Ejecuta el `.exe`
 4. Sigue el wizard de primer arranque (≈2 minutos)
 
 Todo se genera en la misma carpeta donde está el `.exe`:
 
 ```
-ClaudeDevManager/
-  claude-dev-manager.exe
+AgentHub/
+  agent-hub.exe
   config.json
   agents/
   cache/
@@ -86,8 +86,8 @@ Al ejecutar por primera vez, el wizard te guía en tres pasos:
 ## Estructura de la aplicación
 
 ```
-claude-dev-manager/
-├── claude-dev-manager.exe      ← ejecutable portable
+agent-hub/
+├── agent-hub.exe               ← ejecutable portable
 ├── config.json                 ← configuración, proyectos registrados, hashes de sync
 ├── agents/
 │   ├── global/                 ← Nivel 1: agentes para todos los proyectos
@@ -238,7 +238,7 @@ En disco los agentes se serializan siempre con el model ID completo. La UI muest
 Desde **Ajustes → Agentes externos** puedes importar un agente publicado como `.md` con frontmatter en cualquier URL:
 
 1. Introduce la URL del archivo `.md`
-2. CDM lo descarga y muestra un preview editable con todos los campos (nombre, descripción, modelo, herramientas, system prompt)
+2. Agent Hub lo descarga y muestra un preview editable con todos los campos (nombre, descripción, modelo, herramientas, system prompt)
 3. Elige en qué nivel guardarlo (Global, Categoría o Tecnología)
 4. Confirma — el agente queda guardado como un agente real en la jerarquía
 
@@ -308,11 +308,22 @@ src/
 │   ├── defaults.js         ← definición de los agentes incluidos por defecto
 │   └── preload.js          ← context bridge: expone window.api al renderer
 └── renderer/
-    ├── index.html          ← toda la UI (single-file, vanilla JS)
-    ├── views/              ← vistas modulares (proyectos, agentes, ajustes, wizard)
-    ├── app.js              ← lógica del renderer
-    └── styles/
-        └── main.css        ← estilos globales (tema oscuro VS Code)
+    ├── index.html          ← shell HTML
+    ├── styles.css          ← estilos globales (tema oscuro)
+    └── js/                 ← módulos JS (SRP)
+        ├── utils.js        ← helpers (esc, etc.)
+        ├── state.js        ← estado global S
+        ├── api.js          ← función req() para la API REST
+        ├── toast.js        ← notificaciones toast
+        ├── modal.js        ← modal de confirmación
+        ├── category-helpers.js
+        ├── view-manager.js ← switchView()
+        ├── projects-view.js
+        ├── agents-view.js
+        ├── settings-view.js
+        ├── wizard.js
+        ├── update.js       ← listeners de auto-update
+        └── init.js         ← arranque de la app
 ```
 
 ### Scripts disponibles
@@ -333,8 +344,8 @@ npm run release      # Build + publicar en GitHub Releases (requiere GH_TOKEN)
 El fichero `electron-builder.yml` en la raíz del proyecto contiene:
 
 ```yaml
-appId: com.adanoliva.claude-dev-manager
-productName: Claude Dev Manager
+appId: com.adanoliva.agent-hub
+productName: Agent Hub
 
 publish:
   provider: github
@@ -349,7 +360,7 @@ win:
   icon: assets/icon.ico
 
 portable:
-  artifactName: claude-dev-manager.exe
+  artifactName: agent-hub.exe
 
 asar: true
 compression: maximum
@@ -370,7 +381,7 @@ npm version major   # 1.2.4 → 2.0.0
 npm run build
 
 # El .exe generado estará en:
-# dist/claude-dev-manager.exe
+# dist/agent-hub.exe
 ```
 
 ### Publicar nueva versión en GitHub Releases
@@ -387,7 +398,7 @@ npm run release
 ```
 
 Esto genera:
-- `dist/claude-dev-manager.exe` — el instalable para los usuarios
+- `dist/agent-hub.exe` — el instalable para los usuarios
 - `dist/latest.yml` — el manifiesto de versión que `electron-updater` consulta para el auto-update
 
 > Los usuarios con versiones anteriores verán el banner de actualización automáticamente en su próximo arranque.
@@ -465,7 +476,7 @@ Thumbs.db
 ## Preguntas frecuentes
 
 **¿Necesito tener Claude Code instalado?**  
-Sí, Claude Dev Manager gestiona los agentes de Claude Code. Necesitas tener la CLI de Claude Code instalada.
+Sí, Agent Hub gestiona los agentes de Claude Code. Necesitas tener la CLI de Claude Code instalada.
 
 **¿Puedo usar la app sin proveedor de IA?**  
 Sí. El modo manual para crear agentes siempre está disponible. Solo el modo asistido por IA (generación de prompts y sugerencias) requiere un proveedor configurado.
