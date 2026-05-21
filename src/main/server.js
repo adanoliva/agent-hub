@@ -31,8 +31,8 @@ const {
   getProjectSyncStatus,
   syncProject,
   syncAllProjects,
-  getClaudeMd,
-  saveClaudeMd,
+  getContextFile,
+  saveContextFile,
 } = require('./projects');
 
 const app  = express();
@@ -244,17 +244,22 @@ app.delete('/api/agents', (req, res) => {
 
 // ── Agents — project level (4) ────────────────────────────────────────────────
 
+function projectProviders(project) {
+  const p = project.aiProvider || 'claude';
+  return p === 'both' ? ['claude', 'github'] : [p];
+}
+
 app.get('/api/projects/:id/agents', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  res.json(listProjectAgents(project.path));
+  res.json(listProjectAgents(project.path, projectProviders(project)));
 });
 
 app.post('/api/projects/:id/agents', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   try {
-    res.json(saveProjectAgent(project.path, req.body.agent.name, req.body.agent));
+    res.json(saveProjectAgent(project.path, req.body.agent.name, req.body.agent, projectProviders(project)));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -264,7 +269,7 @@ app.put('/api/projects/:id/agents', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   try {
-    res.json(saveProjectAgent(project.path, req.body.oldName, req.body.agent));
+    res.json(saveProjectAgent(project.path, req.body.oldName, req.body.agent, projectProviders(project)));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -273,7 +278,7 @@ app.put('/api/projects/:id/agents', (req, res) => {
 app.delete('/api/projects/:id/agents/:name', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  deleteProjectAgent(project.path, req.params.name);
+  deleteProjectAgent(project.path, req.params.name, projectProviders(project));
   res.json({ ok: true });
 });
 
@@ -288,24 +293,24 @@ app.get('/api/projects', (req, res) => {
 });
 
 app.post('/api/projects', (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status } = req.body;
+  const { name, categoryId, techId, projectPath, description, status, aiProvider } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(createProject({ name, categoryId, techId, projectPath, description, status }));
+    res.json(createProject({ name, categoryId, techId, projectPath, description, status, aiProvider }));
   } catch (e) {
     res.status(e.message.includes('already exists') ? 409 : 500).json({ error: e.message });
   }
 });
 
 app.post('/api/projects/import', (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status } = req.body;
+  const { name, categoryId, techId, projectPath, description, status, aiProvider } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(importProject({ name, categoryId, techId, projectPath, description, status }));
+    res.json(importProject({ name, categoryId, techId, projectPath, description, status, aiProvider }));
   } catch (e) {
     res.status(e.message.includes('not exist') ? 404 : 409).json({ error: e.message });
   }
@@ -359,18 +364,20 @@ app.post('/api/sync-all', (req, res) => {
   }
 });
 
-// ── CLAUDE.md ─────────────────────────────────────────────────────────────────
+// ── Context files (CLAUDE.md / copilot-instructions.md) ──────────────────────
 
 app.get('/api/projects/:id/context', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  res.json(getClaudeMd(project));
+  const type = req.query.type || (project.aiProvider === 'github' ? 'github' : 'claude');
+  res.json(getContextFile(project, type));
 });
 
 app.put('/api/projects/:id/context', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  const filePath = saveClaudeMd(project, req.body.content || '');
+  const type     = req.body.type || (project.aiProvider === 'github' ? 'github' : 'claude');
+  const filePath = saveContextFile(project, type, req.body.content || '');
   res.json({ ok: true, filePath });
 });
 

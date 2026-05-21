@@ -49,10 +49,17 @@ function renderProjectsView() {
   document.getElementById('view-projects').innerHTML = html;
 }
 
+const PROVIDER_ICONS = {
+  claude: '<i class="ti ti-robot" title="Claude Code"></i>',
+  github: '<i class="ti ti-brand-github" title="GitHub Copilot"></i>',
+  both:   '<i class="ti ti-robot" title="Claude + GitHub"></i><i class="ti ti-brand-github"></i>',
+};
+
 function projectCard(p) {
-  const pending = p.pendingUpdates || 0;
-  const exists  = p.pathExists !== false;
+  const pending      = p.pendingUpdates || 0;
+  const exists       = p.pathExists !== false;
   const statusColors = {active:'green', paused:'amber', archived:'gray'};
+  const provIcon     = PROVIDER_ICONS[p.aiProvider || 'claude'] || PROVIDER_ICONS.claude;
   return `<div class="proj-card" onclick="openProjectDrawer('${p.id}')">
     <div class="proj-card-head">
       <div class="proj-card-name">${esc(p.name)}</div>
@@ -61,6 +68,7 @@ function projectCard(p) {
     <div class="proj-card-meta">
       ${p.techId ? `<span class="badge blue">${esc(techName(p.categoryId, p.techId))}</span>` : `<span class="badge gray">${esc(catName(p.categoryId))}</span>`}
       <span class="badge ${statusColors[p.status] || 'gray'}">${p.status || 'active'}</span>
+      <span class="badge gray" style="letter-spacing:0">${provIcon}</span>
       ${!exists ? `<span class="badge coral"><i class="ti ti-alert-triangle"></i> ruta no encontrada</span>` : ''}
     </div>
     <div class="proj-card-actions" onclick="event.stopPropagation()">
@@ -88,6 +96,11 @@ async function syncAllProjects() {
   } catch(e) { toast(e.message, 'err'); }
 }
 
+const PROVIDER_OPTS = `
+  <label class="provider-opt"><input type="radio" name="prov" value="claude" checked><span><i class="ti ti-robot"></i> Claude Code <small style="color:var(--text2)">.claude/agents</small></span></label>
+  <label class="provider-opt"><input type="radio" name="prov" value="github"><span><i class="ti ti-brand-github"></i> GitHub Copilot <small style="color:var(--text2)">.github/agents</small></span></label>
+  <label class="provider-opt"><input type="radio" name="prov" value="both"><span><i class="ti ti-git-merge"></i> Ambos</span></label>`;
+
 function openCreateProject() {
   const cats = S.config?.categories || [];
   showModal('Nuevo proyecto', '', `
@@ -98,17 +111,19 @@ function openCreateProject() {
     <div class="field"><label>Tecnología</label><select id="mp-tech"></select></div>
     <div class="field"><label>Ruta donde crear la carpeta</label><input id="mp-path" placeholder="C:/Proyectos"/><div class="hint">Se creará una subcarpeta con el nombre del proyecto</div></div>
     <div class="field"><label>Descripción (opcional)</label><input id="mp-desc" placeholder="Breve descripción…"/></div>
+    <div class="field"><label>Agentes IA</label><div class="provider-opts">${PROVIDER_OPTS}</div></div>
   `, async () => {
-    const name = document.getElementById('mp-name').value.trim();
-    const cat  = document.getElementById('mp-cat').value;
-    const tech = document.getElementById('mp-tech').value;
-    const base = document.getElementById('mp-path').value.trim();
-    const desc = document.getElementById('mp-desc').value.trim();
+    const name     = document.getElementById('mp-name').value.trim();
+    const cat      = document.getElementById('mp-cat').value;
+    const tech     = document.getElementById('mp-tech').value;
+    const base     = document.getElementById('mp-path').value.trim();
+    const desc     = document.getElementById('mp-desc').value.trim();
+    const provider = document.querySelector('input[name="prov"]:checked')?.value || 'claude';
     if (!name || !cat || !base) { toast('Rellena nombre, categoría y ruta', 'err'); return false; }
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const projectPath = base.replace(/[/\\]$/, '') + '\\' + slug;
     try {
-      await req('POST', '/projects', {name, categoryId:cat, techId:tech||null, projectPath, description:desc});
+      await req('POST', '/projects', {name, categoryId:cat, techId:tech||null, projectPath, description:desc, aiProvider:provider});
       toast(`Proyecto "${name}" creado`);
       await loadProjects(); renderProjectsView();
     } catch(e) { toast(e.message, 'err'); return false; }
@@ -125,14 +140,16 @@ function openImportProject() {
     </div>
     <div class="field"><label>Tecnología</label><select id="mi-tech"></select></div>
     <div class="field"><label>Ruta de la carpeta existente</label><input id="mi-path" placeholder="C:/Dev/mi-proyecto"/></div>
+    <div class="field"><label>Agentes IA</label><div class="provider-opts">${PROVIDER_OPTS}</div></div>
   `, async () => {
-    const name = document.getElementById('mi-name').value.trim();
-    const cat  = document.getElementById('mi-cat').value;
-    const tech = document.getElementById('mi-tech').value;
-    const path = document.getElementById('mi-path').value.trim();
-    if (!name || !cat || !path) { toast('Rellena todos los campos', 'err'); return false; }
+    const name     = document.getElementById('mi-name').value.trim();
+    const cat      = document.getElementById('mi-cat').value;
+    const tech     = document.getElementById('mi-tech').value;
+    const projPath = document.getElementById('mi-path').value.trim();
+    const provider = document.querySelector('input[name="prov"]:checked')?.value || 'claude';
+    if (!name || !cat || !projPath) { toast('Rellena todos los campos', 'err'); return false; }
     try {
-      await req('POST', '/projects/import', {name, categoryId:cat, techId:tech||null, projectPath:path});
+      await req('POST', '/projects/import', {name, categoryId:cat, techId:tech||null, projectPath:projPath, aiProvider:provider});
       toast(`Proyecto "${name}" importado`);
       await loadProjects(); renderProjectsView();
     } catch(e) { toast(e.message, 'err'); return false; }
@@ -160,7 +177,7 @@ async function openProjectDrawer(id) {
   const p = S.projects.find(x => x.id === id);
   if (!p) return;
   S.drawerProject = p;
-  S.drawerTab = 'claude';
+  S.drawerTab = p.aiProvider === 'github' ? 'ctx-github' : 'ctx-claude';
   await renderDrawer();
   document.getElementById('drawer').style.display = 'flex';
 }
@@ -177,8 +194,20 @@ async function renderDrawer() {
 
   let syncStatus = {};
   try { syncStatus = await req('GET', `/projects/${p.id}/sync-status`); } catch {}
-  let claudeMd = '';
-  try { const r = await req('GET', `/projects/${p.id}/context`); claudeMd = r.content || ''; } catch {}
+
+  const isCtxTab   = S.drawerTab === 'ctx-claude' || S.drawerTab === 'ctx-github';
+  const ctxType    = S.drawerTab === 'ctx-github' ? 'github' : 'claude';
+  let   ctxContent = '';
+  let   ctxPath    = '';
+  if (isCtxTab) {
+    try {
+      const r  = await req('GET', `/projects/${p.id}/context?type=${ctxType}`);
+      ctxContent = r.content || '';
+      ctxPath    = r.filePath || '';
+    } catch {}
+  }
+
+  const provider = p.aiProvider || 'claude';
 
   const statusBadge = (s) => {
     if (s === 'ok')       return `<span class="badge green"><i class="ti ti-check"></i>ok</span>`;
@@ -195,6 +224,13 @@ async function renderDrawer() {
       ${statusBadge(entry.status)}
     </div>`).join('');
 
+  const ctxTabs = provider === 'both'
+    ? `<div class="drawer-tab ${S.drawerTab === 'ctx-claude' ? 'active' : ''}" onclick="setDrawerTab('ctx-claude')">CLAUDE.md</div>
+       <div class="drawer-tab ${S.drawerTab === 'ctx-github' ? 'active' : ''}" onclick="setDrawerTab('ctx-github')">Copilot</div>`
+    : provider === 'github'
+      ? `<div class="drawer-tab ${isCtxTab ? 'active' : ''}" onclick="setDrawerTab('ctx-github')">copilot-instructions.md</div>`
+      : `<div class="drawer-tab ${isCtxTab ? 'active' : ''}" onclick="setDrawerTab('ctx-claude')">CLAUDE.md</div>`;
+
   inner.innerHTML = `
     <div class="drawer-head">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -205,16 +241,17 @@ async function renderDrawer() {
         ${p.techId ? `<span class="badge blue">${esc(techName(p.categoryId, p.techId))}</span>` : ''}
         <span class="badge gray">${esc(catName(p.categoryId))}</span>
         <span class="badge ${p.status === 'active' ? 'green' : p.status === 'paused' ? 'amber' : 'gray'}">${p.status || 'active'}</span>
+        <span class="badge gray" style="letter-spacing:0">${PROVIDER_ICONS[provider] || PROVIDER_ICONS.claude}</span>
       </div>
     </div>
     <div class="drawer-tabs">
-      <div class="drawer-tab ${S.drawerTab === 'claude' ? 'active' : ''}" onclick="setDrawerTab('claude')">CLAUDE.md</div>
+      ${ctxTabs}
       <div class="drawer-tab ${S.drawerTab === 'sync' ? 'active' : ''}" onclick="setDrawerTab('sync')">Agentes <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${Object.keys(syncStatus).length}</span></div>
     </div>
     <div class="drawer-body">
-      ${S.drawerTab === 'claude' ? `
-        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;font-family:var(--mono)">${esc(p.path)}\\CLAUDE.md</div>
-        <textarea class="claude-md-editor" id="claude-md-ta">${esc(claudeMd)}</textarea>` : `
+      ${isCtxTab ? `
+        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;font-family:var(--mono)">${esc(ctxPath)}</div>
+        <textarea class="claude-md-editor" id="ctx-ta">${esc(ctxContent)}</textarea>` : `
         <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:12px;color:var(--text1)">${Object.values(syncStatus).filter(s => s.status === 'ok').length} al día, ${Object.values(syncStatus).filter(s => s.status === 'outdated' || s.status === 'new').length} pendientes</span>
         </div>
@@ -222,24 +259,26 @@ async function renderDrawer() {
       `}
     </div>
     <div class="drawer-foot">
-      ${S.drawerTab === 'claude'
-        ? `<button class="btn primary" onclick="saveClaudeMd('${p.id}')"><i class="ti ti-device-floppy"></i> Guardar</button>`
+      ${isCtxTab
+        ? `<button class="btn primary" onclick="saveContextFile('${p.id}','${ctxType}')"><i class="ti ti-device-floppy"></i> Guardar</button>`
         : `<button class="btn" onclick="syncProject('${p.id}');closeDrawer()"><i class="ti ti-refresh"></i> Sync este proyecto</button>`
       }
       <button class="btn" onclick="openVSCode('${p.id}')"><i class="ti ti-brand-vscode"></i> VS Code</button>
       <button class="btn" onclick="openFolder('${p.id}')"><i class="ti ti-folder-open"></i> Carpeta</button>
       <div style="flex:1"></div>
+      <button class="btn sm ghost" onclick="openEditProject('${p.id}')" title="Editar proyecto"><i class="ti ti-pencil"></i></button>
       <button class="btn danger sm" onclick="confirmDeleteProject('${p.id}')"><i class="ti ti-trash"></i></button>
     </div>`;
 }
 
 async function setDrawerTab(tab) { S.drawerTab = tab; await renderDrawer(); }
 
-async function saveClaudeMd(id) {
-  const content = document.getElementById('claude-md-ta')?.value || '';
+async function saveContextFile(id, type) {
+  const content = document.getElementById('ctx-ta')?.value || '';
+  const label   = type === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md';
   try {
-    await req('PUT', `/projects/${id}/context`, {content});
-    toast('CLAUDE.md guardado');
+    await req('PUT', `/projects/${id}/context`, {content, type});
+    toast(`${label} guardado`);
   } catch(e) { toast(e.message, 'err'); }
 }
 
@@ -259,23 +298,107 @@ async function openFolder(id) {
   else toast('Función disponible en la app de escritorio', 'info');
 }
 
+function _providerChangeWarning(oldProv, newProv) {
+  if (!oldProv || oldProv === newProv) return '';
+  const oldSet  = oldProv === 'both' ? ['claude','github'] : [oldProv];
+  const newSet  = newProv === 'both' ? ['claude','github'] : [newProv];
+  const added   = newSet.filter(p => !oldSet.includes(p));
+  const removed = oldSet.filter(p => !newSet.includes(p));
+  const dirName = p => p === 'github' ? '.github/agents' : '.claude/agents';
+
+  let msg = '';
+  const deletedFiles = r => r === 'claude'
+    ? 'la carpeta <code>.claude/</code> y <code>CLAUDE.md</code>'
+    : 'la carpeta <code>.github/</code>';
+
+  if (added.length && removed.length) {
+    msg = `Los agentes propios se copiarán de <code>${dirName(removed[0])}</code> a <code>${dirName(added[0])}</code>. Se eliminarán del disco ${deletedFiles(removed[0])}.`;
+  } else if (added.length) {
+    msg = `Los agentes propios se <strong>duplicarán</strong> en <code>${dirName(added[0])}</code>. Tendrás copias en ambos directorios.`;
+  } else if (removed.length) {
+    msg = `Se eliminarán del disco ${deletedFiles(removed[0])} junto con todos sus agentes.`;
+  }
+  if (!msg) return '';
+  return `<div style="font-size:11px;color:var(--text1);padding:8px 10px;background:var(--amber-dim);border-radius:6px;border:1px solid rgba(251,191,36,.2);margin-top:6px"><i class="ti ti-alert-triangle" style="color:var(--amber)"></i> ${msg}</div>`;
+}
+
+function _updateProviderWarning(oldProv) {
+  const sel = document.querySelector('#ep-provider-opts input[name="ep-prov"]:checked');
+  const div = document.getElementById('ep-prov-warn');
+  if (sel && div) div.innerHTML = _providerChangeWarning(oldProv, sel.value);
+}
+
+function openEditProject(id) {
+  const p = S.projects.find(x => x.id === id); if (!p) return;
+  const cats  = S.config?.categories || [];
+  const cat   = cats.find(c => c.id === p.categoryId);
+  const techs = cat?.technologies || [];
+
+  const provOpts = ['claude','github','both'].map(v => `
+    <label class="provider-opt">
+      <input type="radio" name="ep-prov" value="${v}" ${(p.aiProvider||'claude') === v ? 'checked' : ''}
+        onchange="_updateProviderWarning('${p.aiProvider||'claude'}')">
+      <span>${v === 'claude' ? '<i class="ti ti-robot"></i> Claude Code' : v === 'github' ? '<i class="ti ti-brand-github"></i> GitHub Copilot' : '<i class="ti ti-git-merge"></i> Ambos'}</span>
+    </label>`).join('');
+
+  showModal('Editar proyecto', '', `
+    <div class="field"><label>Nombre</label><input id="ep-name" value="${esc(p.name)}"/></div>
+    <div class="field"><label>Descripción</label><input id="ep-desc" value="${esc(p.description||'')}"/></div>
+    <div class="field"><label>Estado</label>
+      <select id="ep-status">
+        <option value="active"   ${p.status==='active'   ?'selected':''}>Activo</option>
+        <option value="paused"   ${p.status==='paused'   ?'selected':''}>Pausado</option>
+        <option value="archived" ${p.status==='archived' ?'selected':''}>Archivado</option>
+      </select>
+    </div>
+    <div class="field"><label>Tecnología</label>
+      <select id="ep-tech">
+        <option value="">— Sin tecnología específica —</option>
+        ${techs.map(t => `<option value="${t.id}" ${p.techId===t.id?'selected':''}>${t.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>Agentes IA</label>
+      <div class="provider-opts" id="ep-provider-opts">${provOpts}</div>
+      <div id="ep-prov-warn"></div>
+    </div>
+  `, async () => {
+    const name     = document.getElementById('ep-name').value.trim();
+    const desc     = document.getElementById('ep-desc').value.trim();
+    const status   = document.getElementById('ep-status').value;
+    const tech     = document.getElementById('ep-tech').value;
+    const provider = document.querySelector('#ep-provider-opts input[name="ep-prov"]:checked')?.value || p.aiProvider;
+    if (!name) { toast('El nombre es obligatorio', 'err'); return false; }
+    try {
+      const result = await req('PUT', `/projects/${id}`, {name, description:desc, status, techId:tech||null, aiProvider:provider});
+      const m = result.migration;
+      if (m && (m.added.length || m.removed.length)) {
+        const detail = m.agentsMigrated > 0 ? ` (${m.agentsMigrated} agente${m.agentsMigrated!==1?'s':''} migrado${m.agentsMigrated!==1?'s':''})` : '';
+        toast(`Proveedor actualizado${detail}`);
+      } else {
+        toast(`Proyecto "${name}" actualizado`);
+      }
+      S.drawerProject = S.projects.find(x => x.id === id) || S.drawerProject;
+      await loadProjects();
+      S.drawerProject = S.projects.find(x => x.id === id);
+      renderProjectsView();
+      if (S.drawerProject) await renderDrawer();
+    } catch(e) { toast(e.message, 'err'); return false; }
+  }, 'Guardar');
+}
+
 async function confirmDeleteProject(id) {
   const p = S.projects.find(x => x.id === id); if (!p) return;
   showModal('Eliminar proyecto', `¿Eliminar "${esc(p.name)}" del manager?`, `
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="del-folder" style="accent-color:var(--coral)">
-        También borrar la carpeta del disco (${esc(p.path)})
-      </label>
-      <div style="font-size:11px;color:var(--amber);padding:8px 10px;background:var(--amber-dim);border-radius:6px;border:1px solid rgba(251,191,36,.2)">
-        <i class="ti ti-alert-triangle"></i> Si marcas esta opción, los archivos se eliminarán permanentemente.
-      </div>
+    <div style="font-size:12px;color:var(--text1);padding:10px 12px;background:var(--bg3);border-radius:6px;border:1px solid var(--border2)">
+      <i class="ti ti-info-circle" style="color:var(--blue)"></i>
+      Solo se eliminará el proyecto de Agent Hub. La carpeta y sus archivos en
+      <span style="font-family:var(--mono);color:var(--text0)">${esc(p.path)}</span>
+      no se tocarán.
     </div>
   `, async () => {
-    const del = document.getElementById('del-folder')?.checked;
     try {
-      await req('DELETE', `/projects/${id}?deleteFolder=${del}`);
-      toast(`Proyecto "${p.name}" eliminado`);
+      await req('DELETE', `/projects/${id}`);
+      toast(`Proyecto "${p.name}" eliminado de Agent Hub`);
       closeDrawer(); await loadProjects(); renderProjectsView();
     } catch(e) { toast(e.message, 'err'); return false; }
   }, 'Eliminar', 'btn danger');

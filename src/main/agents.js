@@ -227,29 +227,71 @@ function deleteAgent(level, categoryId, techId, name) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
-// ── Project-level agents ──────────────────────────────────────────────────────
+// ── Provider-aware helpers ────────────────────────────────────────────────────
 
-function listProjectAgents(projectPath) {
-  const dir = path.join(projectPath, '.claude', 'agents');
-  return listAgentsInDir(dir).map(a => ({ ...a, level: 'project' }));
+const PROVIDER_DIRS = {
+  claude: ['.claude', 'agents'],
+  github: ['.github',  'agents'],
+};
+
+function getAgentsDirForProvider(projectPath, provider) {
+  const parts = PROVIDER_DIRS[provider] || PROVIDER_DIRS.claude;
+  return path.join(projectPath, ...parts);
 }
 
-function saveProjectAgent(projectPath, oldName, agentData) {
-  const dir = path.join(projectPath, '.claude', 'agents');
-  ensureDir(dir);
+function serializeAgentGitHub(agent) {
+  return [
+    '---',
+    `name: ${agent.name}`,
+    `description: ${agent.description || ''}`,
+    '---',
+    '',
+    agent.system || '',
+    '',
+  ].join('\n');
+}
 
-  const oldPath = path.join(dir, `${oldName}.md`);
-  const newPath = path.join(dir, `${agentData.name}.md`);
+function serializeAgentForProvider(agent, provider) {
+  if (provider === 'github') return serializeAgentGitHub(agent);
+  return serializeAgent(agent);
+}
 
-  if (oldName !== agentData.name && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+// ── Project-level agents ──────────────────────────────────────────────────────
 
-  fs.writeFileSync(newPath, serializeAgent(agentData), 'utf8');
+function listProjectAgents(projectPath, providers = ['claude']) {
+  const seen    = new Set();
+  const results = [];
+  for (const provider of providers) {
+    const dir = getAgentsDirForProvider(projectPath, provider);
+    for (const agent of listAgentsInDir(dir)) {
+      if (!seen.has(agent.name)) {
+        seen.add(agent.name);
+        results.push({ ...agent, level: 'project' });
+      }
+    }
+  }
+  return results;
+}
+
+function saveProjectAgent(projectPath, oldName, agentData, providers = ['claude']) {
+  for (const provider of providers) {
+    const dir = getAgentsDirForProvider(projectPath, provider);
+    ensureDir(dir);
+    const oldPath = path.join(dir, `${oldName}.md`);
+    const newPath = path.join(dir, `${agentData.name}.md`);
+    if (oldName !== agentData.name && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    fs.writeFileSync(newPath, serializeAgentForProvider(agentData, provider), 'utf8');
+  }
+  const firstDir = getAgentsDirForProvider(projectPath, providers[0]);
+  const newPath  = path.join(firstDir, `${agentData.name}.md`);
   return { ...parseAgentFile(newPath), level: 'project' };
 }
 
-function deleteProjectAgent(projectPath, name) {
-  const filePath = path.join(projectPath, '.claude', 'agents', `${name}.md`);
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+function deleteProjectAgent(projectPath, name, providers = ['claude']) {
+  for (const provider of providers) {
+    const filePath = path.join(getAgentsDirForProvider(projectPath, provider), `${name}.md`);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
 }
 
 // ── Migration ─────────────────────────────────────────────────────────────────
@@ -339,6 +381,7 @@ module.exports = {
   parseAgentFile,
   parseAgentFromString,
   serializeAgent,
+  serializeAgentForProvider,
   resolveModel,
   shortModel,
   hashAgent,
@@ -346,6 +389,7 @@ module.exports = {
   listAgentsInDir,
   listAgentsByLevel,
   getApplicableAgents,
+  getAgentsDirForProvider,
   createAgent,
   updateAgent,
   deleteAgent,

@@ -15,9 +15,11 @@ const {
   hashAgent,
   hashFile,
   serializeAgent,
+  serializeAgentForProvider,
+  getAgentsDirForProvider,
   parseAgentFile,
 } = require('./agents');
-const { getTemplate } = require('./templates');
+const { getTemplate, getGitHubTemplate } = require('./templates');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,24 +36,37 @@ function slugify(name) {
     .replace(/^-|-$/g, '');
 }
 
+// ── Provider helpers ──────────────────────────────────────────────────────────
+
+function getProviders(project) {
+  const p = project.aiProvider || 'claude';
+  if (p === 'both') return ['claude', 'github'];
+  return [p];
+}
+
 // ── Agent copy ────────────────────────────────────────────────────────────────
 
 /**
  * Copies all applicable agents (global + section + tech) to a project.
- * Returns a hash map: { agentName: { hash, copiedAt, level, categoryId, techId } }
+ * Writes to every provider directory. Returns a hash map.
  */
-function copyAgentsToProject(projectPath, categoryId, techId) {
-  const agentsDir = path.join(projectPath, '.claude', 'agents');
-  ensureDir(agentsDir);
-
+function copyAgentsToProject(projectPath, categoryId, techId, providers = ['claude']) {
   const applicable = getApplicableAgents(categoryId, techId);
   const hashes     = {};
 
-  for (const agent of applicable) {
-    const destPath = path.join(agentsDir, `${agent.name}.md`);
-    const content  = serializeAgent(agent);
+  for (const provider of providers) {
+    const agentsDir = getAgentsDirForProvider(projectPath, provider);
+    ensureDir(agentsDir);
+    for (const agent of applicable) {
+      fs.writeFileSync(
+        path.join(agentsDir, `${agent.name}.md`),
+        serializeAgentForProvider(agent, provider),
+        'utf8',
+      );
+    }
+  }
 
-    fs.writeFileSync(destPath, content, 'utf8');
+  for (const agent of applicable) {
     hashes[agent.name] = {
       hash:       hashAgent(agent),
       copiedAt:   new Date().toISOString(),
@@ -68,54 +83,50 @@ function copyAgentsToProject(projectPath, categoryId, techId) {
 
 /**
  * Computes the sync status for every agent in a project.
+ * An agent is 'new'/'outdated' if any configured provider dir is missing or stale.
  *
  * Status values:
- *   'ok'       — project copy matches source
- *   'outdated' — source has changed since copy
- *   'new'      — source agent doesn't exist in project yet
- *   'removed'  — source agent was deleted but copy still exists
+ *   'ok'       — all provider copies match source
+ *   'outdated' — source has changed since last copy
+ *   'new'      — missing in at least one provider dir
  *   'local'    — agent only in project (level 4), no source
  */
 function getProjectSyncStatus(project) {
+  const providers    = getProviders(project);
   const applicable   = getApplicableAgents(project.categoryId, project.techId);
-  const projectAgents = listProjectAgents(project.path);
   const savedHashes  = project.agentHashes || {};
+  const statusMap    = {};
 
-  const statusMap = {};
-
-  // Check each applicable (source) agent
   for (const agent of applicable) {
-    const sourceHash  = hashAgent(agent);
-    const savedEntry  = savedHashes[agent.name];
-    const projectFile = path.join(project.path, '.claude', 'agents', `${agent.name}.md`);
+    const sourceHash = hashAgent(agent);
+    const savedEntry = savedHashes[agent.name];
 
-    if (!savedEntry || !fs.existsSync(projectFile)) {
-      statusMap[agent.name] = {
-        status:     'new',
-        sourceHash,
-        agent,
-      };
+    const allPresent = providers.every(provider =>
+      fs.existsSync(path.join(getAgentsDirForProvider(project.path, provider), `${agent.name}.md`)),
+    );
+
+    if (!savedEntry || !allPresent) {
+      statusMap[agent.name] = { status: 'new', sourceHash, agent };
     } else {
-      const currentProjectHash = hashFile(projectFile);
+      const firstFile = path.join(getAgentsDirForProvider(project.path, providers[0]), `${agent.name}.md`);
       statusMap[agent.name] = {
         status:      sourceHash === savedEntry.hash ? 'ok' : 'outdated',
         sourceHash,
         savedHash:   savedEntry.hash,
-        projectHash: currentProjectHash,
+        projectHash: hashFile(firstFile),
         copiedAt:    savedEntry.copiedAt,
         agent,
       };
     }
   }
 
-  // Check project agents that don't have a source (level 4 / local)
+  // Level-4 local agents: read from all provider dirs, de-duplicate
   const applicableNames = new Set(applicable.map(a => a.name));
-  for (const pa of projectAgents) {
-    if (!applicableNames.has(pa.name)) {
-      statusMap[pa.name] = {
-        status: 'local',
-        agent:  pa,
-      };
+  const seenLocal       = new Set();
+  for (const pa of listProjectAgents(project.path, providers)) {
+    if (!applicableNames.has(pa.name) && !seenLocal.has(pa.name)) {
+      seenLocal.add(pa.name);
+      statusMap[pa.name] = { status: 'local', agent: pa };
     }
   }
 
@@ -133,52 +144,46 @@ function countPendingUpdates(project) {
 // ── Sync ──────────────────────────────────────────────────────────────────────
 
 /**
- * Syncs a single project: copies updated and new agents from source.
+ * Syncs a single project: copies updated and new agents to every provider dir.
  * Local (level-4) agents are never touched.
  * Returns { updated: number, added: number }
  */
 function syncProject(project) {
+  const providers = getProviders(project);
   const status    = getProjectSyncStatus(project);
-  const agentsDir = path.join(project.path, '.claude', 'agents');
-  ensureDir(agentsDir);
 
   const cfg     = readConfig();
   const projIdx = cfg.projects.findIndex(p => p.id === project.id);
   if (projIdx === -1) throw new Error('Project not found in config');
 
-  if (!cfg.projects[projIdx].agentHashes) {
-    cfg.projects[projIdx].agentHashes = {};
-  }
+  if (!cfg.projects[projIdx].agentHashes) cfg.projects[projIdx].agentHashes = {};
 
   let updated = 0;
   let added   = 0;
 
   for (const [name, entry] of Object.entries(status)) {
-    if (entry.status === 'outdated') {
-      const destPath = path.join(agentsDir, `${name}.md`);
-      fs.writeFileSync(destPath, serializeAgent(entry.agent), 'utf8');
-      cfg.projects[projIdx].agentHashes[name] = {
-        hash:       entry.sourceHash,
-        copiedAt:   new Date().toISOString(),
-        level:      entry.agent.level,
-        categoryId: entry.agent.categoryId || null,
-        techId:     entry.agent.techId     || null,
-      };
-      updated++;
+    if (entry.status !== 'outdated' && entry.status !== 'new') continue;
+
+    for (const provider of providers) {
+      const agentsDir = getAgentsDirForProvider(project.path, provider);
+      ensureDir(agentsDir);
+      fs.writeFileSync(
+        path.join(agentsDir, `${name}.md`),
+        serializeAgentForProvider(entry.agent, provider),
+        'utf8',
+      );
     }
 
-    if (entry.status === 'new') {
-      const destPath = path.join(agentsDir, `${name}.md`);
-      fs.writeFileSync(destPath, serializeAgent(entry.agent), 'utf8');
-      cfg.projects[projIdx].agentHashes[name] = {
-        hash:       entry.sourceHash,
-        copiedAt:   new Date().toISOString(),
-        level:      entry.agent.level,
-        categoryId: entry.agent.categoryId || null,
-        techId:     entry.agent.techId     || null,
-      };
-      added++;
-    }
+    cfg.projects[projIdx].agentHashes[name] = {
+      hash:       entry.sourceHash,
+      copiedAt:   new Date().toISOString(),
+      level:      entry.agent.level,
+      categoryId: entry.agent.categoryId || null,
+      techId:     entry.agent.techId     || null,
+    };
+
+    if (entry.status === 'outdated') updated++;
+    else                             added++;
   }
 
   cfg.projects[projIdx].lastSyncAt = new Date().toISOString();
@@ -211,46 +216,63 @@ function syncAllProjects() {
   return results;
 }
 
-// ── CLAUDE.md ─────────────────────────────────────────────────────────────────
+// ── Context files (CLAUDE.md / copilot-instructions.md) ──────────────────────
 
-function getClaudeMd(project) {
-  const filePath = path.join(project.path, 'CLAUDE.md');
+function getContextFilePath(project, type) {
+  if (type === 'github') return path.join(project.path, '.github', 'copilot-instructions.md');
+  return path.join(project.path, 'CLAUDE.md');
+}
+
+function getContextFile(project, type) {
+  const filePath = getContextFilePath(project, type);
   return {
     content:  fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '',
     filePath,
+    label:    type === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md',
   };
 }
 
-function saveClaudeMd(project, content) {
-  const filePath = path.join(project.path, 'CLAUDE.md');
+function saveContextFile(project, type, content) {
+  const filePath = getContextFilePath(project, type);
+  if (type === 'github') ensureDir(path.join(project.path, '.github'));
   fs.writeFileSync(filePath, content, 'utf8');
   return filePath;
 }
+
+// Backward-compat aliases
+const getClaudeMd  = (project) => getContextFile(project, 'claude');
+const saveClaudeMd = (project, content) => saveContextFile(project, 'claude', content);
 
 // ── Project CRUD ──────────────────────────────────────────────────────────────
 
 /**
  * Creates a new project: folder structure + CLAUDE.md + copies agents.
  */
-function createProject({ name, categoryId, techId, projectPath, description, status }) {
+function createProject({ name, categoryId, techId, projectPath, description, status, aiProvider }) {
   const cleanPath = projectPath.replace(/^~/, require('os').homedir());
 
   if (fs.existsSync(cleanPath)) {
     throw new Error(`Path already exists: ${cleanPath}`);
   }
 
-  // Create folder structure
+  const provider  = aiProvider || 'claude';
+  const providers = provider === 'both' ? ['claude', 'github'] : [provider];
+
   ensureDir(cleanPath);
-  ensureDir(path.join(cleanPath, '.claude', 'agents'));
+  for (const p of providers) {
+    ensureDir(getAgentsDirForProvider(cleanPath, p));
+  }
 
-  // Write CLAUDE.md with template
-  const claudeMd = getTemplate(categoryId, techId, name);
-  fs.writeFileSync(path.join(cleanPath, 'CLAUDE.md'), claudeMd, 'utf8');
+  if (providers.includes('claude')) {
+    fs.writeFileSync(path.join(cleanPath, 'CLAUDE.md'), getTemplate(categoryId, techId, name), 'utf8');
+  }
+  if (providers.includes('github')) {
+    ensureDir(path.join(cleanPath, '.github'));
+    fs.writeFileSync(path.join(cleanPath, '.github', 'copilot-instructions.md'), getGitHubTemplate(categoryId, techId, name), 'utf8');
+  }
 
-  // Copy applicable agents + get hashes
-  const agentHashes = copyAgentsToProject(cleanPath, categoryId, techId || null);
+  const agentHashes = copyAgentsToProject(cleanPath, categoryId, techId || null, providers);
 
-  // Register in config
   const project = {
     id:          makeProjectId(),
     name,
@@ -259,6 +281,7 @@ function createProject({ name, categoryId, techId, projectPath, description, sta
     techId:      techId  || null,
     description: description || '',
     status:      status  || 'active',
+    aiProvider:  provider,
     path:        cleanPath,
     agentHashes,
     createdAt:   new Date().toISOString(),
@@ -274,32 +297,42 @@ function createProject({ name, categoryId, techId, projectPath, description, sta
 
 /**
  * Imports an existing project folder.
- * Adds .claude/agents/ if missing, copies applicable agents.
+ * Creates provider agent dirs if missing, copies applicable agents.
  */
-function importProject({ name, categoryId, techId, projectPath, description, status }) {
+function importProject({ name, categoryId, techId, projectPath, description, status, aiProvider }) {
   const cleanPath = projectPath.replace(/^~/, require('os').homedir());
 
   if (!fs.existsSync(cleanPath)) {
     throw new Error(`Path does not exist: ${cleanPath}`);
   }
 
-  // Check not already registered
   const cfg = readConfig();
   if (cfg.projects.find(p => p.path === cleanPath)) {
     throw new Error(`Project already registered: ${cleanPath}`);
   }
 
-  // Ensure .claude/agents/ exists
-  ensureDir(path.join(cleanPath, '.claude', 'agents'));
+  const provider  = aiProvider || 'claude';
+  const providers = provider === 'both' ? ['claude', 'github'] : [provider];
 
-  // Write CLAUDE.md only if it doesn't exist
-  const claudeMdPath = path.join(cleanPath, 'CLAUDE.md');
-  if (!fs.existsSync(claudeMdPath)) {
-    fs.writeFileSync(claudeMdPath, getTemplate(categoryId, techId, name), 'utf8');
+  for (const p of providers) {
+    ensureDir(getAgentsDirForProvider(cleanPath, p));
   }
 
-  // Copy applicable agents
-  const agentHashes = copyAgentsToProject(cleanPath, categoryId, techId || null);
+  if (providers.includes('claude')) {
+    const claudeMdPath = path.join(cleanPath, 'CLAUDE.md');
+    if (!fs.existsSync(claudeMdPath)) {
+      fs.writeFileSync(claudeMdPath, getTemplate(categoryId, techId, name), 'utf8');
+    }
+  }
+  if (providers.includes('github')) {
+    ensureDir(path.join(cleanPath, '.github'));
+    const copilotPath = path.join(cleanPath, '.github', 'copilot-instructions.md');
+    if (!fs.existsSync(copilotPath)) {
+      fs.writeFileSync(copilotPath, getGitHubTemplate(categoryId, techId, name), 'utf8');
+    }
+  }
+
+  const agentHashes = copyAgentsToProject(cleanPath, categoryId, techId || null, providers);
 
   const project = {
     id:          makeProjectId(),
@@ -309,6 +342,7 @@ function importProject({ name, categoryId, techId, projectPath, description, sta
     techId:      techId  || null,
     description: description || '',
     status:      status  || 'active',
+    aiProvider:  provider,
     path:        cleanPath,
     agentHashes,
     createdAt:   new Date().toISOString(),
@@ -323,22 +357,106 @@ function importProject({ name, categoryId, techId, projectPath, description, sta
 }
 
 /**
- * Updates project metadata (name, description, status, techId).
- * Does NOT change the path.
+ * Migrates level-4 (project-local) agents when the aiProvider changes.
+ * Returns { agentsMigrated: number, added: string[], removed: string[] }
+ *
+ * Rules:
+ *   Switch (A→B)    : copy level-4 agents from A dir to B dir (format-converted). Old dir untouched.
+ *   Add    (A→both) : copy level-4 agents from A dir to new B dir.
+ *   Remove (both→A) : no file ops — old dir stays, just stops being managed.
+ * Context files are created for added providers if they don't exist yet.
+ */
+function migrateProjectProvider(project, newProvider) {
+  const oldProviders = getProviders(project);
+  const newProviders = newProvider === 'both' ? ['claude', 'github'] : [newProvider];
+
+  const added   = newProviders.filter(p => !oldProviders.includes(p));
+  const removed = oldProviders.filter(p => !newProviders.includes(p));
+
+  let agentsMigrated = 0;
+
+  if (added.length > 0) {
+    const sourceProvider = oldProviders[0];
+    const sourceDir      = getAgentsDirForProvider(project.path, sourceProvider);
+
+    const applicable     = getApplicableAgents(project.categoryId, project.techId);
+    const applicableNames = new Set(applicable.map(a => a.name));
+
+    for (const targetProvider of added) {
+      const targetDir = getAgentsDirForProvider(project.path, targetProvider);
+      ensureDir(targetDir);
+
+      if (fs.existsSync(sourceDir)) {
+        for (const file of fs.readdirSync(sourceDir).filter(f => f.endsWith('.md'))) {
+          const agentName = path.basename(file, '.md');
+          if (applicableNames.has(agentName)) continue; // level 1-3, handled by sync
+
+          const agent    = parseAgentFile(path.join(sourceDir, file));
+          const destPath = path.join(targetDir, file);
+          fs.writeFileSync(destPath, serializeAgentForProvider(agent, targetProvider), 'utf8');
+          agentsMigrated++;
+        }
+      }
+
+      // Create context file for the new provider if missing
+      if (targetProvider === 'github') {
+        ensureDir(path.join(project.path, '.github'));
+        const dest = path.join(project.path, '.github', 'copilot-instructions.md');
+        if (!fs.existsSync(dest)) {
+          const claude = path.join(project.path, 'CLAUDE.md');
+          fs.writeFileSync(dest, fs.existsSync(claude)
+            ? fs.readFileSync(claude, 'utf8')
+            : getGitHubTemplate(project.categoryId, project.techId, project.name), 'utf8');
+        }
+      } else if (targetProvider === 'claude') {
+        const dest = path.join(project.path, 'CLAUDE.md');
+        if (!fs.existsSync(dest)) {
+          const copilot = path.join(project.path, '.github', 'copilot-instructions.md');
+          fs.writeFileSync(dest, fs.existsSync(copilot)
+            ? fs.readFileSync(copilot, 'utf8')
+            : getTemplate(project.categoryId, project.techId, project.name), 'utf8');
+        }
+      }
+    }
+  }
+
+  // Delete everything belonging to removed providers
+  for (const removedProvider of removed) {
+    if (removedProvider === 'claude') {
+      const claudeDir = path.join(project.path, '.claude');
+      const claudeMd  = path.join(project.path, 'CLAUDE.md');
+      if (fs.existsSync(claudeDir)) fs.rmSync(claudeDir, { recursive: true, force: true });
+      if (fs.existsSync(claudeMd))  fs.unlinkSync(claudeMd);
+    } else if (removedProvider === 'github') {
+      const githubDir = path.join(project.path, '.github');
+      if (fs.existsSync(githubDir)) fs.rmSync(githubDir, { recursive: true, force: true });
+    }
+  }
+
+  return { agentsMigrated, added, removed };
+}
+
+/**
+ * Updates project metadata. When aiProvider changes, migrates level-4 agents.
  */
 function updateProject(id, updates) {
   const cfg     = readConfig();
   const idx     = cfg.projects.findIndex(p => p.id === id);
   if (idx === -1) throw new Error('Project not found');
 
-  const allowed = ['name', 'description', 'status', 'techId', 'categoryId'];
+  let migration = null;
+  if (updates.aiProvider && updates.aiProvider !== cfg.projects[idx].aiProvider) {
+    migration = migrateProjectProvider(cfg.projects[idx], updates.aiProvider);
+  }
+
+  const allowed = ['name', 'description', 'status', 'techId', 'categoryId', 'aiProvider'];
   for (const key of allowed) {
     if (updates[key] !== undefined) cfg.projects[idx][key] = updates[key];
   }
 
   cfg.projects[idx].updatedAt = new Date().toISOString();
   writeConfig(cfg);
-  return cfg.projects[idx];
+  return { ...cfg.projects[idx], migration };
 }
 
 /**
@@ -385,6 +503,8 @@ module.exports = {
   countPendingUpdates,
   syncProject,
   syncAllProjects,
+  getContextFile,
+  saveContextFile,
   getClaudeMd,
   saveClaudeMd,
   copyAgentsToProject,

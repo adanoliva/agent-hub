@@ -265,4 +265,22 @@ function getTemplate(categoryId, techId, projectName) {
 `;
 }
 
-module.exports = { getTemplate, TEMPLATES };
+/**
+ * Returns the copilot-instructions.md template for a given category/tech.
+ * Used when creating a GitHub Copilot project.
+ */
+function getGitHubTemplate(categoryId, techId, projectName) {
+  const key = techId ? `${categoryId}-${techId}` : categoryId;
+  const fn  = TEMPLATES[key];
+
+  // Reuse the CLAUDE.md template content but strip Claude-specific language
+  const base = fn
+    ? fn(projectName)
+        .replace(/## Rules\n/g, '## Coding standards\n')
+        .replace(/for Claude Code/g, '')
+    : `# ${projectName}\n\n## Stack\n<!-- Document your stack here -->\n\n## Project structure\n\`\`\`\n<!-- Describe your folder structure -->\n\`\`\`\n\n## Conventions\n<!-- Document your coding conventions -->\n\n## Coding standards\n<!-- Project-specific coding standards -->\n`;
+
+  return base;
+}
+
+module.exports = { getTemplate, getGitHubTemplate, TEMPLATES };
