@@ -1,5 +1,5 @@
-appId: com.adanoliva.claude-dev-manager
-productName: Claude Dev Manager
+appId: com.adanoliva.agent-hub
+productName: Agent Hub
 copyright: Copyright © 2025
 
 publish:
@@ -22,7 +22,7 @@ win:
   requestedExecutionLevel: asInvoker
 
 portable:
-  artifactName: claude-dev-manager.exe
+  artifactName: agent-hub.exe
   # electron-builder sets PORTABLE_EXECUTABLE_DIR at runtime
   # so config.js can find the correct data directory next to the .exe
 

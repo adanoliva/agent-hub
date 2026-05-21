@@ -2,4 +2,4 @@ provider: github
 owner: adanoliva
 repo: cdm
 private: true
-updaterCacheDirName: claude-dev-manager-updater
+updaterCacheDirName: agent-hub-updater

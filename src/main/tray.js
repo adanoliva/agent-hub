@@ -38,7 +38,7 @@ function createTray(win) {
   icon = icon.resize({ width: 16, height: 16 });
 
   tray = new Tray(icon);
-  tray.setToolTip('Claude Dev Manager');
+  tray.setToolTip('Agent Hub');
 
   updateContextMenu(win);
 
@@ -64,7 +64,7 @@ function updateContextMenu(win) {
 
   const menu = Menu.buildFromTemplate([
     {
-      label: 'Abrir Claude Dev Manager',
+      label: 'Abrir Agent Hub',
       click: () => { win.show(); win.focus(); },
     },
     { type: 'separator' },

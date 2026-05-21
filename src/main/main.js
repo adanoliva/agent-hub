@@ -68,7 +68,7 @@ function createWindow() {
     height:          800,
     minWidth:        900,
     minHeight:       600,
-    title:           'Claude Dev Manager',
+    title:           'Agent Hub',
     backgroundColor: '#0d0d0f',
     show:            false,
     frame:           true,
@@ -123,7 +123,7 @@ ipcMain.handle('shell:openVSCode', async (_, projectPath) => {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  console.log(`[main] Starting Claude Dev Manager v${app.getVersion()}`);
+  console.log(`[main] Starting Agent Hub v${app.getVersion()}`);
   console.log(`[main] App dir: ${APP_DIR}`);
   console.log(`[main] Dev mode: ${isDev}`);
 

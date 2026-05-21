@@ -11,7 +11,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const DIST = path.join(__dirname, '..', 'dist');
-const EXE  = path.join(DIST, 'claude-dev-manager.exe');
+const EXE  = path.join(DIST, 'agent-hub.exe');
 
 console.log('\n── Build report ──────────────────────────────');
 
@@ -31,17 +31,17 @@ if (!fs.existsSync(EXE)) {
   }
 } else {
   const size = (fs.statSync(EXE).size / 1024 / 1024).toFixed(1);
-  console.log(`✓ Built: dist/claude-dev-manager.exe (${size} MB)`);
+  console.log(`✓ Built: dist/agent-hub.exe (${size} MB)`);
 }
 
 console.log('\n── Next steps ────────────────────────────────');
 console.log('1. Test the .exe locally:');
-console.log('   cd dist && ./claude-dev-manager.exe');
+console.log('   cd dist && ./agent-hub.exe');
 console.log('');
 console.log('2. Publish to GitHub Releases:');
 console.log('   git tag v1.1.0');
 console.log('   git push origin v1.1.0');
-console.log('   → GitHub → Releases → New release → Upload dist/claude-dev-manager.exe');
+console.log('   → GitHub → Releases → New release → Upload dist/agent-hub.exe');
 console.log('');
 console.log('3. To update version for next release:');
 console.log('   npm version patch   # 1.0.0 → 1.0.1');
