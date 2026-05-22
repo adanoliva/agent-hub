@@ -8,7 +8,10 @@
       "Bash(Get-ChildItem *)",
       "Bash(findstr /R \"ti ti-\" src\\\\renderer\\\\*.html src\\\\renderer\\\\js\\\\*.js)",
       "Bash(npm version *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "PowerShell(npm run *)",
+      "PowerShell(gh release *)"
     ]
   }
 }
