@@ -5,8 +5,12 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "cross-env NODE_ENV=development electron .",
-    "prebuild": "node scripts/generate-icon.js",
+    "dev": "concurrently -k -n vite,electron -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev:watch": "concurrently -k -n build,electron -c cyan,yellow \"vite build --watch\" \"electron .\"",
+    "dev:vite": "vite",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "build:renderer": "vite build",
+    "prebuild": "npm run build:renderer && node scripts/generate-icon.js",
     "build": "electron-builder --win portable",
     "build:dir": "electron-builder --win dir",
     "postbuild": "node scripts/post-build.js",
@@ -16,13 +20,24 @@
     "@anthropic-ai/sdk": "^0.24.3",
     "cors": "^2.8.5",
     "electron-updater": "^6.8.3",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.15.1",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
-    "sharp": "^0.33.0"
+    "sharp": "^0.33.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "wait-on": "^9.0.10"
   },
   "build": {
     "extends": "./electron-builder.yml"

@@ -11,7 +11,17 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "PowerShell(npm run *)",
-      "PowerShell(gh release *)"
+      "PowerShell(gh release *)",
+      "Bash(npm install *)",
+      "Bash(Get-Content \"C:\\\\claudedevmanager\\\\cdm\\\\src\\\\main\\\\server.js\")",
+      "Bash(Select-Object -Last 30)",
+      "Bash(npx vite *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(kill %1)",
+      "Bash(node -e \"console.log\\(process.platform, process.env.SHELL\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\" http://localhost:5173/main.tsx)",
+      "Bash(Test-Path *)"
     ]
   }
 }

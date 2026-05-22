@@ -137,7 +137,86 @@ styles.css               ← --accent, --bg1, .badge (global, sin cambios)
 
 ---
 
-## 3. Plan de migración por fases
+## 3. Estado actual de la migración
+
+> Última actualización: 2026-05-22
+
+### Progreso
+
+| Fase | Contenido | Estado |
+|------|-----------|--------|
+| 0 | Setup tooling (Vite 8 + React 19 + Zustand 5) | ✅ Completado |
+| 1 | Shell y layout (Sidebar, Topbar, Statusbar, App.tsx) | ✅ Completado |
+| 2 | Vista Proyectos (ProjectCard, ProjectDrawer, modales Create/Edit/Import/Exclude) | ✅ Completado |
+| 3 | Vista Agentes (AgentsTree, AgentsCenter, AgentCard, AgentEditor, Agents.tsx) | ✅ Completado |
+| 4 | Vista Chat (mensajes, @mention, historial por proyecto, action buttons) | ✅ Completado |
+| 5 | Vista Ajustes (tabs General/Categorías/Agentes externos) | ✅ Completado |
+| 6 | Wizard de primer arranque | ✅ Completado |
+| 7 | Cleanup (eliminar JS Vanilla, lazy loading, tsc --noEmit) | ✅ Completado |
+
+### Decisiones tomadas durante la implementación
+
+**Vite 8 + Electron — problemas resueltos:**
+- `allowedHosts: 'all'` es obligatorio: Vite 8 bloquea por defecto peticiones que no vienen del host configurado. Electron hace requests desde un origen diferente.
+- `base: command === 'serve' ? '/' : './'`: en dev el `base: './'` rompe las rutas de módulos ESM. Solo se usa `'./'` en el build de producción.
+- `isViteDev = process.env.NODE_ENV === 'development'` (seteado por `cross-env`), distinto de `isDev = !app.isPackaged`. Electron carga Vite en 5173 solo cuando `isViteDev` es true.
+- `wait-on http://localhost:5173` (no `tcp:5173`) en el script `dev` para esperar al servidor Vite.
+
+**CSS layout crítico:**
+- `.view.active { display: flex; flex-direction: column }` — el Topbar vive **dentro** del `.view`, no como sibling como en el Vanilla.
+- `html, body, #root { height: 100% }` — el `#root` debe estar incluido explícitamente.
+
+**Estructura de ficheros real (vs. propuesta):**
+```
+src/renderer/
+├── index.html           ← punto de entrada Vite (con CSP, fuentes, Tabler Icons CDN)
+├── main.tsx             ← ReactDOM.createRoot
+├── App.tsx              ← ErrorBoundary + HashRouter + AppInner
+├── styles.css           ← sin cambios
+├── api.ts               ← req<T>() con BASE = '/api' (proxy Vite en dev)
+├── types.ts             ← tipos compartidos (Agent, Project, Config, SelectedNode…)
+├── store/index.ts       ← Zustand: view, config, projects, toasts, appVersion
+├── hooks/
+│   ├── useToast.ts
+│   └── useCategoryHelpers.ts
+├── constants/tools.ts   ← ALL_TOOLS, agentIcon(), MODEL_ICON, LEVEL_COLOR
+├── components/
+│   ├── layout/          ← Sidebar, Topbar, Statusbar
+│   ├── ui/              ← Toast, Modal
+│   ├── projects/        ← ProjectCard, ProjectDrawer, StatusBadge,
+│   │                       CreateProjectModal, EditProjectModal,
+│   │                       ImportProjectModal, ExcludeAgentModal
+│   └── agents/          ← AgentCard, AgentsTree, AgentsCenter, AgentEditor
+└── pages/
+    ├── Projects.tsx
+    ├── Agents.tsx
+    ├── Chat.tsx
+    └── Settings.tsx
+```
+
+**Store Zustand real** (más simple que el propuesto — la vista de Agentes usa estado local):
+```ts
+interface AppState {
+  view: View;
+  config: Config | null;
+  projects: Project[];
+  appVersion: string | null;
+  toasts: Toast[];
+  setView, setConfig, setProjects, setAppVersion,
+  fetchProjects, addToast, removeToast
+}
+```
+El estado de árbol de agentes, editor, suggestions y chat vive en estado local de cada página (`useState`), no en el store global. Solo lo que es genuinamente global (config, projects, toasts, view) está en Zustand.
+
+**Chat — implementación:**
+- `AbortController` por nodo para cancelar sugerencias al cambiar de nodo (Agentes view).
+- `dangerouslySetInnerHTML` para markdown renderizado (contenido escapado antes de transformar).
+- Historial guarda/carga con `PUT/GET /chat/history?projectId=`.
+- @mention: el cursor position se gestiona vía `useRef` sobre el `<textarea>` para poder modificar el valor sin perder la posición del caret.
+
+---
+
+## 4. Plan de migración por fases (referencia original)
 
 > Cada fase termina con la app funcionando. No hay un momento en que la app esté rota.
 
