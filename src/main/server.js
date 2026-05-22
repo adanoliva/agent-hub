@@ -293,24 +293,24 @@ app.get('/api/projects', (req, res) => {
 });
 
 app.post('/api/projects', (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProvider } = req.body;
+  const { name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(createProject({ name, categoryId, techId, projectPath, description, status, aiProvider }));
+    res.json(createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
   } catch (e) {
     res.status(e.message.includes('already exists') ? 409 : 500).json({ error: e.message });
   }
 });
 
 app.post('/api/projects/import', (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProvider } = req.body;
+  const { name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(importProject({ name, categoryId, techId, projectPath, description, status, aiProvider }));
+    res.json(importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
   } catch (e) {
     res.status(e.message.includes('not exist') ? 404 : 409).json({ error: e.message });
   }

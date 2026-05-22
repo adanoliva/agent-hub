@@ -101,6 +101,18 @@ const PROVIDER_OPTS = `
   <label class="provider-opt"><input type="radio" name="prov" value="github"><span><i class="ti ti-brand-github"></i> GitHub Copilot <small style="color:var(--text2)">.github/agents</small></span></label>
   <label class="provider-opt"><input type="radio" name="prov" value="both"><span><i class="ti ti-git-merge"></i> Ambos</span></label>`;
 
+async function pickFolder(inputId) {
+  if (!window.api?.pickFolder) {
+    toast('Selector de carpeta solo disponible en la app de escritorio', 'info');
+    return;
+  }
+  const folder = await window.api.pickFolder();
+  if (folder) {
+    const input = document.getElementById(inputId);
+    if (input) { input.value = folder; input.dispatchEvent(new Event('input')); }
+  }
+}
+
 function openCreateProject() {
   const cats = S.config?.categories || [];
   showModal('Nuevo proyecto', '', `
@@ -109,7 +121,13 @@ function openCreateProject() {
       <select id="mp-cat" onchange="updateTechSelect()">${cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select>
     </div>
     <div class="field"><label>Tecnología</label><select id="mp-tech"></select></div>
-    <div class="field"><label>Ruta donde crear la carpeta</label><input id="mp-path" placeholder="C:/Proyectos"/><div class="hint">Se creará una subcarpeta con el nombre del proyecto</div></div>
+    <div class="field"><label>Ruta donde crear la carpeta</label>
+      <div class="path-picker-row">
+        <input id="mp-path" placeholder="Selecciona una carpeta…" readonly/>
+        <button type="button" class="btn sm" onclick="pickFolder('mp-path')"><i class="ti ti-folder-open"></i> Examinar</button>
+      </div>
+      <div class="hint">Se creará una subcarpeta con el nombre del proyecto</div>
+    </div>
     <div class="field"><label>Descripción (opcional)</label><input id="mp-desc" placeholder="Breve descripción…"/></div>
     <div class="field"><label>Agentes IA</label><div class="provider-opts">${PROVIDER_OPTS}</div></div>
   `, async () => {
@@ -120,7 +138,7 @@ function openCreateProject() {
     const desc     = document.getElementById('mp-desc').value.trim();
     const provider = document.querySelector('input[name="prov"]:checked')?.value || 'claude';
     if (!name || !cat || !base) { toast('Rellena nombre, categoría y ruta', 'err'); return false; }
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slug        = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const projectPath = base.replace(/[/\\]$/, '') + '\\' + slug;
     try {
       await req('POST', '/projects', {name, categoryId:cat, techId:tech||null, projectPath, description:desc, aiProvider:provider});
@@ -139,7 +157,12 @@ function openImportProject() {
       <select id="mi-cat" onchange="updateTechSelectImport()">${cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select>
     </div>
     <div class="field"><label>Tecnología</label><select id="mi-tech"></select></div>
-    <div class="field"><label>Ruta de la carpeta existente</label><input id="mi-path" placeholder="C:/Dev/mi-proyecto"/></div>
+    <div class="field"><label>Ruta de la carpeta existente</label>
+      <div class="path-picker-row">
+        <input id="mi-path" placeholder="Selecciona una carpeta…" readonly/>
+        <button type="button" class="btn sm" onclick="pickFolder('mi-path')"><i class="ti ti-folder-open"></i> Examinar</button>
+      </div>
+    </div>
     <div class="field"><label>Agentes IA</label><div class="provider-opts">${PROVIDER_OPTS}</div></div>
   `, async () => {
     const name     = document.getElementById('mi-name').value.trim();
@@ -214,15 +237,25 @@ async function renderDrawer() {
     if (s === 'outdated') return `<span class="badge amber"><i class="ti ti-arrow-up"></i>actualizar</span>`;
     if (s === 'new')      return `<span class="badge blue"><i class="ti ti-plus"></i>nuevo</span>`;
     if (s === 'local')    return `<span class="badge gray"><i class="ti ti-user"></i>local</span>`;
+    if (s === 'excluded') return `<span class="badge gray"><i class="ti ti-eye-off"></i>excluido</span>`;
     return `<span class="badge gray">${s}</span>`;
   };
 
-  const syncRows = Object.entries(syncStatus).map(([name, entry]) => `
-    <div class="sync-agent-row">
+  const syncRows = Object.entries(syncStatus).map(([name, entry]) => {
+    const isExcluded  = entry.status === 'excluded';
+    const isLocal     = entry.status === 'local';
+    const toggleBtn   = !isLocal ? `<button class="btn ghost sm" style="padding:2px 6px;font-size:10px;flex-shrink:0"
+      onclick="toggleAgentExclusion('${p.id}','${esc(name)}',${!isExcluded})"
+      title="${isExcluded ? 'Incluir en el proyecto' : 'Excluir del proyecto'}">
+      <i class="ti ${isExcluded ? 'ti-eye' : 'ti-eye-off'}"></i>
+    </button>` : '';
+    return `<div class="sync-agent-row">
       <span class="sync-agent-name">${esc(name)}</span>
       <span class="sync-agent-level">${entry.agent?.level || ''}</span>
       ${statusBadge(entry.status)}
-    </div>`).join('');
+      ${toggleBtn}
+    </div>`;
+  }).join('');
 
   const ctxTabs = provider === 'both'
     ? `<div class="drawer-tab ${S.drawerTab === 'ctx-claude' ? 'active' : ''}" onclick="setDrawerTab('ctx-claude')">CLAUDE.md</div>
@@ -253,7 +286,13 @@ async function renderDrawer() {
         <div style="font-size:11px;color:var(--text2);margin-bottom:10px;font-family:var(--mono)">${esc(ctxPath)}</div>
         <textarea class="claude-md-editor" id="ctx-ta">${esc(ctxContent)}</textarea>` : `
         <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:12px;color:var(--text1)">${Object.values(syncStatus).filter(s => s.status === 'ok').length} al día, ${Object.values(syncStatus).filter(s => s.status === 'outdated' || s.status === 'new').length} pendientes</span>
+          <span style="font-size:12px;color:var(--text1)">${(() => {
+            const vals = Object.values(syncStatus);
+            const ok   = vals.filter(s => s.status === 'ok').length;
+            const pend = vals.filter(s => s.status === 'outdated' || s.status === 'new').length;
+            const excl = vals.filter(s => s.status === 'excluded').length;
+            return `${ok} al día, ${pend} pendientes${excl ? `, ${excl} excluido${excl !== 1 ? 's' : ''}` : ''}`;
+          })()}</span>
         </div>
         ${syncRows || '<div style="color:var(--text2);font-size:12px">Sin agentes registrados</div>'}
       `}
@@ -384,6 +423,20 @@ function openEditProject(id) {
       if (S.drawerProject) await renderDrawer();
     } catch(e) { toast(e.message, 'err'); return false; }
   }, 'Guardar');
+}
+
+async function toggleAgentExclusion(projectId, agentName, shouldExclude) {
+  const p = S.projects.find(x => x.id === projectId); if (!p) return;
+  const excluded = new Set(p.excludedAgents || []);
+  if (shouldExclude) excluded.add(agentName);
+  else               excluded.delete(agentName);
+  try {
+    await req('PUT', `/projects/${projectId}`, { excludedAgents: [...excluded] });
+    await loadProjects();
+    S.drawerProject = S.projects.find(x => x.id === projectId);
+    await renderDrawer();
+    toast(shouldExclude ? `"${agentName}" excluido` : `"${agentName}" incluido`);
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 async function confirmDeleteProject(id) {

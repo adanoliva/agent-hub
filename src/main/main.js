@@ -2,7 +2,7 @@
  * main.js — Electron main process
  */
 
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 
 const { startServer, PORT }                                      = require('./server');
@@ -109,6 +109,13 @@ ipcMain.handle('window:minimize',    () => mainWindow?.minimize());
 ipcMain.handle('window:hide',        () => mainWindow?.hide());
 ipcMain.handle('shell:openPath',     (_, p)   => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url));
+
+ipcMain.handle('dialog:pickFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
 
 ipcMain.handle('shell:openVSCode', async (_, projectPath) => {
   const { exec } = require('child_process');

@@ -89,9 +89,47 @@ async function renderSettingsView() {
     </div>
   </div>`;
 
+    const isGitHub = S.config?.aiProvider === 'github';
     h += `<div class="settings-section">
     <div class="settings-head">Cómo usar los agentes en VS Code</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;flex-direction:column;gap:8px">` +
+
+    (isGitHub ? `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">ABRIR EL CHAT DE COPILOT</div>
+        <div style="font-size:11px;color:var(--text1)">En VS Code abre el panel de <strong>GitHub Copilot Chat</strong> con <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">Ctrl+Alt+I</code> o desde el icono de Copilot en la barra lateral.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">SELECCIONAR UN AGENTE</div>
+        <div style="font-family:var(--mono);font-size:12px;background:var(--bg1);padding:8px 12px;border-radius:6px;color:var(--accent);margin-bottom:6px">@</div>
+        <div style="font-size:11px;color:var(--text1);margin-bottom:8px">Escribe <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">@</code> en el chat para ver el listado de agentes disponibles. Copilot muestra los agentes del proyecto (<code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">.github/agents/</code>) junto con las instrucciones base (<code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">copilot-instructions.md</code>).</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">INVOCAR UN AGENTE</div>
+        <div style="font-family:var(--mono);font-size:12px;background:var(--bg1);padding:8px 12px;border-radius:6px;color:var(--green);margin-bottom:6px">@unity-dev crea un sistema de inventario con ScriptableObjects</div>
+        <div style="font-family:var(--mono);font-size:12px;background:var(--bg1);padding:8px 12px;border-radius:6px;color:var(--green);margin-bottom:6px">@code-reviewer revisa PlayerController.cs</div>
+        <div style="font-size:11px;color:var(--text1)">Usa <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">@nombre-del-agente</code> seguido de la tarea. Copilot carga el system prompt del agente definido en su archivo <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">.md</code>.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">AÑADIR CONTEXTO DE ARCHIVOS</div>
+        <div style="font-family:var(--mono);font-size:12px;background:var(--bg1);padding:8px 12px;border-radius:6px;color:var(--green);margin-bottom:6px">@unity-dev #PlayerController.cs añade doble salto</div>
+        <div style="font-size:11px;color:var(--text1)">Usa <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">#archivo</code> para adjuntar ficheros como contexto. También puedes arrastrar archivos directamente al chat o usar <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">#codebase</code> para el proyecto completo.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">DÓNDE VIVEN LOS AGENTES</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="font-family:var(--mono);background:var(--amber-dim);color:var(--amber);padding:2px 7px;border-radius:4px;font-size:10px;flex-shrink:0">proyecto</span>
+            <span style="color:var(--text1);font-family:var(--mono);font-size:10px">{proyecto}/.github/agents/ — agentes del proyecto</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="font-family:var(--mono);background:var(--blue-dim);color:var(--blue);padding:2px 7px;border-radius:4px;font-size:10px;flex-shrink:0">contexto</span>
+            <span style="color:var(--text1);font-family:var(--mono);font-size:10px">{proyecto}/.github/copilot-instructions.md — instrucciones base</span>
+          </div>
+        </div>
+      </div>` :
+
+    `
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
         <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">VER AGENTES DISPONIBLES</div>
         <div style="font-family:var(--mono);font-size:12px;background:var(--bg1);padding:8px 12px;border-radius:6px;color:var(--accent);margin-bottom:6px">/agents</div>
@@ -110,17 +148,18 @@ async function renderSettingsView() {
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
         <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);margin-bottom:8px">DÓNDE VIVEN LOS AGENTES</div>
         <div style="display:flex;flex-direction:column;gap:5px">
-          <div style="display:flex;gap:8px;align-items:flex-start;font-size:11px">
+          <div style="display:flex;gap:8px;align-items:flex-start">
             <span style="font-family:var(--mono);background:var(--green-dim);color:var(--green);padding:2px 7px;border-radius:4px;font-size:10px;flex-shrink:0">global</span>
             <span style="color:var(--text1);font-family:var(--mono);font-size:10px">~/.claude/agents/ — disponibles en cualquier proyecto</span>
           </div>
-          <div style="display:flex;gap:8px;align-items:flex-start;font-size:11px">
+          <div style="display:flex;gap:8px;align-items:flex-start">
             <span style="font-family:var(--mono);background:var(--amber-dim);color:var(--amber);padding:2px 7px;border-radius:4px;font-size:10px;flex-shrink:0">proyecto</span>
             <span style="color:var(--text1);font-family:var(--mono);font-size:10px">{proyecto}/.claude/agents/ — solo en ese proyecto</span>
           </div>
         </div>
-      </div>
-    </div>
+      </div>`)
+
+    + `</div>
   </div>`;
 
     h += `<div class="settings-section">

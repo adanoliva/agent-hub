@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('api', {
   openExternal:(url) => ipcRenderer.invoke('shell:openExternal', url),
   openVSCode:  (p)   => ipcRenderer.invoke('shell:openVSCode', p),
 
+  // Dialogs
+  pickFolder:  ()    => ipcRenderer.invoke('dialog:pickFolder'),
+
   // Updates
   checkForUpdate:   () => ipcRenderer.invoke('update:check'),
   downloadUpdate:   () => ipcRenderer.invoke('update:download'),
