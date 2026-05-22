@@ -24,7 +24,7 @@ async function renderSettingsView() {
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600;color:var(--text0);margin-bottom:2px;display:flex;align-items:center;gap:8px">
             Claude CLI
-            ${aiStatus.provider === 'cli' && aiStatus.ready ? `<span class="badge green">✓ detectado</span>` : `<span class="badge gray">no detectado</span>`}
+            ${aiStatus.provider === 'cli' && aiStatus.ready ? `<span class="badge green"><i class="ti ti-circle-check"></i>detectado</span>` : `<span class="badge gray"><i class="ti ti-circle-x"></i>no detectado</span>`}
           </div>
           <div style="font-size:11px;color:var(--text1)">Usa tu suscripción de Claude.ai. Sin coste adicional.</div>
         </div>
@@ -41,8 +41,8 @@ async function renderSettingsView() {
         <div class="provider-radio ${S.config?.aiProvider === 'github' ? 'on' : ''}"></div>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600;color:var(--text0);margin-bottom:2px;display:flex;align-items:center;gap:8px">
-            GitHub Copilot <span class="badge blue">Models API</span>
-            ${aiStatus.provider === 'github' && aiStatus.ready ? `<span class="badge green">✓ listo</span>` : ''}
+            GitHub Copilot <span class="badge blue"><i class="ti ti-api"></i>Models API</span>
+            ${aiStatus.provider === 'github' && aiStatus.ready ? `<span class="badge green"><i class="ti ti-circle-check"></i>listo</span>` : ''}
           </div>
           <div style="font-size:11px;color:var(--text1)">Token de GitHub con permiso <code style="font-family:var(--mono);font-size:10px;background:var(--bg3);padding:1px 4px;border-radius:3px">models:read</code>. Capa gratuita disponible.</div>
         </div>

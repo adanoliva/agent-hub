@@ -14,14 +14,17 @@ async function loadAgentsForNode() {
 
 async function loadSuggestions(force = false) {
   const n = S.selectedNode;
-  if (n.level === 'project') { S.suggestions = []; return; }
   S.suggestionsLoading = true;
   renderAgentsCenter();
   try {
-    const q = new URLSearchParams({level: n.level, force: force ? 'true' : 'false'});
-    if (n.categoryId) q.set('categoryId', n.categoryId);
-    if (n.techId)     q.set('techId', n.techId);
-    S.suggestions = await req('GET', `/ai/suggestions?${q}`);
+    if (n.level === 'project') {
+      S.suggestions = await req('GET', `/ai/project-suggestions?projectId=${n.projectId}`);
+    } else {
+      const q = new URLSearchParams({level: n.level, force: force ? 'true' : 'false'});
+      if (n.categoryId) q.set('categoryId', n.categoryId);
+      if (n.techId)     q.set('techId', n.techId);
+      S.suggestions = await req('GET', `/ai/suggestions?${q}`);
+    }
   } catch(e) {
     S.suggestions = [];
     if (force) toast('No se pudieron generar sugerencias: ' + e.message, 'err');
@@ -35,9 +38,13 @@ async function refreshSuggestions() {
   S.suggestionsLoading = true;
   renderAgentsCenter();
   try {
-    S.suggestions = await req('POST', '/ai/suggestions/refresh', {
-      level: n.level, categoryId: n.categoryId || null, techId: n.techId || null
-    });
+    if (n.level === 'project') {
+      S.suggestions = await req('POST', '/ai/project-suggestions/refresh', { projectId: n.projectId });
+    } else {
+      S.suggestions = await req('POST', '/ai/suggestions/refresh', {
+        level: n.level, categoryId: n.categoryId || null, techId: n.techId || null,
+      });
+    }
   } catch(e) { toast('Error: ' + e.message, 'err'); }
   S.suggestionsLoading = false;
   renderAgentsCenter();
@@ -124,7 +131,7 @@ function renderAgentsTree() {
         <div class="tree-indent"></div>
         <i class="ti ti-folder tree-icon" style="color:${catColor(p.categoryId)}"></i>
         <span class="tree-label">${esc(p.name)}</span>
-        ${pending > 0 ? `<span class="tree-badge">↑${pending}</span>` : ''}
+        ${pending > 0 ? `<span class="tree-badge"><i class="ti ti-refresh" style="font-size:9px"></i>${pending}</span>` : ''}
       </div>`;
     });
     if (!projs.length) {
@@ -166,7 +173,7 @@ function renderAgentsCenter() {
   const isProject = n.level === 'project';
   document.getElementById('agents-panel-btns').innerHTML = `
     <button class="btn sm primary" onclick="openNewAgentEditor()"><i class="ti ti-plus"></i> Nuevo agente</button>
-    ${!isProject ? `<button class="btn sm" onclick="refreshSuggestions()" ${loading ? 'disabled' : ''}>${loading ? '<div class="spin"></div>' : '<i class="ti ti-refresh"></i>'} Sugerir más</button>` : ''}`;
+    <button class="btn sm" onclick="refreshSuggestions()" ${loading ? 'disabled' : ''}>${loading ? '<div class="spin"></div>' : '<i class="ti ti-sparkles"></i>'} Sugerir${isProject ? ' para este proyecto' : ' más'}</button>`;
 
   const levelColors = {global:'var(--green)', section:'var(--blue)', tech:'var(--amber)', project:'var(--coral)'};
   const iconMap = name => {
@@ -187,10 +194,13 @@ function renderAgentsCenter() {
     return 'ti-robot';
   };
 
+  const MODEL_ICON = {haiku:'ti-leaf', sonnet:'ti-bolt', opus:'ti-brain'};
   const agentCard = (a, suggested = false) => {
     const sel      = !suggested && S.selectedAgent === a.name;
     const ic       = iconMap(a.name);
-    const modelCls = `model-${a.model || 'sonnet'}`;
+    const model    = a.model || 'sonnet';
+    const modelCls = `model-${model}`;
+    const mIcon    = MODEL_ICON[model] || 'ti-bolt';
     return `<div class="agent-card ${sel ? 'selected' : ''} ${suggested ? 'suggested' : ''}"
       onclick="${suggested ? `useSuggestion(${JSON.stringify(a).replace(/"/g, '&quot;')})` : `selectAgent('${esc(a.name)}',${suggested})`}">
       <div class="agent-card-head">
@@ -198,26 +208,35 @@ function renderAgentsCenter() {
           <i class="ti ${ic}" style="color:${suggested ? 'var(--text2)' : levelColors[n.level]}"></i>
         </div>
         <span class="agent-name">${esc(a.name)}</span>
-        ${suggested ? `<span class="badge gray" style="font-size:9px">sugerido</span>` : ''}
+        ${suggested ? `<span class="badge accent" style="font-size:9px"><i class="ti ti-sparkles"></i>sugerido</span>` : ''}
       </div>
       <div class="agent-desc">${esc(a.description || '')}</div>
       <div class="agent-footer">
         ${(a.tools || []).slice(0, 3).map(t => `<span class="tool-pill">${t}</span>`).join('')}
         ${(a.tools || []).length > 3 ? `<span style="font-size:10px;color:var(--text3)">+${(a.tools || []).length - 3}</span>` : ''}
-        <span class="tool-pill ${modelCls}" style="margin-left:auto">${a.model || 'sonnet'}</span>
+        <span class="tool-pill ${modelCls}" style="margin-left:auto"><i class="ti ${mIcon}"></i>${model}</span>
       </div>
     </div>`;
   };
 
+  const suggsSection = !loading && suggs.length
+    ? `<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin-top:${agents.length ? '8px' : '0'};margin-bottom:4px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:10px;color:var(--text2);font-family:var(--mono);letter-spacing:.05em">${isProject ? 'sugerencias para este proyecto' : 'sugerencias'}</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+       </div>
+       ${suggs.map(s => agentCard(s, true)).join('')}`
+    : '';
+
   let content = `<div class="agents-grid">
     ${agents.map(a => agentCard(a)).join('')}
-    ${!isProject && !loading ? suggs.map(s => agentCard(s, true)).join('') : ''}
-    ${!isProject && loading ? `<div style="display:flex;align-items:center;gap:8px;color:var(--text2);font-size:12px;grid-column:1/-1"><div class="spin"></div>Generando sugerencias…</div>` : ''}
+    ${suggsSection}
+    ${loading ? `<div style="display:flex;align-items:center;gap:8px;color:var(--text2);font-size:12px;grid-column:1/-1"><div class="spin"></div>${isProject ? 'Analizando el proyecto…' : 'Generando sugerencias…'}</div>` : ''}
   </div>`;
 
   if (!agents.length && !loading && !suggs.length) {
     content = `<div style="display:flex;flex-direction:column;align-items:center;padding:60px;gap:10px;color:var(--text2)">
-      <i class="ti ti-robot" style="font-size:40px;opacity:.2"></i>
+      <i class="ti ti-cpu" style="font-size:40px;opacity:.2"></i>
       <div style="font-size:13px;color:var(--text1)">Sin agentes en este nivel</div>
       <div style="font-size:12px">Crea el primero o espera las sugerencias de IA</div>
     </div>`;
@@ -284,7 +303,7 @@ function renderAgentEditor() {
       </div>
       <div class="field"><label>Modelo</label>
         <select id="ea-model" onchange="S.editorAgent.model=this.value;S.editorDirty=true">
-          ${['haiku','sonnet','opus'].map(m => `<option value="${m}" ${a.model === m ? 'selected' : ''}>${m}</option>`).join('')}
+          ${[['haiku','haiku — rápido y ligero'],['sonnet','sonnet — equilibrado'],['opus','opus — máximo potencial']].map(([m,l]) => `<option value="${m}" ${a.model === m ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
       </div>
       <div class="field"><label>Herramientas</label>
@@ -311,9 +330,14 @@ function renderAgentEditor() {
         </div>
       </div>
 
-      <div class="field"><label>System prompt</label>
+      <div class="field">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="margin-bottom:0">System prompt</label>
+          ${!a.optimized && a.system ? `<button class="btn sm" id="ea-opt-btn" onclick="optimizeAgent()" style="gap:5px;font-size:11px;color:var(--accent);border-color:rgba(124,106,247,0.3);background:var(--accent-dim)"><i class="ti ti-wand"></i>Optimizar con IA</button>` : ''}
+          ${a.optimized ? `<span class="badge accent" style="font-size:10px"><i class="ti ti-circle-check"></i>optimizado</span>` : ''}
+        </div>
         <textarea id="ea-system" rows="8"
-          oninput="S.editorAgent.system=this.value;S.editorDirty=true">${esc(a.system || '')}</textarea>
+          oninput="S.editorAgent.system=this.value;S.editorDirty=true;updateOptimizeBtn()">${esc(a.system || '')}</textarea>
       </div>
     </div>
     <div class="editor-foot">
@@ -363,6 +387,37 @@ async function generateSystemPrompt() {
   } catch(e) { toast(e.message, 'err'); }
   btn.disabled = false;
   btn.innerHTML = '<i class="ti ti-sparkles"></i> Generar system prompt';
+}
+
+function updateOptimizeBtn() {
+  const ta  = document.getElementById('ea-system');
+  const btn = document.getElementById('ea-opt-btn');
+  if (!btn || !ta) return;
+  btn.style.display = ta.value.trim() ? '' : 'none';
+}
+
+async function optimizeAgent() {
+  const a   = S.editorAgent; if (!a) return;
+  const btn = document.getElementById('ea-opt-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spin"></div>Optimizando…'; }
+  try {
+    const { description, system } = await req('POST', '/ai/optimize-agent', {
+      name:        a.name,
+      description: a.description,
+      system:      a.system,
+      tools:       a.tools || [],
+      model:       a.model || 'sonnet',
+    });
+    a.description = description;
+    a.system      = system;
+    a.optimized   = true;
+    S.editorDirty = true;
+    renderAgentEditor();
+    toast('Agente optimizado — revisa y guarda cuando estés listo');
+  } catch(e) {
+    toast(e.message, 'err');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-wand"></i>Optimizar con IA'; }
+  }
 }
 
 async function saveCurrentAgent() {

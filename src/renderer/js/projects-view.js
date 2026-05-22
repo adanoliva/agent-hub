@@ -7,7 +7,7 @@ function renderProjectsView() {
   const tb = document.getElementById('tb-actions');
   tb.innerHTML = `
     <button class="btn primary sm" onclick="openCreateProject()"><i class="ti ti-plus"></i> Nuevo proyecto</button>
-    <button class="btn sm" onclick="openImportProject()"><i class="ti ti-folder-open"></i> Importar</button>
+    <button class="btn sm" onclick="openImportProject()"><i class="ti ti-folder-plus"></i> Importar</button>
     <button class="btn sm" onclick="syncAllProjects()" title="Sync todos los proyectos"><i class="ti ti-refresh"></i> Sync todos</button>`;
 
   document.getElementById('tb-sub').textContent = `${S.projects.length} proyecto${S.projects.length !== 1 ? 's' : ''}`;
@@ -50,26 +50,31 @@ function renderProjectsView() {
 }
 
 const PROVIDER_ICONS = {
-  claude: '<i class="ti ti-robot" title="Claude Code"></i>',
-  github: '<i class="ti ti-brand-github" title="GitHub Copilot"></i>',
-  both:   '<i class="ti ti-robot" title="Claude + GitHub"></i><i class="ti ti-brand-github"></i>',
+  claude: '<i class="ti ti-robot"></i>Claude',
+  github: '<i class="ti ti-brand-github"></i>Copilot',
+  both:   '<i class="ti ti-git-merge"></i>Ambos',
+};
+
+const STATUS_BADGE = {
+  active:   `<span class="badge green"><i class="ti ti-circle-check"></i>activo</span>`,
+  paused:   `<span class="badge amber"><i class="ti ti-player-pause"></i>pausado</span>`,
+  archived: `<span class="badge gray"><i class="ti ti-archive"></i>archivado</span>`,
 };
 
 function projectCard(p) {
-  const pending      = p.pendingUpdates || 0;
-  const exists       = p.pathExists !== false;
-  const statusColors = {active:'green', paused:'amber', archived:'gray'};
-  const provIcon     = PROVIDER_ICONS[p.aiProvider || 'claude'] || PROVIDER_ICONS.claude;
+  const pending  = p.pendingUpdates || 0;
+  const exists   = p.pathExists !== false;
+  const provIcon = PROVIDER_ICONS[p.aiProvider || 'claude'] || PROVIDER_ICONS.claude;
   return `<div class="proj-card" onclick="openProjectDrawer('${p.id}')">
     <div class="proj-card-head">
       <div class="proj-card-name">${esc(p.name)}</div>
-      ${pending > 0 ? `<span class="proj-pending"><i class="ti ti-arrow-up"></i>${pending}</span>` : ''}
+      ${pending > 0 ? `<span class="proj-pending"><i class="ti ti-refresh"></i>${pending}</span>` : ''}
     </div>
     <div class="proj-card-meta">
-      ${p.techId ? `<span class="badge blue">${esc(techName(p.categoryId, p.techId))}</span>` : `<span class="badge gray">${esc(catName(p.categoryId))}</span>`}
-      <span class="badge ${statusColors[p.status] || 'gray'}">${p.status || 'active'}</span>
-      <span class="badge gray" style="letter-spacing:0">${provIcon}</span>
-      ${!exists ? `<span class="badge coral"><i class="ti ti-alert-triangle"></i> ruta no encontrada</span>` : ''}
+      ${p.techId ? `<span class="badge blue"><i class="ti ti-code"></i>${esc(techName(p.categoryId, p.techId))}</span>` : `<span class="badge gray"><i class="ti ti-folder"></i>${esc(catName(p.categoryId))}</span>`}
+      ${STATUS_BADGE[p.status] || STATUS_BADGE.active}
+      <span class="badge gray">${provIcon}</span>
+      ${!exists ? `<span class="badge coral"><i class="ti ti-map-pin-off"></i>ruta no encontrada</span>` : ''}
     </div>
     <div class="proj-card-actions" onclick="event.stopPropagation()">
       <button class="btn sm ghost" onclick="openVSCode('${p.id}')" title="Abrir en VS Code"><i class="ti ti-brand-vscode"></i></button>
@@ -233,10 +238,10 @@ async function renderDrawer() {
   const provider = p.aiProvider || 'claude';
 
   const statusBadge = (s) => {
-    if (s === 'ok')       return `<span class="badge green"><i class="ti ti-check"></i>ok</span>`;
-    if (s === 'outdated') return `<span class="badge amber"><i class="ti ti-arrow-up"></i>actualizar</span>`;
-    if (s === 'new')      return `<span class="badge blue"><i class="ti ti-plus"></i>nuevo</span>`;
-    if (s === 'local')    return `<span class="badge gray"><i class="ti ti-user"></i>local</span>`;
+    if (s === 'ok')       return `<span class="badge green"><i class="ti ti-circle-check"></i>ok</span>`;
+    if (s === 'outdated') return `<span class="badge amber"><i class="ti ti-refresh"></i>actualizar</span>`;
+    if (s === 'new')      return `<span class="badge blue"><i class="ti ti-sparkles"></i>nuevo</span>`;
+    if (s === 'local')    return `<span class="badge gray"><i class="ti ti-device-laptop"></i>local</span>`;
     if (s === 'excluded') return `<span class="badge gray"><i class="ti ti-eye-off"></i>excluido</span>`;
     return `<span class="badge gray">${s}</span>`;
   };
@@ -271,10 +276,10 @@ async function renderDrawer() {
         <button class="btn ghost sm" onclick="closeDrawer()"><i class="ti ti-x"></i></button>
       </div>
       <div class="drawer-meta">
-        ${p.techId ? `<span class="badge blue">${esc(techName(p.categoryId, p.techId))}</span>` : ''}
-        <span class="badge gray">${esc(catName(p.categoryId))}</span>
-        <span class="badge ${p.status === 'active' ? 'green' : p.status === 'paused' ? 'amber' : 'gray'}">${p.status || 'active'}</span>
-        <span class="badge gray" style="letter-spacing:0">${PROVIDER_ICONS[provider] || PROVIDER_ICONS.claude}</span>
+        ${p.techId ? `<span class="badge blue"><i class="ti ti-code"></i>${esc(techName(p.categoryId, p.techId))}</span>` : ''}
+        <span class="badge gray"><i class="ti ti-folder"></i>${esc(catName(p.categoryId))}</span>
+        ${STATUS_BADGE[p.status] || STATUS_BADGE.active}
+        <span class="badge gray">${PROVIDER_ICONS[provider] || PROVIDER_ICONS.claude}</span>
       </div>
     </div>
     <div class="drawer-tabs">

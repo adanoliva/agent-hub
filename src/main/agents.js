@@ -93,6 +93,7 @@ function parseAgentFile(filePath) {
     description: get('description'),
     tools,
     model:       shortModel(rawModel) || 'sonnet',
+    optimized:   get('optimized') === 'true',
     system:      m[2].trim(),
     filePath,
   };
@@ -135,17 +136,17 @@ function serializeAgent(agent) {
   const toolsBlock = toolsList ? `tools:\n${toolsList}` : 'tools: []';
   const modelId    = resolveModel(agent.model);
 
-  return [
+  const lines = [
     '---',
     `name: ${agent.name}`,
     `description: ${agent.description || ''}`,
     `model: ${modelId}`,
     toolsBlock,
-    '---',
-    '',
-    agent.system || '',
-    '',
-  ].join('\n');
+  ];
+  if (agent.optimized) lines.push('optimized: true');
+  lines.push('---', '', agent.system || '', '');
+
+  return lines.join('\n');
 }
 
 // ── Hash ──────────────────────────────────────────────────────────────────────

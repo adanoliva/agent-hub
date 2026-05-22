@@ -548,6 +548,7 @@ const {
   getProviderStatus,
   generateAgentPrompt,
   getSuggestions,
+  generateProjectSuggestions,
   clearSuggestionsCache,
   callAIChat,
 } = require('./ai');
@@ -570,6 +571,53 @@ app.post('/api/ai/generate-prompt', async (req, res) => {
       description, name, level, categoryId, techId, tools, language, existingAgents,
     });
     res.json({ system });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/ai/optimize-agent — rewrite & improve an existing agent system prompt
+app.post('/api/ai/optimize-agent', async (req, res) => {
+  const { name, description, system, tools = [], model = 'sonnet' } = req.body;
+  if (!system) return res.status(400).json({ error: 'system prompt required' });
+
+  const toolList = tools.join(', ') || 'ninguna';
+  const modelHint = model === 'haiku' ? 'conciso y directo (modelo ligero)'
+    : model === 'opus' ? 'detallado y exhaustivo (modelo avanzado)'
+    : 'equilibrado entre concisión y detalle';
+
+  const prompt = `Eres un experto en diseño de system prompts para agentes Claude Code.
+
+Tienes este agente:
+- Nombre: ${name || 'agente'}
+- Descripción actual: ${description || '(sin descripción)'}
+- Herramientas disponibles: ${toolList}
+- Modelo: ${model} — estilo ${modelHint}
+
+System prompt actual:
+---
+${system}
+---
+
+Optimiza el system prompt para que sea:
+1. Más claro y específico en el rol y objetivo del agente
+2. Con instrucciones precisas sobre qué hacer Y qué NO hacer
+3. Apropiado para el estilo del modelo (${model})
+4. Sin redundancias ni relleno innecesario
+5. Enfocado en un objetivo principal; usa pasos concretos solo si aportan claridad
+
+Si la descripción actual es vaga, genérica o está vacía, propón una mejor.
+
+Responde SOLO con JSON válido, sin explicaciones, sin bloques markdown:
+{"description":"<descripción mejorada>","system":"<system prompt optimizado>"}`;
+
+  try {
+    const { callAI } = require('./ai');
+    const raw = await callAI(prompt, { maxTokens: 800 });
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('La IA no devolvió JSON válido');
+    const { description: newDesc, system: newSystem } = JSON.parse(jsonMatch[0]);
+    res.json({ description: newDesc, system: newSystem });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -613,6 +661,69 @@ app.post('/api/ai/suggestions/refresh', async (req, res) => {
       true, // force regenerate
     );
     res.json(suggestions);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Project-specific suggestions ─────────────────────────────────────────────
+
+function projectSuggestionsCacheKey(projectId) {
+  return `project::${projectId}`;
+}
+
+async function getProjectSuggestionsImpl(projectId, force = false) {
+  const cfg     = readConfig();
+  const project = cfg.projects.find(p => p.id === projectId);
+  if (!project) throw new Error('Project not found');
+
+  const cKey           = projectSuggestionsCacheKey(projectId);
+  const suggestionsPath = path.join(CHAT_CACHE_DIR, 'suggestions.json');
+  const readCache      = () => { try { return JSON.parse(fs.readFileSync(suggestionsPath, 'utf8')); } catch { return {}; } };
+
+  if (!force) {
+    const cached = readCache()[cKey];
+    if (cached) return cached.suggestions;
+  }
+
+  const provider = project.aiProvider === 'github' ? 'github' : 'claude';
+  const ctx      = getContextFile(project, provider);
+  const cat      = (cfg.categories || []).find(c => c.id === project.categoryId);
+  const tech     = (cat?.technologies || []).find(t => t.id === project.techId);
+  const existing = listProjectAgents(project.path, [provider]).map(a => a.name);
+
+  const suggestions = await generateProjectSuggestions({
+    project,
+    contextContent: ctx.content || '',
+    categoryName:   cat?.name || project.categoryId || '',
+    techName:       tech?.name || project.techId || '',
+    existingAgents: existing,
+  });
+
+  const allCache      = readCache();
+  allCache[cKey]      = { suggestions, generatedAt: new Date().toISOString() };
+  fs.writeFileSync(suggestionsPath, JSON.stringify(allCache, null, 2), 'utf8');
+
+  return suggestions;
+}
+
+// GET /api/ai/project-suggestions?projectId=
+app.get('/api/ai/project-suggestions', async (req, res) => {
+  const { projectId } = req.query;
+  if (!projectId) return res.status(400).json({ error: 'projectId required' });
+  try {
+    res.json(await getProjectSuggestionsImpl(projectId, false));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/ai/project-suggestions/refresh
+app.post('/api/ai/project-suggestions/refresh', async (req, res) => {
+  const { projectId } = req.body;
+  if (!projectId) return res.status(400).json({ error: 'projectId required' });
+  try {
+    res.json(await getProjectSuggestionsImpl(projectId, true));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

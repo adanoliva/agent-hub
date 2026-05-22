@@ -431,6 +431,67 @@ function clearSuggestionsCache(level, categoryId, techId) {
   writeSuggestionsCache(cache);
 }
 
+/**
+ * Generates agent suggestions for a specific project, using its context file
+ * (CLAUDE.md or copilot-instructions.md) as rich input.
+ *
+ * @param {object} params
+ * @param {object} params.project         — full project object from config
+ * @param {string} params.contextContent  — content of CLAUDE.md or copilot-instructions
+ * @param {string} params.categoryName
+ * @param {string} params.techName
+ * @param {string[]} params.existingAgents
+ * @returns {Promise<Array>}
+ */
+async function generateProjectSuggestions({ project, contextContent, categoryName, techName, existingAgents = [] }) {
+  const existing = existingAgents.length
+    ? `Agents ALREADY in this project (do NOT suggest these): ${existingAgents.join(', ')}.`
+    : '';
+
+  const contextSection = contextContent?.trim()
+    ? `PROJECT DOCUMENTATION (CLAUDE.md / instructions):\n---\n${contextContent.slice(0, 3000)}\n---`
+    : 'PROJECT DOCUMENTATION: Not available — base suggestions on category and technology.';
+
+  const prompt = `You are an expert at designing Claude Code sub-agents for software development projects.
+
+PROJECT:
+- Name: ${project.name}
+- Description: ${project.description || 'Not provided'}
+- Category: ${categoryName || project.categoryId || 'Unknown'}
+- Technology: ${techName || project.techId || 'Unknown'}
+- AI Provider: ${project.aiProvider || 'claude'}
+
+${contextSection}
+
+${existing}
+
+Based on the project documentation and characteristics above, suggest exactly 3 Claude Code agents that would be GENUINELY USEFUL for THIS SPECIFIC PROJECT.
+Prioritize agents that address:
+1. The actual tech stack and architecture described in the documentation
+2. Recurring tasks or conventions mentioned in the docs
+3. Gaps not covered by the existing agents
+
+Respond with ONLY a valid JSON array. No markdown, no explanation.
+Each item must have exactly these fields:
+- name: string (kebab-case, specific to the project)
+- description: string (one sentence, max 80 chars, in Spanish)
+- tools: array of strings from: ["Bash", "Read", "Write", "Grep", "Edit", "WebFetch", "WebSearch", "TodoRead", "TodoWrite"]
+- model: string, one of: "haiku", "sonnet", "opus"
+- system: string (75-200 word system prompt, plain text, in Spanish)`;
+
+  const raw    = await callAI(prompt, { maxTokens: 1400 });
+  const parsed = parseJSONSafely(raw);
+  if (!Array.isArray(parsed)) throw new Error('AI returned invalid suggestions format');
+
+  return parsed.slice(0, 4).map(s => ({
+    name:        String(s.name        || 'project-agent').toLowerCase().replace(/\s+/g, '-'),
+    description: String(s.description || '').slice(0, 100),
+    tools:       Array.isArray(s.tools) ? s.tools : ['Read'],
+    model:       ['haiku','sonnet','opus'].includes(s.model) ? s.model : 'sonnet',
+    system:      String(s.system      || ''),
+  }));
+}
+
 // ── JSON parser (tolerant) ────────────────────────────────────────────────────
 
 function parseJSONSafely(raw) {
@@ -521,6 +582,7 @@ async function callAIChat(messages, opts = {}) {
 
 module.exports = {
   callAI,
+  generateProjectSuggestions,
   callAIChat,
   generateAgentPrompt,
   generateSuggestions,
