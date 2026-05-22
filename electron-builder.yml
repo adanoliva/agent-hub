@@ -29,6 +29,7 @@ portable:
 files:
   # Source files
   - src/**/*
+  - dist/renderer/**/*
   - package.json
   # All node_modules (asar bundles them efficiently)
   - node_modules/**/*

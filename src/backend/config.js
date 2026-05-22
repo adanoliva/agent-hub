@@ -57,6 +57,7 @@ const DEFAULT_CONFIG = {
   githubToken: '',
   githubModel: 'gpt-4o-mini',
   theme: 'dark',       // 'dark' | 'light'
+  closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
   categories: [
     {
       id: 'games',

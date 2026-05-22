@@ -10,7 +10,8 @@ const { createTray, destroyTray }                                = require('./tr
 const { readConfig, bootstrapDirectories, APP_DIR }              = require('./config');
 const { migrateAgentFiles, seedDefaultAgents, syncGlobalAgentsToClaudeDir } = require('./agents');
 
-const isDev = !app.isPackaged;
+const isDev     = !app.isPackaged;
+const isViteDev = process.env.NODE_ENV === 'development';
 
 // ── Auto-updater ──────────────────────────────────────────────────────────────
 
@@ -81,16 +82,44 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://localhost:${PORT}`);
+  const url = isViteDev ? 'http://localhost:5173' : `http://localhost:${PORT}`;
+  console.log(`[main] Loading URL: ${url} (isViteDev=${isViteDev})`);
+  mainWindow.loadURL(url);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
+    if (isDev || isViteDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
   mainWindow.on('close', (e) => {
-    if (!app.isQuiting) { e.preventDefault(); mainWindow.hide(); }
+    if (app.isQuiting) return;
+    e.preventDefault();
+    handleClose();
   });
+
+  function handleClose() {
+    const { readConfig, writeConfig } = require('./config');
+    const cfg = readConfig();
+    const action = cfg.closeAction || 'ask';
+
+    if (action === 'tray') { mainWindow.hide(); return; }
+    if (action === 'quit') { app.isQuiting = true; app.quit(); return; }
+
+    // action === 'ask' — show custom in-app dialog via IPC
+    mainWindow.webContents.send('app:close-requested');
+    ipcMain.once('app:close-response', (_, { action: chosen, remember }) => {
+      if (remember) {
+        cfg.closeAction = chosen;
+        writeConfig(cfg);
+      }
+      if (chosen === 'tray') {
+        mainWindow.hide();
+      } else {
+        app.isQuiting = true;
+        app.quit();
+      }
+    });
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);

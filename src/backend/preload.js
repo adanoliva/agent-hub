@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('api', {
   // Dialogs
   pickFolder:  ()    => ipcRenderer.invoke('dialog:pickFolder'),
 
+  // Close dialog
+  onCloseRequested: (cb) => ipcRenderer.on('app:close-requested', () => cb()),
+  closeResponse:    (action, remember) => ipcRenderer.send('app:close-response', { action, remember }),
+
   // Updates
   checkForUpdate:   () => ipcRenderer.invoke('update:check'),
   downloadUpdate:   () => ipcRenderer.invoke('update:download'),

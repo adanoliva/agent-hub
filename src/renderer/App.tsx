@@ -1,0 +1,107 @@
+import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { HashRouter } from 'react-router-dom';
+import { useStore } from './store';
+import { req } from './api';
+import { Sidebar } from './components/layout/Sidebar';
+import { Statusbar } from './components/layout/Statusbar';
+import { ToastContainer } from './components/ui/Toast';
+import { Wizard } from './components/ui/Wizard';
+import { CloseDialog } from './components/ui/CloseDialog';
+import type { Config, Project } from './types';
+
+const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
+const Agents   = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
+const Chat     = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })));
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, color: '#fb7185', fontFamily: 'monospace', fontSize: 13 }}>
+          <strong>Error de renderizado:</strong>
+          <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>
+            {(this.state.error as Error).message}
+            {'\n'}
+            {(this.state.error as Error).stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppInner() {
+  const view        = useStore((s) => s.view);
+  const setConfig   = useStore((s) => s.setConfig);
+  const setProjects = useStore((s) => s.setProjects);
+  const setVersion  = useStore((s) => s.setAppVersion);
+  const addToast    = useStore((s) => s.addToast);
+
+  const [showWizard,      setShowWizard]      = useState(() => !localStorage.getItem('cdm-wizard-done'));
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+
+  useEffect(() => {
+    const api = (window as any).api;
+    api?.getVersion?.().then((v: string) => setVersion(v));
+
+    req<Config>('GET', '/config')
+      .then((cfg) => {
+        setConfig(cfg);
+        if (cfg.theme === 'light') document.body.classList.add('light');
+        else document.body.classList.remove('light');
+      })
+      .catch(() => addToast('Error al cargar la configuración', 'err'));
+
+    req<Project[]>('GET', '/projects')
+      .then((projects) => setProjects(projects))
+      .catch(() => {});
+
+    api?.onCloseRequested?.(() => setShowCloseDialog(true));
+  }, []);
+
+  return (
+    <div id="app">
+      <Sidebar />
+      <div className="main">
+        <Suspense fallback={null}>
+          {view === 'projects' && <Projects />}
+          {view === 'agents'   && <Agents />}
+          {view === 'chat'     && <Chat />}
+          {view === 'settings' && <Settings />}
+        </Suspense>
+        <Statusbar />
+      </div>
+      <ToastContainer />
+      {showWizard && <Wizard onDone={() => setShowWizard(false)} />}
+      {showCloseDialog && (
+        <CloseDialog
+          onRespond={(action, remember) => {
+            setShowCloseDialog(false);
+            (window as any).api?.closeResponse?.(action, remember);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <HashRouter>
+        <AppInner />
+      </HashRouter>
+    </ErrorBoundary>
+  );
+}

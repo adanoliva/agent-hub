@@ -40,7 +40,8 @@ const PORT = process.env.PORT || 3737;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'renderer')));
+const RENDERER_DIR = path.join(__dirname, '..', '..', 'dist', 'renderer');
+app.use(express.static(RENDERER_DIR));
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
@@ -56,12 +57,13 @@ app.get('/api/config', (req, res) => {
 
 app.put('/api/config', (req, res) => {
   const cfg = readConfig();
-  const { apiKey, aiProvider, githubToken, githubModel, theme } = req.body;
+  const { apiKey, aiProvider, githubToken, githubModel, theme, closeAction } = req.body;
   if (apiKey       !== undefined) cfg.apiKey       = apiKey;
   if (aiProvider   !== undefined) cfg.aiProvider   = aiProvider;
   if (githubToken  !== undefined) cfg.githubToken  = githubToken;
   if (githubModel  !== undefined) cfg.githubModel  = githubModel;
   if (theme        !== undefined) cfg.theme        = theme;
+  if (closeAction  !== undefined && ['ask','tray','quit'].includes(closeAction)) cfg.closeAction = closeAction;
   writeConfig(cfg);
   res.json({ ok: true });
 });
@@ -820,7 +822,7 @@ app.post('/api/projects/:id/open-folder', (req, res) => {
 // ── Catch-all ─────────────────────────────────────────────────────────────────
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  res.sendFile(path.join(RENDERER_DIR, 'index.html'));
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
