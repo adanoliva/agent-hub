@@ -1,6 +1,6 @@
 # Guía de migración: Vanilla JS → React
 
-**Agent Hub v1.4.0 — Electron + Express + Vanilla JS a Electron + React**
+**Agent Hub v1.4.0 — Electron + Express + Vanilla JS a Electron + React + Vite + Zustand**
 
 ---
 
@@ -15,62 +15,67 @@ Agent Hub funciona hoy con un renderer de Vanilla JS donde cada vista se constru
 - **Estado reactivo.** Zustand notifica a los componentes que dependen de un slice concreto del estado. `renderProjectsView()` no existe: los componentes se suscriben a los datos que necesitan.
 - **DX.** TypeScript opcional, hot module replacement durante el desarrollo, errores con stack traces claros.
 
-**Lo que NO cambia:** todo `src/main/` (main.js, server.js, agents.js, projects.js, ai.js, config.js), la API REST en puerto 3737, `preload.js`, `window.api`, `config.json` y el sistema de temas CSS.
+**Lo que NO cambia:** todo `src/backend/` (main.js, server.js, agents.js, projects.js, ai.js, config.js), la API REST en puerto 3737, `preload.js`, `window.api`, `config.json` y el sistema de temas CSS.
+
+> **Nota sobre carpetas:** `src/main/` se renombró a `src/backend/` durante la migración para mayor claridad. `src/renderer/` permanece con ese nombre (proceso de renombrado a `src/frontend/` pendiente — bloqueado por lock de proceso en Windows).
 
 ---
 
 ## 2. Decisiones de arquitectura
 
-### 2.1 Estructura de carpetas propuesta
+### 2.1 Estructura de carpetas (estado real tras la migración)
 
 ```
 src/
-├── main/                        # Sin cambios
-│   ├── main.js
-│   ├── server.js
-│   ├── agents.js
-│   ├── projects.js
-│   ├── ai.js
-│   ├── config.js
-│   ├── preload.js
-│   └── ...
-└── renderer/                    # Reescrito con React
-    ├── index.html               # Punto de entrada Vite (mínimo)
+├── backend/                     # Renombrado desde src/main/
+│   ├── main.js                  # BrowserWindow, IPC, auto-updater
+│   ├── server.js                # Express en localhost:3737
+│   ├── agents.js                # CRUD agentes (.md + frontmatter)
+│   ├── projects.js              # CRUD proyectos, sync de agentes
+│   ├── ai.js                    # Integración IA (CLI/API/GitHub)
+│   ├── config.js                # config.json (portable-aware)
+│   ├── tray.js                  # Icono de bandeja
+│   ├── preload.js               # Context bridge (window.api)
+│   ├── defaults.js              # Agentes por defecto
+│   └── templates.js             # Plantillas CLAUDE.md / copilot-instructions.md
+└── renderer/                    # React + Vite (pendiente renombrar a frontend/)
+    ├── index.html               # Punto de entrada Vite (CSP, fuentes, Tabler CDN)
     ├── main.tsx                 # ReactDOM.createRoot
-    ├── App.tsx                  # Shell + HashRouter + layout
+    ├── App.tsx                  # ErrorBoundary + HashRouter + AppInner
     ├── styles.css               # Sin cambios (variables CSS de tema)
-    ├── api.ts                   # req() tipado, igual que hoy
+    ├── api.ts                   # req<T>() con BASE = '/api'
+    ├── types.ts                 # Tipos compartidos (Agent, Project, Config…)
     ├── store/
-    │   └── index.ts             # Store Zustand (equivalente a S)
+    │   └── index.ts             # Zustand: view, config, projects, toasts, appVersion
     ├── hooks/
-    │   ├── useApi.ts            # Wrapper async sobre req()
-    │   └── useElectron.ts       # Wrapper sobre window.api
+    │   ├── useToast.ts
+    │   └── useCategoryHelpers.ts
+    ├── constants/
+    │   └── tools.ts             # ALL_TOOLS, agentIcon(), MODEL_ICON, LEVEL_COLOR
     ├── components/
     │   ├── layout/
     │   │   ├── Sidebar.tsx
-    │   │   ├── Topbar.tsx
-    │   │   └── Statusbar.tsx
+    │   │   ├── Topbar.tsx       # Prop `actions?: ReactNode` para botones en la derecha
+    │   │   └── Statusbar.tsx    # Muestra servidor + proveedor IA activo
     │   ├── ui/
-    │   │   ├── Toast.tsx        # Sistema de toasts
-    │   │   ├── Modal.tsx        # Modal genérico
-    │   │   ├── Drawer.tsx       # Drawer lateral
-    │   │   └── Badge.tsx
+    │   │   ├── Toast.tsx        # ToastContainer + lógica de auto-dismiss
+    │   │   ├── Modal.tsx        # Modal genérico controlado por props
+    │   │   ├── Wizard.tsx       # Overlay de primer arranque (3 pasos)
+    │   │   └── CloseDialog.tsx  # Diálogo custom tray vs. quit (con "recordar")
     │   ├── projects/
-    │   │   ├── ProjectsView.tsx
     │   │   ├── ProjectCard.tsx
     │   │   ├── ProjectDrawer.tsx
-    │   │   └── CreateProjectModal.tsx
-    │   ├── agents/
-    │   │   ├── AgentsView.tsx
-    │   │   ├── AgentTree.tsx
-    │   │   └── AgentEditor.tsx
-    │   ├── chat/
-    │   │   └── ChatView.tsx
-    │   ├── settings/
-    │   │   └── SettingsView.tsx
-    │   └── wizard/
-    │       └── Wizard.tsx
-    └── pages/                   # Rutas de React Router
+    │   │   ├── StatusBadge.tsx
+    │   │   ├── CreateProjectModal.tsx
+    │   │   ├── EditProjectModal.tsx
+    │   │   ├── ImportProjectModal.tsx
+    │   │   └── ExcludeAgentModal.tsx
+    │   └── agents/
+    │       ├── AgentCard.tsx
+    │       ├── AgentsTree.tsx
+    │       ├── AgentsCenter.tsx
+    │       └── AgentEditor.tsx
+    └── pages/
         ├── Projects.tsx
         ├── Agents.tsx
         ├── Chat.tsx
@@ -153,8 +158,35 @@ styles.css               ← --accent, --bg1, .badge (global, sin cambios)
 | 5 | Vista Ajustes (tabs General/Categorías/Agentes externos) | ✅ Completado |
 | 6 | Wizard de primer arranque | ✅ Completado |
 | 7 | Cleanup (eliminar JS Vanilla, lazy loading, tsc --noEmit) | ✅ Completado |
+| — | Post-migración: mejoras adicionales (ver abajo) | ✅ Completado |
 
-### Decisiones tomadas durante la implementación
+### Mejoras implementadas tras la migración base
+
+**Diálogo de cierre personalizado (`CloseDialog.tsx`):**
+- Al pulsar la X de la ventana, en lugar del diálogo nativo de Windows se muestra un modal React con dos opciones: minimizar al tray o salir completamente.
+- Opción "Recordar mi elección" persiste la decisión en `config.json` (`closeAction: 'ask'|'tray'|'quit'`).
+- Flujo IPC: `main.js` envía `app:close-requested` → renderer muestra `<CloseDialog>` → renderer devuelve `app:close-response` con `{ action, remember }` → `main.js` actúa con `ipcMain.once`.
+- Si `closeAction` ya está guardado en config, `handleClose()` lo aplica directamente sin mostrar el diálogo.
+
+**Statusbar con indicador de proveedor IA:**
+- Además del punto de conexión al servidor, la Statusbar muestra un segundo indicador con el nombre del proveedor activo ("Claude CLI", "Anthropic API" o "GitHub Copilot") y un punto verde/ámbar según `GET /ai/status`.
+- El indicador se actualiza reactivamente al cambiar el proveedor en Ajustes (efecto sobre `config?.aiProvider`).
+
+**Toggle de tema en el Topbar de Ajustes:**
+- La sección "Apariencia" se eliminó del tab General de Ajustes.
+- El Topbar de Settings recibe un botón pequeño vía la prop `actions` que alterna entre tema claro y oscuro.
+- Usa la función `setTheme()` ya existente en el componente (no requiere nueva infraestructura).
+
+**Ajustes a ancho completo:**
+- Eliminado el `max-width: 640px` de `.settings-section` en `styles.css`.
+- Eliminado el `maxWidth: 900` inline de la grid del tab General.
+- La vista de ajustes ocupa ahora el 100% del espacio disponible.
+
+**Renombrado de carpetas:**
+- `src/main/` → `src/backend/` completado.
+- `src/renderer/` → `src/frontend/` pendiente (el proceso de Vite/Electron bloquea el rename en Windows durante el desarrollo).
+
+### Decisiones de implementación
 
 **Vite 8 + Electron — problemas resueltos:**
 - `allowedHosts: 'all'` es obligatorio: Vite 8 bloquea por defecto peticiones que no vienen del host configurado. Electron hace requests desde un origen diferente.
@@ -165,36 +197,18 @@ styles.css               ← --accent, --bg1, .badge (global, sin cambios)
 **CSS layout crítico:**
 - `.view.active { display: flex; flex-direction: column }` — el Topbar vive **dentro** del `.view`, no como sibling como en el Vanilla.
 - `html, body, #root { height: 100% }` — el `#root` debe estar incluido explícitamente.
+- Reset global de `<button>`: `button { background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer }` — imprescindible porque el Vanilla usaba `<div>` para los nav items y los `<button>` heredan `background: buttonface` del navegador.
 
-**Estructura de ficheros real (vs. propuesta):**
-```
-src/renderer/
-├── index.html           ← punto de entrada Vite (con CSP, fuentes, Tabler Icons CDN)
-├── main.tsx             ← ReactDOM.createRoot
-├── App.tsx              ← ErrorBoundary + HashRouter + AppInner
-├── styles.css           ← sin cambios
-├── api.ts               ← req<T>() con BASE = '/api' (proxy Vite en dev)
-├── types.ts             ← tipos compartidos (Agent, Project, Config, SelectedNode…)
-├── store/index.ts       ← Zustand: view, config, projects, toasts, appVersion
-├── hooks/
-│   ├── useToast.ts
-│   └── useCategoryHelpers.ts
-├── constants/tools.ts   ← ALL_TOOLS, agentIcon(), MODEL_ICON, LEVEL_COLOR
-├── components/
-│   ├── layout/          ← Sidebar, Topbar, Statusbar
-│   ├── ui/              ← Toast, Modal
-│   ├── projects/        ← ProjectCard, ProjectDrawer, StatusBadge,
-│   │                       CreateProjectModal, EditProjectModal,
-│   │                       ImportProjectModal, ExcludeAgentModal
-│   └── agents/          ← AgentCard, AgentsTree, AgentsCenter, AgentEditor
-└── pages/
-    ├── Projects.tsx
-    ├── Agents.tsx
-    ├── Chat.tsx
-    └── Settings.tsx
+**React.lazy con exports nombrados:**
+Las páginas usan `export function Agents()` (named export). `React.lazy` solo acepta default exports, por lo que hay que usar el wrapper:
+```tsx
+const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
 ```
 
-**Store Zustand real** (más simple que el propuesto — la vista de Agentes usa estado local):
+**IPC one-shot para el diálogo de cierre:**
+`ipcMain.once('app:close-response', ...)` garantiza que el handler se registra una sola vez por intento de cierre, evitando listeners acumulados si el usuario abre y cancela el diálogo varias veces.
+
+**Store Zustand real** (más simple que el propuesto — cada vista usa estado local):
 ```ts
 interface AppState {
   view: View;
@@ -207,6 +221,9 @@ interface AppState {
 }
 ```
 El estado de árbol de agentes, editor, suggestions y chat vive en estado local de cada página (`useState`), no en el store global. Solo lo que es genuinamente global (config, projects, toasts, view) está en Zustand.
+
+**Validación en modales:**
+Los handlers `onConfirm` de `<Modal>` deben lanzar `throw new Error('validation')` (no `return`) para mantener el modal abierto cuando la validación falla. Si `onConfirm` resuelve sin error, el Modal se cierra automáticamente.
 
 **Chat — implementación:**
 - `AbortController` por nodo para cancelar sugerencias al cambiar de nodo (Agentes view).
@@ -246,7 +263,7 @@ El estado de árbol de agentes, editor, suggestions y chat vive en estado local 
        "strict": true,
        "skipLibCheck": true
      },
-     "include": ["src/renderer/**/*"]
+     "include": ["src/frontend/**/*"]
    }
    ```
 
@@ -912,7 +929,7 @@ export default defineConfig(({ command }) => ({
     rendererPlugin(),   // resuelve módulos Node en el renderer correctamente
   ],
 
-  root: path.resolve(__dirname, 'src/renderer'),
+  root: path.resolve(__dirname, 'src/frontend'),
 
   server: {
     port: 5173,
@@ -935,7 +952,7 @@ export default defineConfig(({ command }) => ({
 
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src/renderer'),
+      '@': path.resolve(__dirname, 'src/frontend'),
     },
   },
 
@@ -960,7 +977,7 @@ if (process.env.NODE_ENV !== 'development') {
 ```yaml
 # electron-builder.yml
 files:
-  - src/main/**/*
+  - src/backend/**/*
   - dist/renderer/**/*    # añadir esto
   - assets/**/*
   - package.json
