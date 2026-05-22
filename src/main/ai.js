@@ -455,10 +455,73 @@ function parseJSONSafely(raw) {
   }
 }
 
+// ── Multi-turn chat ───────────────────────────────────────────────────────────
+
+/**
+ * Sends a multi-turn conversation to the configured AI provider.
+ *
+ * @param {Array<{role:'user'|'assistant', content:string}>} messages
+ * @param {object} [opts]
+ * @param {string} [opts.systemPrompt]
+ * @param {number} [opts.maxTokens]
+ * @returns {Promise<string>}
+ */
+async function callAIChat(messages, opts = {}) {
+  const cfg      = readConfig();
+  const provider = cfg.aiProvider || 'cli';
+
+  if (provider === 'api') {
+    if (!cfg.apiKey) throw new Error('No API key configured');
+    let Anthropic;
+    try { Anthropic = require('@anthropic-ai/sdk'); }
+    catch { throw new Error('@anthropic-ai/sdk not installed. Run: npm install @anthropic-ai/sdk'); }
+
+    const client  = new Anthropic.default({ apiKey: cfg.apiKey });
+    const params  = {
+      model:      MODEL,
+      max_tokens: opts.maxTokens || 2048,
+      messages,
+    };
+    if (opts.systemPrompt) params.system = opts.systemPrompt;
+    const result = await client.messages.create(params);
+    return result.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  }
+
+  if (provider === 'github') {
+    if (!cfg.githubToken) throw new Error('No GitHub token configured');
+    const body = {
+      model:      cfg.githubModel || GITHUB_MODELS_DEFAULT,
+      messages:   opts.systemPrompt ? [{ role: 'system', content: opts.systemPrompt }, ...messages] : messages,
+      max_tokens: opts.maxTokens || 2048,
+    };
+    const response = await fetch(GITHUB_MODELS_URL, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${cfg.githubToken}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+      signal:  AbortSignal.timeout(CALL_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(`GitHub Models error: ${err.error?.message || response.statusText}`);
+    }
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  }
+
+  // CLI: flatten conversation into a single prompt
+  const lines = [];
+  if (opts.systemPrompt) lines.push(`[System]: ${opts.systemPrompt}\n`);
+  for (const m of messages) {
+    lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+  }
+  return callCLI(lines.join('\n\n'), opts);
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
   callAI,
+  callAIChat,
   generateAgentPrompt,
   generateSuggestions,
   getSuggestions,

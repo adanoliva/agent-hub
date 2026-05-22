@@ -28,6 +28,7 @@
     <div class="sidebar-logo"><i class="ti ti-robot"></i></div>
     <div class="nav-btn active" data-view="projects" onclick="switchView('projects')"><i class="ti ti-layout-grid"></i><span class="tip">Proyectos</span></div>
     <div class="nav-btn" data-view="agents" onclick="switchView('agents')"><i class="ti ti-robot"></i><span class="tip">Agentes</span></div>
+    <div class="nav-btn" data-view="chat" onclick="switchView('chat')"><i class="ti ti-message-chatbot"></i><span class="tip">Chat IA</span></div>
     <div class="sidebar-spacer"></div>
     <div class="nav-set" data-view="settings" onclick="switchView('settings')"><i class="ti ti-settings"></i><span class="tip">Ajustes</span></div>
   </nav>
@@ -42,6 +43,7 @@
     <div class="view active" id="view-projects"></div>
     <div class="view" id="view-agents"></div>
     <div class="view" id="view-settings"></div>
+    <div class="view" id="view-chat"></div>
     <div class="statusbar">
       <div class="status-item"><div class="sdot green" id="srv-dot"></div><span id="srv-lbl">Iniciando…</span></div>
       <div class="status-item"><i class="ti ti-folder" style="font-size:11px"></i><span id="dir-lbl" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</span></div>
@@ -90,6 +92,7 @@
 <script src="js/projects-view.js"></script>
 <script src="js/agents-view.js"></script>
 <script src="js/settings-view.js"></script>
+<script src="js/chat-view.js"></script>
 <script src="js/wizard.js"></script>
 <script src="js/update.js"></script>
 <script src="js/init.js"></script>

@@ -388,6 +388,7 @@ const {
   generateAgentPrompt,
   getSuggestions,
   clearSuggestionsCache,
+  callAIChat,
 } = require('./ai');
 
 // GET /api/ai/status — check which provider is configured and ready
@@ -460,6 +461,56 @@ app.post('/api/ai/suggestions/refresh', async (req, res) => {
 app.delete('/api/ai/suggestions/cache', (req, res) => {
   clearSuggestionsCache();
   res.json({ ok: true });
+});
+
+// POST /api/chat — multi-turn chat with the configured AI provider
+app.post('/api/chat', async (req, res) => {
+  const { messages, systemPrompt } = req.body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array required' });
+  }
+  try {
+    const reply = await callAIChat(messages, { systemPrompt });
+    res.json({ reply });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Chat history persistence ───────────────────────────────────────────────────
+
+const { CACHE_DIR: CHAT_CACHE_DIR, ensureDir: chatEnsureDir } = require('./config');
+const CHAT_HISTORY_FILE = require('path').join(CHAT_CACHE_DIR, 'chat-history.json');
+
+app.get('/api/chat/history', (req, res) => {
+  try {
+    if (!fs.existsSync(CHAT_HISTORY_FILE)) return res.json({ messages: [] });
+    const raw = fs.readFileSync(CHAT_HISTORY_FILE, 'utf8');
+    res.json(JSON.parse(raw));
+  } catch {
+    res.json({ messages: [] });
+  }
+});
+
+app.put('/api/chat/history', (req, res) => {
+  const { messages } = req.body;
+  if (!Array.isArray(messages)) return res.status(400).json({ error: 'messages array required' });
+  try {
+    chatEnsureDir(CHAT_CACHE_DIR);
+    fs.writeFileSync(CHAT_HISTORY_FILE, JSON.stringify({ messages }, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/chat/history', (req, res) => {
+  try {
+    if (fs.existsSync(CHAT_HISTORY_FILE)) fs.unlinkSync(CHAT_HISTORY_FILE);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Open in editor/explorer ───────────────────────────────────────────────────
