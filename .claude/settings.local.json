@@ -4,7 +4,8 @@
       "Bash(gh auth *)",
       "PowerShell(gh auth *)",
       "PowerShell(cd \"C:\\\\claudedevmanager\\\\cdm\"; $env:GH_TOKEN=\"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\"; npx electron-builder --win portable --publish always 2>&1; Write-Host \"EXIT:$LASTEXITCODE\")",
-      "PowerShell(Test-Path \"C:\\\\claudedevmanager\\\\cdm\\\\dist\"; cmd /c \"dir C:\\\\claudedevmanager\\\\cdm\\\\dist\")"
+      "PowerShell(Test-Path \"C:\\\\claudedevmanager\\\\cdm\\\\dist\"; cmd /c \"dir C:\\\\claudedevmanager\\\\cdm\\\\dist\")",
+      "Bash(Get-ChildItem *)"
     ]
   }
 }

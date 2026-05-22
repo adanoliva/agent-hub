@@ -20,6 +20,7 @@ async function init() {
   try { S.config   = await req('GET', '/config');   } catch {}
   try { S.projects = await req('GET', '/projects'); } catch {}
 
+  applyTheme(S.config?.theme || 'dark');
   renderProjectsView();
 
   if (!localStorage.getItem('cdm-wizard-done')) openWizard();

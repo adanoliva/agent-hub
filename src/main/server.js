@@ -56,11 +56,12 @@ app.get('/api/config', (req, res) => {
 
 app.put('/api/config', (req, res) => {
   const cfg = readConfig();
-  const { apiKey, aiProvider, githubToken, githubModel } = req.body;
+  const { apiKey, aiProvider, githubToken, githubModel, theme } = req.body;
   if (apiKey       !== undefined) cfg.apiKey       = apiKey;
   if (aiProvider   !== undefined) cfg.aiProvider   = aiProvider;
   if (githubToken  !== undefined) cfg.githubToken  = githubToken;
   if (githubModel  !== undefined) cfg.githubModel  = githubModel;
+  if (theme        !== undefined) cfg.theme        = theme;
   writeConfig(cfg);
   res.json({ ok: true });
 });
@@ -381,6 +382,166 @@ app.put('/api/projects/:id/context', (req, res) => {
   res.json({ ok: true, filePath });
 });
 
+app.post('/api/projects/:id/generate-context', async (req, res) => {
+  const cfg = readConfig();
+  const project = cfg.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const ctxType = req.query.type || 'claude';
+
+  try {
+    const safeRead = (filePath, maxLen = 3000) => {
+      try {
+        const c = fs.readFileSync(filePath, 'utf8');
+        return c.length > maxLen ? c.slice(0, maxLen) + '\n...(truncado)' : c;
+      } catch { return null; }
+    };
+
+    const langExtMap = {
+      '.js':'JavaScript','.ts':'TypeScript','.jsx':'JavaScript/JSX','.tsx':'TypeScript/TSX',
+      '.py':'Python','.rb':'Ruby','.php':'PHP','.java':'Java','.cs':'C#',
+      '.go':'Go','.rs':'Rust','.cpp':'C++','.c':'C','.swift':'Swift','.kt':'Kotlin',
+      '.vue':'Vue','.svelte':'Svelte','.dart':'Dart','.scala':'Scala',
+    };
+
+    const langCount = {};
+    const skipDirs  = new Set(['node_modules','dist','build','.git','__pycache__','.next','out','coverage','.venv','venv']);
+    const scanDir   = (dir, depth = 0) => {
+      if (depth > 2) return;
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.name.startsWith('.') || skipDirs.has(entry.name)) continue;
+          if (entry.isDirectory()) scanDir(path.join(dir, entry.name), depth + 1);
+          else {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (langExtMap[ext]) langCount[langExtMap[ext]] = (langCount[langExtMap[ext]] || 0) + 1;
+          }
+        }
+      } catch {}
+    };
+    scanDir(project.path);
+    const detectedLanguages = Object.entries(langCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([l])=>l);
+    if (!detectedLanguages.length) detectedLanguages.push('No detectado');
+
+    const getStructure = (dir, depth = 0, prefix = '') => {
+      const lines = [];
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+          .filter(e => !e.name.startsWith('.') && !skipDirs.has(e.name))
+          .slice(0, 25);
+        for (const e of entries) {
+          lines.push(`${prefix}${e.isDirectory() ? '📁' : '📄'} ${e.name}`);
+          if (e.isDirectory() && depth < 1)
+            lines.push(...getStructure(path.join(dir, e.name), depth + 1, prefix + '  '));
+        }
+      } catch {}
+      return lines;
+    };
+    const structure = getStructure(project.path).join('\n') || 'No disponible';
+
+    let packageManager = 'No detectado', mainLibraries = [], dependencies = 'No detectado';
+    let buildTool = 'No detectado', testingFramework = 'No detectado', lintingTool = 'No detectado';
+
+    const pkgJson = safeRead(path.join(project.path, 'package.json'));
+    if (pkgJson) {
+      packageManager = fs.existsSync(path.join(project.path, 'pnpm-lock.yaml')) ? 'pnpm'
+        : fs.existsSync(path.join(project.path, 'yarn.lock')) ? 'yarn' : 'npm';
+      try {
+        const pkg  = JSON.parse(pkgJson);
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+        mainLibraries = Object.keys(deps).slice(0, 15);
+        dependencies  = Object.entries(deps).slice(0, 20).map(([k,v]) => `  ${k}: ${v}`).join('\n');
+        if      (deps.vite || deps['@vitejs/plugin-react']) buildTool = 'Vite';
+        else if (deps.webpack)  buildTool = 'Webpack';
+        else if (deps.esbuild)  buildTool = 'esbuild';
+        else if (pkg.scripts?.build) buildTool = 'npm scripts';
+        if      (deps.jest || deps['@jest/core'])           testingFramework = 'Jest';
+        else if (deps.vitest)   testingFramework = 'Vitest';
+        else if (deps.mocha)    testingFramework = 'Mocha';
+        else if (deps.cypress)  testingFramework = 'Cypress';
+        else if (deps.playwright || deps['@playwright/test']) testingFramework = 'Playwright';
+        const lint = [];
+        if (deps.eslint)   lint.push('ESLint');
+        if (deps.prettier) lint.push('Prettier');
+        lintingTool = lint.join(' + ') || 'No detectado';
+      } catch {}
+    }
+
+    const requirements = safeRead(path.join(project.path, 'requirements.txt'), 1000);
+    if (requirements) {
+      if (!mainLibraries.length)
+        mainLibraries = requirements.split('\n').filter(l=>l.trim()&&!l.startsWith('#')).slice(0,10).map(l=>l.split(/[=><!]/)[0].trim());
+      if (packageManager === 'No detectado') packageManager = 'pip';
+      if (testingFramework === 'No detectado' && requirements.includes('pytest')) testingFramework = 'pytest';
+      dependencies = requirements;
+    }
+    const pyproject = safeRead(path.join(project.path, 'pyproject.toml'), 500);
+    if (pyproject) packageManager = pyproject.includes('poetry') ? 'Poetry' : pyproject.includes('hatch') ? 'Hatch' : 'pip';
+
+    let cicdPipeline = null;
+    if (fs.existsSync(path.join(project.path, '.github', 'workflows')))  cicdPipeline = 'GitHub Actions';
+    else if (fs.existsSync(path.join(project.path, 'Jenkinsfile')))       cicdPipeline = 'Jenkins';
+    else if (fs.existsSync(path.join(project.path, '.gitlab-ci.yml')))    cicdPipeline = 'GitLab CI';
+    else if (fs.existsSync(path.join(project.path, '.circleci')))         cicdPipeline = 'CircleCI';
+
+    const hasDocker = fs.existsSync(path.join(project.path, 'Dockerfile')) || fs.existsSync(path.join(project.path, 'docker-compose.yml'));
+    const existingReadme = safeRead(path.join(project.path, 'README.md'), 2000) || safeRead(path.join(project.path, 'readme.md'), 2000);
+
+    const cat  = (cfg.categories || []).find(c => c.id === project.categoryId);
+    const tech = (cat?.technologies || []).find(t => t.id === project.techId);
+    const fileLabel = ctxType === 'github' ? 'copilot-instructions.md (GitHub Copilot)' : 'CLAUDE.md (Claude Code)';
+
+    const analysisPrompt = `Analiza este proyecto de desarrollo y genera un ${fileLabel} optimizado para agentes de IA.
+
+## Información del proyecto
+
+**Nombre:** ${project.name}
+**Descripción:** ${project.description || 'No especificada'}
+**Categoría:** ${cat?.name || project.categoryId || 'No especificada'}
+**Tecnología:** ${tech?.name || project.techId || 'No especificada'}
+**Lenguajes:** ${detectedLanguages.join(', ')}
+**Frameworks/Librerías principales:** ${mainLibraries.slice(0, 8).join(', ') || 'No detectados'}
+
+## Estructura del proyecto
+
+${structure}
+
+## Dependencias principales
+
+${dependencies}
+
+## Configuración detectada
+
+- Testing: ${testingFramework}
+- Linting: ${lintingTool}
+- Build tool: ${buildTool}
+- Package manager: ${packageManager}
+- CI/CD: ${cicdPipeline || 'No detectado'}
+- Containerización: ${hasDocker ? 'Sí (Docker)' : 'No'}
+
+${existingReadme ? '## README existente:\n' + existingReadme : ''}
+
+---
+
+Basándote en esto, genera un ${fileLabel} que incluya:
+
+1. **Descripción del proyecto**: Resumen claro de qué es y qué hace
+2. **Stack tecnológico**: Lista de tecnologías principales
+3. **Estructura del código**: Explicación de carpetas clave
+4. **Cómo ejecutar localmente**: Instrucciones básicas
+5. **Instrucciones para agentes**: Reglas específicas (convenciones, patrones, qué evitar)
+6. **Quick wins**: Tareas de mejora identificables rápidamente
+
+Formato: Markdown limpio y profesional, máximo 1000 palabras. Solo devuelve el contenido del archivo, sin explicaciones adicionales.`;
+
+    const { callAI } = require('./ai');
+    const content = await callAI(analysisPrompt);
+    res.json({ content });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 const {
@@ -477,16 +638,20 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ── Chat history persistence ───────────────────────────────────────────────────
+// ── Chat history persistence (per-project) ────────────────────────────────────
 
 const { CACHE_DIR: CHAT_CACHE_DIR, ensureDir: chatEnsureDir } = require('./config');
-const CHAT_HISTORY_FILE = require('path').join(CHAT_CACHE_DIR, 'chat-history.json');
+
+function chatHistoryFile(projectId) {
+  const slug = projectId ? `chat-${projectId}` : 'chat-global';
+  return require('path').join(CHAT_CACHE_DIR, `${slug}.json`);
+}
 
 app.get('/api/chat/history', (req, res) => {
+  const file = chatHistoryFile(req.query.projectId || '');
   try {
-    if (!fs.existsSync(CHAT_HISTORY_FILE)) return res.json({ messages: [] });
-    const raw = fs.readFileSync(CHAT_HISTORY_FILE, 'utf8');
-    res.json(JSON.parse(raw));
+    if (!fs.existsSync(file)) return res.json({ messages: [] });
+    res.json(JSON.parse(fs.readFileSync(file, 'utf8')));
   } catch {
     res.json({ messages: [] });
   }
@@ -495,9 +660,10 @@ app.get('/api/chat/history', (req, res) => {
 app.put('/api/chat/history', (req, res) => {
   const { messages } = req.body;
   if (!Array.isArray(messages)) return res.status(400).json({ error: 'messages array required' });
+  const file = chatHistoryFile(req.query.projectId || '');
   try {
     chatEnsureDir(CHAT_CACHE_DIR);
-    fs.writeFileSync(CHAT_HISTORY_FILE, JSON.stringify({ messages }, null, 2), 'utf8');
+    fs.writeFileSync(file, JSON.stringify({ messages }, null, 2), 'utf8');
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -505,12 +671,29 @@ app.put('/api/chat/history', (req, res) => {
 });
 
 app.delete('/api/chat/history', (req, res) => {
+  const file = chatHistoryFile(req.query.projectId || '');
   try {
-    if (fs.existsSync(CHAT_HISTORY_FILE)) fs.unlinkSync(CHAT_HISTORY_FILE);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Agents flat list (all levels, for @mention autocomplete) ──────────────────
+
+app.get('/api/agents/flat', (req, res) => {
+  const cfg = readConfig();
+  const all = [];
+  const collect = (level, catId, techId) => {
+    try { all.push(...listAgentsByLevel(level, catId, techId)); } catch {}
+  };
+  collect('global');
+  for (const cat of (cfg.categories || [])) {
+    collect('section', cat.id);
+    for (const tech of (cat.technologies || [])) collect('tech', cat.id, tech.id);
+  }
+  res.json(all);
 });
 
 // ── Open in editor/explorer ───────────────────────────────────────────────────

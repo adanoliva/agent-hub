@@ -1,3 +1,14 @@
+function applyTheme(theme) {
+  document.body.classList.toggle('light', theme === 'light');
+}
+
+async function setTheme(theme) {
+  applyTheme(theme);
+  if (S.config) S.config.theme = theme;
+  await req('PUT', '/config', { theme });
+  renderSettingsView();
+}
+
 function esc(s) {
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

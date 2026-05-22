@@ -56,6 +56,7 @@ const DEFAULT_CONFIG = {
   apiKey: '',
   githubToken: '',
   githubModel: 'gpt-4o-mini',
+  theme: 'dark',       // 'dark' | 'light'
   categories: [
     {
       id: 'games',

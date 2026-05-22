@@ -299,7 +299,8 @@ async function renderDrawer() {
     </div>
     <div class="drawer-foot">
       ${isCtxTab
-        ? `<button class="btn primary" onclick="saveContextFile('${p.id}','${ctxType}')"><i class="ti ti-device-floppy"></i> Guardar</button>`
+        ? `<button class="btn primary" onclick="saveContextFile('${p.id}','${ctxType}')"><i class="ti ti-device-floppy"></i> Guardar</button>
+           <button class="btn" id="gen-ctx-btn" onclick="generateContextFile('${p.id}','${ctxType}')"><i class="ti ti-wand"></i> Generar con IA</button>`
         : `<button class="btn" onclick="syncProject('${p.id}');closeDrawer()"><i class="ti ti-refresh"></i> Sync este proyecto</button>`
       }
       <button class="btn" onclick="openVSCode('${p.id}')"><i class="ti ti-brand-vscode"></i> VS Code</button>
@@ -311,6 +312,24 @@ async function renderDrawer() {
 }
 
 async function setDrawerTab(tab) { S.drawerTab = tab; await renderDrawer(); }
+
+async function generateContextFile(id, type) {
+  const btn = document.getElementById('gen-ctx-btn');
+  const ta  = document.getElementById('ctx-ta');
+  if (!btn || !ta) return;
+  const label = type === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Analizando...';
+  try {
+    const { content } = await req('POST', `/projects/${id}/generate-context?type=${type}`);
+    ta.value = content;
+    toast(`${label} generado — revísalo y guarda cuando estés listo`);
+  } catch(e) { toast(e.message, 'err'); }
+  finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-wand"></i> Generar con IA';
+  }
+}
 
 async function saveContextFile(id, type) {
   const content = document.getElementById('ctx-ta')?.value || '';
@@ -428,15 +447,53 @@ function openEditProject(id) {
 async function toggleAgentExclusion(projectId, agentName, shouldExclude) {
   const p = S.projects.find(x => x.id === projectId); if (!p) return;
   const excluded = new Set(p.excludedAgents || []);
-  if (shouldExclude) excluded.add(agentName);
-  else               excluded.delete(agentName);
-  try {
-    await req('PUT', `/projects/${projectId}`, { excludedAgents: [...excluded] });
-    await loadProjects();
-    S.drawerProject = S.projects.find(x => x.id === projectId);
-    await renderDrawer();
-    toast(shouldExclude ? `"${agentName}" excluido` : `"${agentName}" incluido`);
-  } catch(e) { toast(e.message, 'err'); }
+
+  if (!shouldExclude) {
+    excluded.delete(agentName);
+    try {
+      await req('PUT', `/projects/${projectId}`, { excludedAgents: [...excluded] });
+      await req('POST', `/projects/${projectId}/sync`);
+      await loadProjects();
+      S.drawerProject = S.projects.find(x => x.id === projectId);
+      await renderDrawer();
+      toast(`"${agentName}" incluido y sincronizado`);
+    } catch(e) { toast(e.message, 'err'); }
+    return;
+  }
+
+  excluded.add(agentName);
+  showModal(
+    'Excluir agente',
+    `¿Qué hacer con <strong>${esc(agentName)}</strong>?`,
+    `<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;cursor:pointer">
+        <input type="radio" name="excl-opt" value="delete" checked style="margin-top:2px;flex-shrink:0">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text0)">Excluir y eliminar archivo</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">El archivo <code style="font-family:var(--mono)">${esc(agentName)}.md</code> se borrará del proyecto</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;cursor:pointer">
+        <input type="radio" name="excl-opt" value="keep" style="margin-top:2px;flex-shrink:0">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text0)">Solo excluir</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">El archivo permanece pero Agent Hub no lo gestionará</div>
+        </div>
+      </label>
+    </div>`,
+    async () => {
+      const choice = document.querySelector('input[name="excl-opt"]:checked')?.value || 'keep';
+      try {
+        await req('PUT', `/projects/${projectId}`, { excludedAgents: [...excluded] });
+        if (choice === 'delete') await req('DELETE', `/projects/${projectId}/agents/${agentName}`);
+        await loadProjects();
+        S.drawerProject = S.projects.find(x => x.id === projectId);
+        await renderDrawer();
+        toast(choice === 'delete' ? `"${agentName}" excluido y archivo eliminado` : `"${agentName}" excluido`);
+      } catch(e) { toast(e.message, 'err'); return false; }
+    },
+    'Confirmar'
+  );
 }
 
 async function confirmDeleteProject(id) {

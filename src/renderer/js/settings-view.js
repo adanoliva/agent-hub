@@ -162,6 +162,21 @@ async function renderSettingsView() {
     + `</div>
   </div>`;
 
+    const theme = S.config?.theme || 'dark';
+    h += `<div class="settings-section">
+    <div class="settings-head">Apariencia</div>
+    <div class="theme-toggle">
+      <div class="theme-option ${theme === 'dark' ? 'selected' : ''}" onclick="setTheme('dark')">
+        <i class="ti ti-moon"></i>
+        <span>Oscuro</span>
+      </div>
+      <div class="theme-option ${theme === 'light' ? 'selected' : ''}" onclick="setTheme('light')">
+        <i class="ti ti-sun"></i>
+        <span>Claro</span>
+      </div>
+    </div>
+  </div>`;
+
     h += `<div class="settings-section">
     <div class="settings-head">Actualizaciones</div>
     <div style="display:flex;align-items:center;gap:12px">
