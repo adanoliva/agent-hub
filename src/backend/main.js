@@ -10,8 +10,7 @@ const { createTray, destroyTray }                                = require('./tr
 const { readConfig, bootstrapDirectories, APP_DIR }              = require('./config');
 const { migrateAgentFiles, seedDefaultAgents, syncGlobalAgentsToClaudeDir } = require('./agents');
 
-const isDev     = !app.isPackaged;
-const isViteDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
 
 // ── Auto-updater ──────────────────────────────────────────────────────────────
 
@@ -82,14 +81,28 @@ function createWindow() {
     },
   });
 
-  const url = isViteDev ? 'http://localhost:5173' : `http://localhost:${PORT}`;
-  console.log(`[main] Loading URL: ${url} (isViteDev=${isViteDev})`);
+  const url = `http://localhost:${PORT}`;
+  console.log(`[main] Loading URL: ${url}`);
   mainWindow.loadURL(url);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    if (isDev || isViteDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
+    if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
+
+  // En dev, recarga el renderer cuando Vite recompila el bundle
+  if (isDev) {
+    const fs = require('fs');
+    const rendererDir = path.join(__dirname, '../../dist/renderer');
+    let reloadTimer = null;
+    fs.watch(rendererDir, { recursive: false }, (event, filename) => {
+      if (filename !== 'index.html') return;
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        mainWindow?.webContents.reload();
+      }, 300);
+    });
+  }
 
   mainWindow.on('close', (e) => {
     if (app.isQuiting) return;

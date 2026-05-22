@@ -23,7 +23,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\" http://localhost:5173/main.tsx)",
       "Bash(Test-Path *)",
       "Bash(grep *)",
-      "PowerShell(Rename-Item *)"
+      "PowerShell(Rename-Item *)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

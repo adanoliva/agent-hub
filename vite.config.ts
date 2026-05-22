@@ -2,21 +2,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const RENDERER = path.resolve(__dirname, 'src/renderer');
+
 export default defineConfig(({ command }) => ({
-  root: 'src/renderer',
-  // In dev: '/' so Vite's module server uses absolute paths.
-  // In build: './' so packaged Electron can load assets from relative paths.
+  root: RENDERER,
   base: command === 'serve' ? '/' : './',
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, 'src/renderer') },
+    alias: { '@': RENDERER },
   },
   server: {
+    host: 'localhost',
     port: 5173,
     strictPort: true,
-    // Allow all hosts — Electron's internal browser may use different host representations.
-    allowedHosts: 'all',
-    cors: true,
+    allowedHosts: true,
     proxy: {
       '/api': { target: 'http://localhost:3737', changeOrigin: true },
     },
@@ -24,5 +23,8 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: path.resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
+    rollupOptions: {
+      input: path.resolve(RENDERER, 'index.html'),
+    },
   },
 }));
