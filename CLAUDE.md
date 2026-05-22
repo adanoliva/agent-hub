@@ -1,6 +1,6 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **1.4.0** · Actualizar este campo en cada release.
+> Versión actual: **1.5.0** · Actualizar este campo en cada release.
 
 ## Qué es esto
 
