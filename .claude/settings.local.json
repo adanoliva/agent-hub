@@ -32,7 +32,9 @@
       "Bash(node --check src/backend/agents-sync.js)",
       "Bash(node --check src/backend/defaults.js)",
       "Bash(node --check src/backend/server.js)",
-      "Bash(node --check src/backend/main.js)"
+      "Bash(node --check src/backend/main.js)",
+      "Bash(rtk ls *)",
+      "Bash(git *)"
     ]
   }
 }

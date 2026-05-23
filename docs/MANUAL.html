@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Hub — Manual de uso v1.6.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
+<style>
+:root{
+  --bg0:#0d0d0f;--bg1:#141416;--bg2:#1a1a1d;--bg3:#222226;--bg4:#2a2a2f;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.10);--border3:rgba(255,255,255,0.16);
+  --text0:#f2f2f3;--text1:#a8a8b3;--text2:#62626e;--text3:#3e3e48;
+  --accent:#7c6af7;--green:#34d399;--amber:#fbbf24;--blue:#60a5fa;--coral:#fb7185;
+  --green-dim:rgba(52,211,153,0.10);--amber-dim:rgba(251,191,36,0.10);
+  --blue-dim:rgba(96,165,250,0.10);--purple-dim:rgba(124,106,247,0.10);--coral-dim:rgba(251,113,133,0.10);
+  --mono:'JetBrains Mono',monospace;--display:'Syne',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg0);color:var(--text0);font-family:var(--display);font-size:14px;line-height:1.65}
+
+/* ── Shell ── */
+.shell{display:flex;min-height:100vh}
+.nav{width:264px;background:var(--bg1);border-right:1px solid var(--border);position:fixed;top:0;left:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;z-index:10}
+.nav::-webkit-scrollbar{width:4px}
+.nav::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.main{margin-left:264px;flex:1;min-height:100vh}
+
+/* ── Nav ── */
+.nav-logo{padding:24px 20px 16px;border-bottom:1px solid var(--border)}
+.nav-logo-title{font-size:14px;font-weight:700;color:var(--text0);display:flex;align-items:center;gap:8px}
+.nav-logo-title i{color:var(--accent);font-size:18px}
+.nav-logo-sub{font-size:11px;color:var(--text2);margin-top:3px;font-family:var(--mono)}
+.nav-section{padding:16px 20px 6px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono)}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 20px;color:var(--text1);font-size:12px;cursor:pointer;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
+.nav-item:hover{color:var(--text0);background:var(--bg3)}
+.nav-item.active{color:var(--accent);background:var(--purple-dim);border-left-color:var(--accent)}
+.nav-item i{font-size:15px;flex-shrink:0}
+.nav-spacer{flex:1}
+.nav-footer{padding:16px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);font-family:var(--mono)}
+
+/* ── Content ── */
+.content{max-width:800px;margin:0 auto;padding:60px 48px 100px}
+
+/* ── Hero ── */
+.hero{margin-bottom:64px;padding-bottom:48px;border-bottom:1px solid var(--border)}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--accent);background:var(--purple-dim);border:1px solid rgba(124,106,247,0.2);padding:4px 10px;border-radius:20px;margin-bottom:20px}
+.hero-title{font-size:clamp(28px,4vw,44px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-bottom:12px}
+.hero-title span{color:var(--accent)}
+.hero-sub{font-size:15px;color:var(--text1);line-height:1.7;max-width:540px}
+.hero-tagline{font-size:13px;color:var(--text2);font-style:italic;margin-top:12px;font-family:var(--mono)}
+
+/* ── Section ── */
+.section{margin-bottom:64px;scroll-margin-top:24px}
+.section-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-family:var(--mono);color:var(--text2);margin-bottom:14px}
+.section-badge::before{content:'';width:24px;height:1px;background:var(--border3)}
+.section-title{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px;color:var(--text0)}
+.section-title span{color:var(--accent)}
+.section-intro{font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:28px;max-width:600px}
+
+/* ── Screenshot placeholder ── */
+.screenshot{background:var(--bg2);border:1px dashed var(--border3);border-radius:12px;padding:32px 24px;margin-bottom:24px;text-align:center}
+.screenshot img{max-width:100%;border-radius:8px;display:block;margin:0 auto}
+.screenshot-placeholder{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text2)}
+.screenshot-placeholder i{font-size:32px;color:var(--text3)}
+.screenshot-placeholder span{font-size:12px;font-family:var(--mono)}
+.screenshot-placeholder em{font-size:11px;color:var(--text3);font-style:normal}
+
+/* ── Step ── */
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:20px;padding-bottom:32px;position:relative}
+.step:last-child{padding-bottom:0}
+.step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:var(--border2)}
+.step-num{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text0);flex-shrink:0;font-family:var(--mono);z-index:1}
+.step-body{flex:1;padding-top:8px}
+.step-title{font-size:14px;font-weight:600;color:var(--text0);margin-bottom:6px}
+.step-desc{font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:10px}
+.step-num.accent{background:var(--purple-dim);border-color:rgba(124,106,247,0.3);color:var(--accent)}
+.step-num.green{background:var(--green-dim);border-color:rgba(52,211,153,0.3);color:var(--green)}
+.step-num.amber{background:var(--amber-dim);border-color:rgba(251,191,36,0.3);color:var(--amber)}
+
+/* ── Cards ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.card.green-l{border-left:2px solid var(--green)}
+.card.blue-l{border-left:2px solid var(--blue)}
+.card.amber-l{border-left:2px solid var(--amber)}
+.card.accent-l{border-left:2px solid var(--accent)}
+.card.coral-l{border-left:2px solid var(--coral)}
+.card-icon{font-size:22px;margin-bottom:8px}
+.card-title{font-size:13px;font-weight:600;color:var(--text0);margin-bottom:5px}
+.card-body{font-size:12px;color:var(--text1);line-height:1.6}
+
+/* ── Callout ── */
+.callout{display:flex;gap:12px;padding:14px 16px;border-radius:10px;border:1px solid;margin-bottom:16px}
+.callout.tip{background:var(--green-dim);border-color:rgba(52,211,153,0.2)}
+.callout.warn{background:var(--amber-dim);border-color:rgba(251,191,36,0.2)}
+.callout.info{background:var(--blue-dim);border-color:rgba(96,165,250,0.2)}
+.callout.note{background:var(--purple-dim);border-color:rgba(124,106,247,0.2)}
+.callout i{font-size:18px;flex-shrink:0;margin-top:1px}
+.callout.tip i{color:var(--green)}
+.callout.warn i{color:var(--amber)}
+.callout.info i{color:var(--blue)}
+.callout.note i{color:var(--accent)}
+.callout-body{flex:1}
+.callout-title{font-size:13px;font-weight:600;color:var(--text0);margin-bottom:4px}
+.callout-text{font-size:12px;color:var(--text1);line-height:1.6}
+
+/* ── Code ── */
+code{font-family:var(--mono);font-size:11px;background:var(--bg3);border:1px solid var(--border2);padding:2px 6px;border-radius:4px;color:var(--text1)}
+.code-block{background:var(--bg1);border:1px solid var(--border);border-radius:10px;padding:16px 18px;font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--text1);margin-bottom:16px;overflow-x:auto}
+.code-block .hi{color:var(--text0);font-weight:600}
+.code-block .dim{color:var(--text3)}
+.code-block .acc{color:var(--accent)}
+.code-block .grn{color:var(--green)}
+.code-block .amb{color:var(--amber)}
+
+/* ── UI mockup ── */
+.mockup{background:var(--bg1);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:20px}
+.mockup-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px}
+.mockup-dot{width:10px;height:10px;border-radius:50%}
+.mockup-title{font-size:11px;color:var(--text2);font-family:var(--mono);margin-left:8px}
+.mockup-body{padding:16px}
+.mock-nav{display:flex;gap:6px;margin-bottom:12px}
+.mock-tab{font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:default}
+.mock-tab.active{background:var(--purple-dim);border-color:rgba(124,106,247,0.3);color:var(--accent)}
+.mock-tree{font-family:var(--mono);font-size:11px;line-height:2;color:var(--text1)}
+.mock-tree .sel{color:var(--accent);background:var(--purple-dim);padding:1px 6px;border-radius:4px}
+.mock-tree .grn{color:var(--green)}
+.mock-tree .blu{color:var(--blue)}
+.mock-tree .amb{color:var(--amber)}
+.mock-tree .dim{color:var(--text3)}
+.mock-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mock-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.mock-card.suggested{border-style:dashed;opacity:.65}
+.mock-card-name{font-size:11px;font-weight:600;color:var(--text0);font-family:var(--mono);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.mock-card-desc{font-size:10px;color:var(--text1);line-height:1.4}
+.mock-badge{font-size:9px;padding:1px 6px;border-radius:20px}
+.mock-badge.green{background:var(--green-dim);color:var(--green)}
+.mock-badge.amber{background:var(--amber-dim);color:var(--amber)}
+.mock-badge.gray{background:var(--bg4);color:var(--text2)}
+.mock-badge.suggested{background:var(--bg4);color:var(--text2);border:1px dashed var(--text3)}
+.mock-badge.pending{background:var(--amber-dim);color:var(--amber)}
+
+/* ── Status chips ── */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:20px;border:1px solid}
+.chip.green{background:var(--green-dim);border-color:rgba(52,211,153,0.25);color:var(--green)}
+.chip.amber{background:var(--amber-dim);border-color:rgba(251,191,36,0.25);color:var(--amber)}
+.chip.gray{background:var(--bg3);border-color:var(--border2);color:var(--text2)}
+.chip.blue{background:var(--blue-dim);border-color:rgba(96,165,250,0.25);color:var(--blue)}
+.chip.accent{background:var(--purple-dim);border-color:rgba(124,106,247,0.25);color:var(--accent)}
+
+/* ── Tags ── */
+.tag{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:5px;background:var(--bg3);border:1px solid var(--border2);color:var(--text1)}
+
+/* ── Separator ── */
+.sep{height:1px;background:linear-gradient(to right,transparent,var(--border2),transparent);margin:64px 0}
+
+/* ── H4 ── */
+h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-transform:uppercase;font-family:var(--mono);margin:20px 0 10px}
+
+/* ── Divider ── */
+.divider{height:1px;background:var(--border);margin:14px 0}
+
+/* ── Tray mockup ── */
+.tray-bar{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text1);margin-bottom:10px}
+.tray-icon{width:22px;height:22px;background:var(--purple-dim);border-radius:4px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(124,106,247,0.2)}
+.tray-menu{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;overflow:hidden;width:200px;margin-bottom:16px}
+.tray-item{padding:8px 14px;font-size:12px;color:var(--text1);border-bottom:1px solid var(--border);cursor:default}
+.tray-item:last-child{border-bottom:none}
+.tray-item.danger{color:var(--coral)}
+
+/* ── FAQ ── */
+.faq{display:flex;flex-direction:column;gap:12px}
+.faq-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.faq-q{padding:14px 16px;font-size:13px;font-weight:600;color:var(--text0);display:flex;align-items:center;gap:10px}
+.faq-q i{color:var(--accent);font-size:15px;flex-shrink:0}
+.faq-a{padding:0 16px 14px 41px;font-size:12px;color:var(--text1);line-height:1.65}
+
+/* ── Chat mockup ── */
+.chat-bubble{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:12px;color:var(--text1);line-height:1.6}
+.chat-bubble.user{background:var(--purple-dim);border-color:rgba(124,106,247,0.2);color:var(--text0)}
+.chat-bubble .mention{color:var(--accent);font-family:var(--mono)}
+.chat-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chat-action-btn{font-size:11px;padding:4px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--border2);color:var(--text1);cursor:default;display:flex;align-items:center;gap:5px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ── Sidebar nav ── -->
+<nav class="nav">
+  <div class="nav-logo">
+    <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Agent Hub</div>
+    <div class="nav-logo-sub">Manual de uso · v1.6.0</div>
+  </div>
+
+  <div class="nav-section">Primeros pasos</div>
+  <a class="nav-item active" href="#inicio"><i class="ti ti-home" aria-hidden="true"></i> Introducción</a>
+  <a class="nav-item" href="#instalacion"><i class="ti ti-download" aria-hidden="true"></i> Instalación</a>
+  <a class="nav-item" href="#wizard"><i class="ti ti-wand" aria-hidden="true"></i> Primer arranque</a>
+  <a class="nav-item" href="#tray"><i class="ti ti-bell" aria-hidden="true"></i> Bandeja del sistema</a>
+
+  <div class="nav-section">La aplicación</div>
+  <a class="nav-item" href="#proyectos"><i class="ti ti-layout-grid" aria-hidden="true"></i> Vista Proyectos</a>
+  <a class="nav-item" href="#agentes"><i class="ti ti-cpu" aria-hidden="true"></i> Vista Agentes</a>
+  <a class="nav-item" href="#chat"><i class="ti ti-message-chatbot" aria-hidden="true"></i> Vista Chat</a>
+  <a class="nav-item" href="#ajustes"><i class="ti ti-settings" aria-hidden="true"></i> Vista Ajustes</a>
+  <a class="nav-item" href="#jerarquia"><i class="ti ti-sitemap" aria-hidden="true"></i> Jerarquía de niveles</a>
+
+  <div class="nav-section">Tareas frecuentes</div>
+  <a class="nav-item" href="#crear-proyecto"><i class="ti ti-folder-plus" aria-hidden="true"></i> Crear / importar proyecto</a>
+  <a class="nav-item" href="#drawer-proyecto"><i class="ti ti-layout-sidebar-right" aria-hidden="true"></i> Drawer de proyecto</a>
+  <a class="nav-item" href="#crear-agente"><i class="ti ti-plus" aria-hidden="true"></i> Crear un agente</a>
+  <a class="nav-item" href="#optimizar-agente"><i class="ti ti-sparkles" aria-hidden="true"></i> Optimizar agente con IA</a>
+  <a class="nav-item" href="#sync"><i class="ti ti-refresh" aria-hidden="true"></i> Sincronizar cambios</a>
+  <a class="nav-item" href="#sugerencias"><i class="ti ti-bulb" aria-hidden="true"></i> Sugerencias de IA</a>
+  <a class="nav-item" href="#generar-contexto"><i class="ti ti-file-description" aria-hidden="true"></i> Generar contexto</a>
+  <a class="nav-item" href="#importar-externo"><i class="ti ti-cloud-download" aria-hidden="true"></i> Importar agente puntual</a>
+  <a class="nav-item" href="#autoupdate"><i class="ti ti-refresh-alert" aria-hidden="true"></i> Actualizaciones</a>
+
+  <div class="nav-section">Referencia</div>
+  <a class="nav-item" href="#vscode"><i class="ti ti-brand-vscode" aria-hidden="true"></i> Usar en VS Code</a>
+  <a class="nav-item" href="#faq"><i class="ti ti-help-circle" aria-hidden="true"></i> Preguntas frecuentes</a>
+
+  <div class="nav-spacer"></div>
+  <div class="nav-footer">Agent Hub © 2025</div>
+</nav>
+
+<!-- ── Main content ── -->
+<main class="main">
+<div class="content">
+
+  <!-- ══════════════════════ -->
+  <!-- Hero                   -->
+  <!-- ══════════════════════ -->
+  <div class="hero" id="inicio">
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v1.6.0</div>
+    <h1 class="hero-title">Agent <span>Hub</span></h1>
+    <p class="hero-sub">Guía completa para gestionar tus agentes de Claude Code, organizar proyectos y mantener contexto por proyecto — todo desde una interfaz visual.</p>
+    <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
+  </div>
+
+  <!-- ══════════════════════ -->
+  <!-- Instalación            -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="instalacion">
+    <div class="section-badge">Primeros pasos</div>
+    <h2 class="section-title">Instalación</h2>
+    <p class="section-intro">Agent Hub es un ejecutable portable. No requiere instalador ni Node.js en el sistema.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Descargar el ejecutable</div>
+          <div class="step-desc">Ve a la sección <strong>Releases</strong> del repositorio y descarga <code>agent-hub.exe</code>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Elige una ubicación permanente</div>
+          <div class="step-desc">Mueve el <code>.exe</code> a la carpeta donde quieras que viva la app — por ejemplo <code>C:\Tools\AgentHub\</code>. Todos los datos (agentes, configuración, caché) se crean en esa misma carpeta.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">Ejecuta el .exe</div>
+          <div class="step-desc">La primera vez arranca el wizard de configuración. En ejecuciones posteriores carga directamente la vista de Proyectos.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info" style="margin-top:16px">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Portabilidad</div>
+        <div class="callout-text">Puedes mover toda la carpeta a otro lugar — la app funciona desde cualquier ubicación. Las rutas de los proyectos registrados son absolutas; si mueves los proyectos en disco, actualiza sus rutas desde la app.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Wizard                 -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="wizard">
+    <div class="section-badge">Primeros pasos</div>
+    <h2 class="section-title">Primer arranque — <span>Wizard</span></h2>
+    <p class="section-intro">Al ejecutar Agent Hub por primera vez aparece el wizard de tres pasos. Puedes saltarlo en cualquier momento y configurar todo después desde Ajustes.</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/wizard.png para mostrar aquí la captura del wizard -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/wizard.png</span>
+        <em>Captura del wizard de primer arranque</em>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num green">1</div>
+        <div class="step-body">
+          <div class="step-title">Bienvenida</div>
+          <div class="step-desc">Resumen de las capacidades de Agent Hub: jerarquía de agentes, IA integrada, sync inteligente y proyectos autónomos.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">2</div>
+        <div class="step-body">
+          <div class="step-title">Conectar con Claude</div>
+          <div class="step-desc">Elige el proveedor de IA que usará Agent Hub para generar system prompts y sugerencias de agentes.</div>
+          <div class="grid3" style="margin-top:10px">
+            <div class="card accent-l">
+              <div class="card-title">Claude CLI</div>
+              <div class="card-body">Usa tu suscripción de Claude.ai. Sin coste adicional. La app detecta automáticamente si está instalado.</div>
+            </div>
+            <div class="card blue-l">
+              <div class="card-title">GitHub Copilot</div>
+              <div class="card-body">Introduce un Personal Access Token con permiso <code>models:read</code>. Capa gratuita disponible.</div>
+            </div>
+            <div class="card amber-l">
+              <div class="card-title">API key Anthropic</div>
+              <div class="card-body">Acceso directo a la API. Requiere cuenta en <code>console.anthropic.com</code>.</div>
+            </div>
+          </div>
+          <div class="callout note">
+            <i class="ti ti-info-circle" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">Opcional</div>
+              <div class="callout-text">Si saltas este paso, Agent Hub funciona en modo manual: puedes crear y editar agentes sin IA, pero no podrás usar la generación automática de prompts ni las sugerencias contextuales hasta configurar un proveedor.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">3</div>
+        <div class="step-body">
+          <div class="step-title">Generación de estructura base</div>
+          <div class="step-desc">Agent Hub crea las carpetas de agentes y carga los agentes por defecto: code-reviewer, git-helper, test-writer, doc-writer, refactor-agent, debugger y todos los agentes de categorías y tecnologías predefinidas.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Tray                   -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="tray">
+    <div class="section-badge">Primeros pasos</div>
+    <h2 class="section-title">Bandeja del <span>sistema</span></h2>
+    <p class="section-intro">Agent Hub vive en la bandeja del sistema de Windows. Cerrar la ventana no termina la app — la minimiza a la bandeja.</p>
+
+    <div class="tray-bar">
+      <div class="tray-icon"><i class="ti ti-robot" style="font-size:13px;color:var(--accent)" aria-hidden="true"></i></div>
+      <span style="font-size:11px;color:var(--text2)">Agent Hub · doble clic para abrir</span>
+    </div>
+
+    <div class="tray-menu">
+      <div class="tray-item">Abrir Agent Hub</div>
+      <div class="tray-item danger">Salir</div>
+    </div>
+
+    <p style="font-size:13px;color:var(--text1);line-height:1.65">
+      Haz doble clic en el icono de la bandeja para abrir la ventana. El menú contextual (clic derecho) ofrece <strong>Abrir Agent Hub</strong> y <strong>Salir</strong>.
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Vista Proyectos        -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="proyectos">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Vista <span>Proyectos</span></h2>
+    <p class="section-intro">La vista principal. Muestra todos tus proyectos agrupados por categoría en tarjetas. Desde aquí gestionas el ciclo de vida de cada proyecto.</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/vista-proyectos.png para mostrar aquí la captura -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/vista-proyectos.png</span>
+        <em>Vista principal de proyectos con tarjetas y badges de sync</em>
+      </div>
+    </div>
+
+    <h4>Tarjeta de proyecto</h4>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Badge <span class="chip amber">↑N</span></div>
+        <div class="card-body">Indica que N agentes tienen actualizaciones pendientes. Pulsa el botón <strong>Sync</strong> de la tarjeta o abre el proyecto y sincroniza desde el drawer.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Badge <span class="chip" style="background:var(--coral-dim);border-color:rgba(251,113,133,0.25);color:var(--coral)">ruta no encontrada</span></div>
+        <div class="card-body">La carpeta del proyecto ya no existe en la ruta registrada. Actualiza la ruta desde el drawer del proyecto.</div>
+      </div>
+    </div>
+
+    <h4>Botones de la tarjeta</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Cada tarjeta tiene botones para abrir en <strong>VS Code</strong>, abrir la <strong>carpeta</strong> en el Explorador de Windows y, si hay actualizaciones pendientes, un botón <strong>Sync</strong> directo.
+    </p>
+
+    <h4>Botones de la barra superior</h4>
+    <div class="grid3">
+      <div class="card accent-l">
+        <div class="card-title">Nuevo proyecto</div>
+        <div class="card-body">Crea la carpeta del proyecto, genera <code>CLAUDE.md</code> vacío y copia todos los agentes aplicables.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Importar</div>
+        <div class="card-body">Registra una carpeta existente. Copia los agentes aplicables sin tocar los archivos que ya existen.</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-title">Sync todos</div>
+        <div class="card-body">Propaga todos los cambios pendientes a todos los proyectos de una vez.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Vista Agentes          -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="agentes">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Vista <span>Agentes</span></h2>
+    <p class="section-intro">Panel de dos columnas: árbol de navegación a la izquierda y cuadrícula de agentes a la derecha. Al seleccionar un agente, se abre el editor en la columna central.</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/vista-agentes.png para mostrar aquí la captura -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/vista-agentes.png</span>
+        <em>Vista de agentes con árbol, cuadrícula y editor lateral</em>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#febc2e"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <div class="mockup-title">Agent Hub · Agentes</div>
+      </div>
+      <div class="mockup-body" style="display:grid;grid-template-columns:160px 1fr;gap:12px">
+        <div>
+          <div class="mock-tree">
+            <div><span class="mock-tree grn sel">● Global</span></div>
+            <div style="padding-left:8px"><i class="ti ti-chevron-right" style="font-size:10px"></i> Categorías</div>
+            <div style="padding-left:16px"><span class="mock-tree blu">⬡ Web</span></div>
+            <div style="padding-left:24px"><span class="mock-tree dim">⟨⟩ React</span></div>
+            <div style="padding-left:16px"><span class="mock-tree amb">⬡ Juegos</span></div>
+            <div style="padding-left:8px"><i class="ti ti-chevron-right" style="font-size:10px"></i> Proyectos</div>
+          </div>
+        </div>
+        <div>
+          <div class="mock-cards">
+            <div class="mock-card">
+              <div class="mock-card-name"><i class="ti ti-eye" style="font-size:11px;color:var(--green)"></i> code-reviewer</div>
+              <div class="mock-card-desc">Revisa código: bugs, antipatrones y mejoras</div>
+            </div>
+            <div class="mock-card">
+              <div class="mock-card-name"><i class="ti ti-git-branch" style="font-size:11px;color:var(--green)"></i> git-helper</div>
+              <div class="mock-card-desc">Commits, ramas y resolución de conflictos</div>
+            </div>
+            <div class="mock-card suggested">
+              <div class="mock-card-name"><i class="ti ti-sparkles" style="font-size:11px;color:var(--text2)"></i> security-scan <span class="mock-badge suggested">sugerido</span></div>
+              <div class="mock-card-desc">Análisis de vulnerabilidades en el código</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Árbol de navegación</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Tres secciones: <strong>Global</strong> (nivel 1), <strong>Categorías</strong> con sus tecnologías anidadas (niveles 2 y 3) y <strong>Proyectos</strong> (nivel 4). Haz clic en cualquier nodo para cargar sus agentes en la cuadrícula. Los nodos con actualizaciones pendientes muestran el badge <span class="chip amber">↑N</span>.
+    </p>
+
+    <h4>Cuadrícula de agentes</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Muestra los agentes existentes del nivel seleccionado. En tarjetas con borde punteado aparecen las <strong>sugerencias de IA</strong>. Haz clic en un agente para abrirlo en el editor. Haz clic en una sugerencia para pre-rellenar el editor con sus datos — puedes editarlos antes de guardar.
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Vista Chat             -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="chat">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Vista <span>Chat</span></h2>
+    <p class="section-intro">Chat de IA multi-turno integrado en la app. Conversa con el proveedor configurado usando tus agentes como contexto activo y con historial por proyecto.</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/vista-chat.png para mostrar aquí la captura -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/vista-chat.png</span>
+        <em>Vista del chat con chips de agentes activos y acciones sugeridas</em>
+      </div>
+    </div>
+
+    <div class="mockup" style="margin-top:0">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#febc2e"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <div class="mockup-title">Agent Hub · Chat — Mi RPG</div>
+      </div>
+      <div class="mockup-body">
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <span style="font-size:10px;background:var(--purple-dim);border:1px solid rgba(124,106,247,0.2);color:var(--accent);padding:2px 8px;border-radius:20px;font-family:var(--mono)">@code-reviewer</span>
+          <span style="font-size:10px;background:var(--purple-dim);border:1px solid rgba(124,106,247,0.2);color:var(--accent);padding:2px 8px;border-radius:20px;font-family:var(--mono)">@unity-dev</span>
+        </div>
+        <div class="chat-bubble user">Revisa PlayerController.cs y dime si hay problemas de rendimiento</div>
+        <div class="chat-bubble">He analizado <code>PlayerController.cs</code>. Encuentro dos problemas principales:<br>
+          1. <code>GetComponent&lt;Rigidbody&gt;()</code> se llama en <code>Update()</code> — debería cachearse en <code>Awake()</code>.<br>
+          2. La corrutina de animación no tiene condición de salida si el objeto es destruido.
+          <div class="chat-actions">
+            <div class="chat-action-btn"><i class="ti ti-plus" style="font-size:11px"></i> Crear agente de revisión Unity</div>
+            <div class="chat-action-btn"><i class="ti ti-cpu" style="font-size:11px"></i> Ver agentes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Historial por proyecto</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Cada proyecto tiene su propio historial de conversación. Al cambiar el proyecto activo desde el selector del topbar, el chat actual se guarda y se carga el del nuevo proyecto. El historial global (sin proyecto) se mantiene cuando no hay ningún proyecto seleccionado.
+    </p>
+
+    <h4>@mention de agentes</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Escribe <code>@nombre</code> en el input para añadir un agente como contexto activo. Aparece un dropdown autocomplete con todos los agentes disponibles filtrados por lo que escribes. Los agentes activos se muestran como chips encima del input y su system prompt se incluye automáticamente en cada mensaje enviado.
+    </p>
+
+    <div class="callout tip">
+      <i class="ti ti-bulb" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Combina agentes</div>
+        <div class="callout-text">Puedes activar varios agentes a la vez. Por ejemplo, <code>@code-reviewer</code> + <code>@unity-dev</code> da como resultado una revisión de código con criterios específicos de Unity.</div>
+      </div>
+    </div>
+
+    <h4>Acciones sugeridas</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      La IA puede sugerir acciones al final de sus respuestas que aparecen como botones clicables. Acciones disponibles: <strong>Crear agente</strong> (abre el editor prerellenado), <strong>Ver agentes</strong> (navega a la vista Agentes) y <strong>Abrir ajustes</strong>.
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Vista Ajustes          -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="ajustes">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Vista <span>Ajustes</span></h2>
+    <p class="section-intro">La pantalla de Ajustes tiene tres pestañas: General, Categorías y Agentes externos.</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/vista-ajustes.png para mostrar aquí la captura -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/vista-ajustes.png</span>
+        <em>Vista de ajustes con las tres pestañas</em>
+      </div>
+    </div>
+
+    <h4>Pestaña General</h4>
+    <div class="card accent-l" style="margin-bottom:10px">
+      <div class="card-title">Proveedor de IA</div>
+      <div class="card-body">
+        <p style="margin-bottom:8px">Cambia el proveedor que Agent Hub usa para generar prompts, sugerencias y el chat.</p>
+        <ul style="padding-left:16px;display:flex;flex-direction:column;gap:4px">
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Claude CLI</strong> — detectado automáticamente desde el PATH. Sin coste adicional.</li>
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">API key de Anthropic</strong> — introduce tu clave <code>sk-ant-api03-…</code> y guarda.</li>
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">GitHub Copilot Models API</strong> — introduce tu Personal Access Token con permiso <code>models:read</code> y selecciona el modelo.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card green-l" style="margin-bottom:10px">
+      <div class="card-title">Actualizaciones</div>
+      <div class="card-body">Muestra la versión actual instalada y el botón <strong>Buscar actualizaciones</strong> para comprobar manualmente si hay una versión nueva en GitHub Releases.</div>
+    </div>
+
+    <h4>Pestaña Categorías</h4>
+    <div class="card amber-l" style="margin-bottom:10px">
+      <div class="card-title">Gestión de categorías y tecnologías</div>
+      <div class="card-body">
+        <ul style="padding-left:16px;display:flex;flex-direction:column;gap:4px">
+          <li style="font-size:12px;color:var(--text1)">Añadir una nueva categoría con su ID, nombre, icono y color.</li>
+          <li style="font-size:12px;color:var(--text1)">Añadir tecnologías a una categoría existente.</li>
+          <li style="font-size:12px;color:var(--text1)">Eliminar categorías y tecnologías (los ficheros de agentes no se borran del disco).</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>Pestaña Directorio de Agentes</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">
+      Esta pestaña tiene dos secciones independientes para incorporar agentes externos a la app.
+    </p>
+    <div class="card accent-l" style="margin-bottom:10px">
+      <div class="card-title"><i class="ti ti-git-branch" style="margin-right:6px;color:var(--accent)"></i>Directorio de Agentes</div>
+      <div class="card-body">
+        Repositorio GitHub que actúa como fuente de agentes versionados. Agent Hub descarga y mantiene sincronizados todos los agentes del repositorio. Configura la URL del repo, activa o desactiva la sincronización y lanza un sync manual cuando quieras. Si el repo actualiza un agente que tú también has modificado localmente, aparece un <span style="color:var(--amber)">conflicto</span> que puedes resolver eligiendo mantener tu versión o actualizar con la del directorio.
+      </div>
+    </div>
+    <div class="card blue-l" style="margin-bottom:10px">
+      <div class="card-title"><i class="ti ti-download" style="margin-right:6px;color:var(--blue)"></i>Importar agente puntual</div>
+      <div class="card-body">
+        Importa un único agente desde cualquier URL que devuelva un fichero <code>.md</code> con frontmatter válido. Útil para incorporar un agente concreto sin añadir todo un repositorio. Consulta la sección <a href="#importar-externo" style="color:var(--accent)">Importar agente externo</a> para el flujo completo.
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Jerarquía              -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="jerarquia">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Jerarquía de <span>niveles</span></h2>
+    <p class="section-intro">Los agentes se organizan en cuatro niveles. Los tres primeros participan en el sistema de sync; el cuarto es exclusivo del proyecto.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Global</div>
+          <div class="step-desc">Aplica a todos los proyectos sin excepción. Estos agentes también se sincronizan automáticamente a <code>~/.claude/agents/</code> para que estén disponibles en cualquier proyecto desde la CLI de Claude Code, aunque no esté registrado en Agent Hub.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Categoría</div>
+          <div class="step-desc">Aplica a todos los proyectos de esa categoría (Juegos, Web, Móvil, Docs, etc.). Útil para agentes específicos del dominio pero no de una tecnología concreta.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">Tecnología</div>
+          <div class="step-desc">Aplica solo a proyectos con esa tecnología dentro de la categoría (Unity, React, React Native, Next.js, etc.).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Proyecto</div>
+          <div class="step-desc">Exclusivo de ese proyecto. Se crea y edita desde el árbol seleccionando el proyecto, o directamente desde el drawer. Nunca participa en el sistema de sync — Agent Hub no lo toca al sincronizar.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Crear proyecto         -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="crear-proyecto">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Crear / importar <span>proyecto</span></h2>
+
+    <h4>Crear un proyecto nuevo</h4>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Nuevo proyecto" en la barra superior</div>
+          <div class="step-desc">Se abre el modal de creación.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Rellena el formulario</div>
+          <div class="step-desc">Nombre, categoría, tecnología (opcional), ruta base donde crear la carpeta y estado inicial. Agent Hub genera la carpeta con un slug a partir del nombre.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Agent Hub lo configura</div>
+          <div class="step-desc">Crea la estructura de carpetas, un <code>CLAUDE.md</code> vacío y copia todos los agentes aplicables (global + categoría + tecnología) a <code>.claude/agents/</code>. Registra los hashes de cada copia.</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Importar un proyecto existente</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Pulsa <strong>Importar</strong>. Introduce el nombre, categoría y la ruta de la carpeta existente. Agent Hub registra el proyecto y copia los agentes aplicables sin modificar los archivos que ya existen. Si la carpeta ya tiene agentes propios en <code>.claude/agents/</code>, los detecta como agentes de nivel 4 (<span class="chip gray">local</span>).
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Drawer de proyecto     -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="drawer-proyecto">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Drawer de <span>proyecto</span></h2>
+    <p class="section-intro">Haz clic en cualquier tarjeta de proyecto para abrir el drawer lateral. Contiene todas las opciones de gestión de ese proyecto en tres pestañas.</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/drawer-proyecto.png para mostrar aquí la captura -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/drawer-proyecto.png</span>
+        <em>Drawer del proyecto con las tres pestañas</em>
+      </div>
+    </div>
+
+    <h4>Pestaña CLAUDE.md</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Editor de texto para el fichero <code>CLAUDE.md</code> del proyecto. Este fichero es el contexto que Claude Code carga automáticamente al trabajar en ese proyecto. Pulsa <strong>Guardar</strong> para escribir los cambios en disco.
+    </p>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      También puedes generar el contenido automáticamente con IA — consulta la sección <a href="#generar-contexto" style="color:var(--accent)">Generar contexto del proyecto</a>.
+    </p>
+
+    <h4>Pestaña Agentes</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Lista todos los agentes del proyecto con su estado de sincronización:
+    </p>
+    <div class="grid2">
+      <div class="card green-l">
+        <div class="card-title"><span class="chip green"><i class="ti ti-circle-check" style="font-size:10px"></i> ok</span></div>
+        <div class="card-body">El agente está actualizado. El hash del fichero coincide con el maestro en Agent Hub.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title"><span class="chip amber"><i class="ti ti-refresh" style="font-size:10px"></i> actualizar</span></div>
+        <div class="card-body">El agente maestro cambió. Hay una versión más reciente disponible.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><span class="chip blue"><i class="ti ti-sparkles" style="font-size:10px"></i> nuevo</span></div>
+        <div class="card-body">Agente aplicable que aún no fue copiado. Aparecerá tras la siguiente sync.</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="chip gray"><i class="ti ti-device-laptop" style="font-size:10px"></i> local</span></div>
+        <div class="card-body">Agente de nivel 4 propio del proyecto. Agent Hub no lo modifica durante el sync.</div>
+      </div>
+    </div>
+
+    <h4>Excluir un agente</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Al excluir un agente desde el drawer aparece un modal con dos opciones:
+    </p>
+    <div class="grid2">
+      <div class="card coral-l">
+        <div class="card-title">Excluir y eliminar archivo</div>
+        <div class="card-body">Borra el <code>.md</code> del disco del proyecto. El agente queda marcado como excluido y no volverá a copiarse en futuras syncs.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Solo excluir</div>
+        <div class="card-body">El archivo permanece en disco pero Agent Hub lo ignora en syncs futuras. Útil para desactivar un agente sin perder su contenido.</div>
+      </div>
+    </div>
+
+    <h4>Pestaña Info</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Edita los metadatos del proyecto: nombre, categoría, tecnología, ruta, descripción y estado. También muestra sugerencias de agentes específicas para ese proyecto basadas en su CLAUDE.md.
+    </p>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Crear un agente        -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="crear-agente">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Crear un <span>agente</span></h2>
+    <p class="section-intro">Desde la vista Agentes, selecciona el nivel donde quieres crear el agente y pulsa "Nuevo agente".</p>
+
+    <div class="screenshot">
+      <!-- Sube screenshots/editor-agente.png para mostrar aquí la captura -->
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/editor-agente.png</span>
+        <em>Editor de agente con el panel de generación IA</em>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Selecciona el nivel en el árbol</div>
+          <div class="step-desc">Haz clic en Global, en una categoría, en una tecnología o en un proyecto según dónde deba vivir el agente.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Nuevo agente"</div>
+          <div class="step-desc">El editor se abre en blanco. Rellena el nombre (identificador en kebab-case), la descripción y el modelo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Elige las herramientas</div>
+          <div class="step-desc">Marca las herramientas que el agente necesita: <code>Bash</code>, <code>Read</code>, <code>Write</code>, <code>Edit</code>, <code>Grep</code>, <code>WebFetch</code>, etc. Usa solo las imprescindibles.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Escribe o genera el system prompt</div>
+          <div class="step-desc">Escribe el system prompt manualmente, o usa <strong>Generar con IA</strong>: describe el agente en una frase y pulsa "Generar". Agent Hub llama al proveedor de IA y rellena el textarea con el prompt generado.</div>
+          <div class="callout tip" style="margin-top:8px">
+            <i class="ti ti-bulb" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">Selector de idioma</div>
+              <div class="callout-text">Usa el selector ES / EN para que el system prompt generado salga en español o inglés. La descripción que escribes puede estar en cualquier idioma.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Guarda el agente</div>
+          <div class="step-desc">Pulsa "Guardar". Agent Hub escribe el fichero <code>{nombre}.md</code> en el directorio del nivel seleccionado y actualiza los hashes de los proyectos afectados.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Optimizar agente       -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="optimizar-agente">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Optimizar agente <span>con IA</span></h2>
+    <p class="section-intro">Para agentes ya existentes con system prompt propio, Agent Hub puede pedir a la IA que mejore el prompt y la descripción manteniendo el foco original del agente.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Abre el agente en el editor</div>
+          <div class="step-desc">Haz clic en cualquier agente existente que tenga system prompt. El botón <strong>Optimizar con IA</strong> aparece en la barra de acciones del editor.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Optimizar con IA"</div>
+          <div class="step-desc">Agent Hub envía al proveedor de IA el nombre, descripción, system prompt actual, herramientas y modelo. La IA devuelve una descripción mejorada y un system prompt optimizado.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">Revisa y guarda</div>
+          <div class="step-desc">El editor se actualiza con los nuevos valores. Revísalos y pulsa <strong>Guardar</strong>. El fichero queda marcado con <code>optimized: true</code> en el frontmatter y el botón de optimizar desaparece para indicar que ya está optimizado.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Un solo uso por agente</div>
+        <div class="callout-text">El botón de optimizar solo aparece si el agente no ha sido optimizado previamente (<code>optimized: true</code> ausente). Si quieres volver a optimizarlo, edita el frontmatter manualmente y elimina ese campo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Sync                   -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="sync">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Sincronizar <span>cambios</span></h2>
+    <p class="section-intro">Cuando editas un agente de los niveles 1-3, los proyectos que lo tienen copiado quedan marcados con actualizaciones pendientes. El sync copia la versión actualizada a esos proyectos.</p>
+
+    <div class="callout note">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El sync es manual y explícito</div>
+        <div class="callout-text">Agent Hub nunca sobrescribe los ficheros de tus proyectos sin que lo pidas. Tú decides cuándo sincronizar. Esto evita cambios inesperados mientras trabajas.</div>
+      </div>
+    </div>
+
+    <h4>Opciones de sync</h4>
+    <div class="grid3" style="margin-top:12px">
+      <div class="card green-l">
+        <div class="card-title">Sync todos</div>
+        <div class="card-body">Botón en la barra superior de la vista Proyectos. Propaga todos los cambios pendientes a todos los proyectos de una vez.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title">Sync proyecto (tarjeta)</div>
+        <div class="card-body">Botón en la tarjeta de un proyecto concreto, visible solo cuando hay pendientes.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Sync desde drawer</div>
+        <div class="card-body">Botón en el drawer del proyecto, pestaña Agentes. Muestra además el estado detallado de cada agente.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Sugerencias            -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="sugerencias">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Sugerencias <span>de IA</span></h2>
+    <p class="section-intro">Agent Hub consulta al proveedor de IA para sugerir agentes útiles en cada contexto. Hay dos tipos de sugerencias: por nivel y por proyecto.</p>
+
+    <h4>Sugerencias por nivel</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Al seleccionar un nodo en el árbol de la vista Agentes, Agent Hub sugiere 2-4 agentes que podrían ser útiles en ese nivel (global, categoría o tecnología). Aparecen en la cuadrícula como tarjetas punteadas con la etiqueta <span class="chip gray">sugerido</span>. Haz clic en una para pre-rellenar el editor.
+    </p>
+
+    <h4>Sugerencias por proyecto</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      En el drawer de cada proyecto, la pestaña Info muestra sugerencias de agentes específicas para ese proyecto. Agent Hub lee el <code>CLAUDE.md</code> del proyecto como contexto principal y genera sugerencias adaptadas a su arquitectura y tecnología concreta.
+    </p>
+
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Caché inteligente</div>
+        <div class="callout-text">Las sugerencias se cachean para no gastar tokens en cada visita. Agent Hub nunca sugiere agentes que ya existen en ese nivel. Pulsa <strong>Sugerir más</strong> para forzar una nueva generación descartando el caché.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Generar contexto       -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="generar-contexto">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Generar contexto <span>del proyecto</span></h2>
+    <p class="section-intro">Agent Hub puede analizar la estructura de tu proyecto y generar automáticamente el fichero de contexto para IA.</p>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-title">CLAUDE.md</div>
+        <div class="card-body">Fichero de contexto para Claude Code. Se guarda en la raíz del proyecto y Claude Code lo carga automáticamente.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">copilot-instructions.md</div>
+        <div class="card-body">Fichero de contexto para GitHub Copilot. Se guarda en <code>.github/</code>.</div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Abre el drawer del proyecto</div>
+          <div class="step-desc">Haz clic en la tarjeta del proyecto y ve a la pestaña <strong>CLAUDE.md</strong>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Generar con IA"</div>
+          <div class="step-desc">Agent Hub analiza el directorio del proyecto: detecta lenguajes por extensión de archivo, lee <code>package.json</code>, <code>requirements.txt</code> o <code>pyproject.toml</code>, detecta framework de testing, linting, build tool, CI/CD y Docker.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Revisa el contenido generado</div>
+          <div class="step-desc">El resultado aparece en el editor para que lo revises y edites antes de guardar. Pulsa <strong>Guardar</strong> para escribirlo en disco.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Revisar antes de guardar</div>
+        <div class="callout-text">El contenido generado es un punto de partida. Revísalo y ajusta lo que no sea correcto — la IA puede inferir mal la arquitectura del proyecto si no tiene suficiente información en los ficheros de configuración.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Importar externo       -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="importar-externo">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Importar agente <span>puntual</span></h2>
+    <p class="section-intro">Importa un único agente desde cualquier URL que devuelva un <code>.md</code> con frontmatter válido. Accede desde <strong>Ajustes → Directorio de Agentes → Importar agente puntual</strong>.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Introduce la URL</div>
+          <div class="step-desc">Pega la URL directa al fichero <code>.md</code> del agente. Puede ser un raw de GitHub, un Gist o cualquier URL que devuelva el texto del fichero.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Importar"</div>
+          <div class="step-desc">Agent Hub descarga el fichero y lo parsea. Si tiene frontmatter válido, extrae nombre, descripción, modelo, herramientas y system prompt automáticamente.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Revisa el preview</div>
+          <div class="step-desc">Aparece un modal con todos los campos del agente parseado. Puedes editar cualquier campo antes de guardarlo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Elige el destino y confirma</div>
+          <div class="step-desc">Selecciona en qué nivel guardar el agente (Global, Categoría o Tecnología). Agent Hub guarda el agente en disco y participa en el sistema de sync como cualquier otro agente del nivel elegido.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Auto-update            -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="autoupdate">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title"><span>Actualizaciones</span> automáticas</h2>
+    <p class="section-intro">Agent Hub comprueba si hay una nueva versión cada vez que arranca. La actualización es opt-in — nada se descarga ni instala sin tu confirmación.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num green">1</div>
+        <div class="step-body">
+          <div class="step-title">Comprobación automática al arrancar</div>
+          <div class="step-desc">Unos 8 segundos después de arrancar, Agent Hub consulta en silencio si hay una nueva versión publicada en GitHub Releases.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">2</div>
+        <div class="step-body">
+          <div class="step-title">Banner de actualización</div>
+          <div class="step-desc">Si hay una versión nueva, aparece un banner en la esquina inferior derecha con el número de versión y el botón <strong>Descargar</strong>. Puedes cerrarlo con la X y actualizar más tarde.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">3</div>
+        <div class="step-body">
+          <div class="step-title">Descarga y progreso</div>
+          <div class="step-desc">El banner muestra el progreso en porcentaje mientras se descarga el nuevo <code>.exe</code>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">4</div>
+        <div class="step-body">
+          <div class="step-title">Instalar y reiniciar</div>
+          <div class="step-desc">Una vez descargada, el banner cambia a <strong>Reiniciar ahora</strong>. Al pulsar, Agent Hub se cierra y se relanza con la versión nueva. Tus datos (<code>config.json</code>, <code>agents/</code>, <code>cache/</code>) no se tocan.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <i class="ti ti-refresh" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Buscar manualmente</div>
+        <div class="callout-text">Ve a <strong>Ajustes → General → Actualizaciones</strong> y pulsa <strong>Buscar actualizaciones</strong> para comprobar en cualquier momento.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- VS Code                -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="vscode">
+    <div class="section-badge">Referencia</div>
+    <h2 class="section-title">Usar agentes en <span>VS Code</span></h2>
+    <p class="section-intro">Los agentes gestionados por Agent Hub se usan directamente en Claude Code dentro de VS Code. No necesitas ningún paso adicional — Agent Hub ya los ha copiado en los lugares correctos.</p>
+
+    <h4>Ver agentes disponibles</h4>
+    <div class="code-block"><span class="grn">/agents</span></div>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Lista completa de agentes disponibles en el proyecto actual y los globales de <code>~/.claude/agents/</code>.</p>
+
+    <h4>Invocar un agente directamente</h4>
+    <div class="code-block">
+<span class="grn">@code-reviewer</span> revisa PlayerController.cs
+<span class="grn">@unity-dev</span> crea un sistema de inventario con ScriptableObjects
+<span class="grn">@test-writer</span> genera tests para AuthService.ts</div>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Escribe <code>@nombre-del-agente</code> seguido de la tarea. Claude Code carga el system prompt del agente y trabaja con ese contexto especializado.</p>
+
+    <h4>Delegación automática</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">Si describes una tarea sin <code>@</code>, Claude Code puede seleccionar el agente más apropiado basándose en el campo <strong>description</strong> de cada agente. Por eso es importante que las descripciones sean precisas.</p>
+
+    <h4>Dónde viven los agentes</h4>
+    <div class="grid2">
+      <div class="card green-l">
+        <div class="card-title"><span class="chip green">global</span></div>
+        <div class="card-body"><code>~/.claude/agents/</code> — disponibles en cualquier proyecto, aunque no esté registrado en Agent Hub.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title"><span class="chip amber">proyecto</span></div>
+        <div class="card-body"><code>{proyecto}/.claude/agents/</code> — disponibles solo cuando trabajas en ese proyecto.</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Requiere Claude Code</div>
+        <div class="callout-text">Para usar agentes necesitas tener la extensión Claude Code instalada en VS Code o la CLI de Claude Code. Agent Hub gestiona los ficheros pero no instala Claude Code por ti.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- FAQ                    -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="faq">
+    <div class="section-badge">Referencia</div>
+    <h2 class="section-title">Preguntas <span>frecuentes</span></h2>
+
+    <div class="faq">
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Necesito tener Claude Code instalado?</div>
+        <div class="faq-a">Sí. Agent Hub gestiona los agentes de Claude Code. Para usarlos necesitas tener la CLI de Claude Code instalada y configurada (<code>~/.claude/</code>). En modo manual puedes crear agentes sin proveedor de IA, pero solo tienen efecto si Claude Code está instalado.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo usar Agent Hub sin configurar ningún proveedor de IA?</div>
+        <div class="faq-a">Sí. El modo manual siempre está disponible: puedes crear, editar, organizar y sincronizar agentes sin ningún proveedor. Solo las funciones de generación de system prompts, optimización, sugerencias, chat y generación de contexto requieren un proveedor configurado.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Los agentes se sincronizan automáticamente cuando los modifico?</div>
+        <div class="faq-a">No. Agent Hub marca los proyectos afectados con el badge de actualizaciones pendientes, pero tú decides cuándo aplicar el sync. Esto evita que cambios en los agentes lleguen a tus proyectos mientras estás trabajando en ellos.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué pasa si borro un agente de nivel global?</div>
+        <div class="faq-a">El fichero se elimina del directorio <code>agents/global/</code> del manager y de <code>~/.claude/agents/</code>. En los proyectos que tenían ese agente, la copia en <code>.claude/agents/</code> queda intacta hasta que ejecutes un sync.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Cuál es la diferencia entre "excluir y eliminar" y "solo excluir"?</div>
+        <div class="faq-a">"Excluir y eliminar" borra el fichero <code>.md</code> del directorio <code>.claude/agents/</code> del proyecto. "Solo excluir" mantiene el fichero en disco pero Agent Hub lo ignora en syncs futuros — el agente sigue disponible en Claude Code hasta que lo borres manualmente.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo mover la carpeta del .exe a otro lugar?</div>
+        <div class="faq-a">Sí, Agent Hub es completamente portable. Mueve toda la carpeta (con <code>config.json</code>, <code>agents/</code> y <code>cache/</code>) al nuevo lugar y ejecuta el .exe. Las rutas de los proyectos son absolutas — si también mueves los proyectos, actualiza sus rutas desde la app.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿El auto-update funciona con el .exe portable?</div>
+        <div class="faq-a">Sí. electron-updater soporta portables. Al instalar la actualización, reemplaza el .exe existente con el nuevo. Tus datos (<code>config.json</code>, <code>agents/</code>, <code>cache/</code>) no se tocan — están junto al .exe, no dentro de él.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué diferencia hay entre "Nuevo proyecto" e "Importar"?</div>
+        <div class="faq-a"><strong>Nuevo proyecto</strong> crea la carpeta en el sistema de ficheros desde cero. <strong>Importar</strong> registra una carpeta que ya existe — útil para proyectos que ya tienes en disco y quieres empezar a gestionar con Agent Hub.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Funciona en macOS o Linux?</div>
+        <div class="faq-a">La app está desarrollada y probada en Windows 10/11. Electron es multiplataforma, pero el build actual genera solo .exe. Con ajustes en <code>electron-builder.yml</code> podría compilarse para macOS (.dmg) o Linux (.AppImage).</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</main>
+</div>
+
+<script>
+// Activa el nav-item correspondiente a la sección visible
+const items = document.querySelectorAll('.nav-item');
+const sections = document.querySelectorAll('.section, .hero');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      items.forEach(i => i.classList.remove('active'));
+      const link = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-30% 0px -60% 0px' });
+sections.forEach(s => s.id && observer.observe(s));
+
+// Muestra las capturas reales si los ficheros existen
+document.querySelectorAll('.screenshot').forEach(el => {
+  const placeholder = el.querySelector('.screenshot-placeholder span');
+  if (!placeholder) return;
+  const src = placeholder.textContent.trim();
+  const img = new Image();
+  img.onload = () => {
+    img.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin:0 auto';
+    el.innerHTML = '';
+    el.appendChild(img);
+    el.style.padding = '0';
+    el.style.border = 'none';
+  };
+  img.src = src;
+});
+</script>
+</body>
+</html>
