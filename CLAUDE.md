@@ -325,6 +325,13 @@ npm run build        # Portable .exe en dist/
 npm run release      # Build + publish a GitHub Releases
 ```
 
+En dev, los datos (config.json, agents/, cache/) se guardan en la raíz del proyecto por defecto. Para usar otra carpeta define `CDM_DATA_DIR`:
+
+```powershell
+$env:CDM_DATA_DIR = "C:\MiCarpetaDatos"
+npm run dev
+```
+
 - Salida: `dist/agent-hub.exe` (portable x64)
 - Auto-updater: GitHub Releases (repo privado `adanoliva/cdm`)
 - Icono: `assets/icon.ico` (generado por `scripts/generate-icon.js`)

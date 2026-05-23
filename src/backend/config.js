@@ -22,11 +22,11 @@ const { app } = require('electron');
 
 function getAppDir() {
   if (!app.isPackaged) {
-    // Dev: use project root (two levels up from src/main/)
-    return path.join(__dirname, '..', '..');
+    // Dev: CDM_DATA_DIR overrides the default location (project root)
+    return process.env.CDM_DATA_DIR
+      || path.join(__dirname, '..', '..');
   }
   // Portable: electron-builder sets PORTABLE_EXECUTABLE_DIR at runtime
-  // This points to the folder containing the .exe file
   return process.env.PORTABLE_EXECUTABLE_DIR
     || path.dirname(process.execPath);
 }
