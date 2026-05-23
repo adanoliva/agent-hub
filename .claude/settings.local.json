@@ -26,7 +26,8 @@
       "PowerShell(Rename-Item *)",
       "PowerShell(Get-NetTCPConnection *)",
       "Bash(git tag *)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(git rm *)"
     ]
   }
 }
