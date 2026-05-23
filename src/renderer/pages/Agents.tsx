@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Topbar } from '../components/layout/Topbar';
 import { req } from '../api';
+import { useStore } from '../store';
 import { useToast } from '../hooks/useToast';
 import { AgentsTree } from '../components/agents/AgentsTree';
 import { AgentsCenter } from '../components/agents/AgentsCenter';
@@ -11,7 +12,9 @@ const DEFAULT_NODE: SelectedNode = { level: 'global', categoryId: null, techId: 
 const NEW_AGENT: Agent = { name: '', description: '', tools: ['Read'], model: 'sonnet', system: '' };
 
 export function Agents() {
-  const toast = useToast();
+  const toast            = useToast();
+  const pendingAction    = useStore((s) => s.pendingAction);
+  const setPendingAction = useStore((s) => s.setPendingAction);
 
   const [node,               setNode]               = useState<SelectedNode>(DEFAULT_NODE);
   const [expanded,           setExpanded]           = useState<Set<string>>(new Set());
@@ -100,6 +103,14 @@ export function Agents() {
     await loadAgents(n);
     loadSuggestions(n);
   }, [loadAgents, loadSuggestions]);
+
+  useEffect(() => {
+    if (pendingAction === 'new-agent') {
+      setEditorAgent({ ...NEW_AGENT });
+      setEditorIsNew(true);
+      setPendingAction(null);
+    }
+  }, []);
 
   useEffect(() => {
     loadAgents(DEFAULT_NODE);

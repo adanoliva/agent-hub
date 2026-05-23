@@ -21,6 +21,69 @@ const { readConfig, CACHE_DIR, ensureDir } = require('./config');
 const CALL_TIMEOUT_MS = 60_000; // 60s max for AI calls
 const MODEL           = 'claude-sonnet-4-20250514';
 
+// ── Usage tracker ─────────────────────────────────────────────────────────────
+// cumulative: persisted to disk, resets when AI provider changes
+// session:    in-memory only, resets on app restart or manual reset
+
+const USAGE_FILE = path.join(CACHE_DIR, 'ai-usage.json');
+
+function _emptyEntry() {
+  return { calls: 0, inputTokens: 0, outputTokens: 0, estimatedCostUSD: 0, since: new Date().toISOString() };
+}
+
+function loadCumulative() {
+  ensureDir(CACHE_DIR);
+  if (!fs.existsSync(USAGE_FILE)) return _emptyEntry();
+  try { return JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8')); }
+  catch { return _emptyEntry(); }
+}
+
+function saveCumulative(u) {
+  ensureDir(CACHE_DIR);
+  fs.writeFileSync(USAGE_FILE, JSON.stringify(u, null, 2), 'utf8');
+}
+
+const cumulative = loadCumulative();
+const session    = _emptyEntry();
+
+function trackUsage({ inputTokens = 0, outputTokens = 0, costUSD = 0 } = {}) {
+  for (const u of [cumulative, session]) {
+    u.calls            += 1;
+    u.inputTokens      += inputTokens;
+    u.outputTokens     += outputTokens;
+    u.estimatedCostUSD += costUSD;
+  }
+  saveCumulative(cumulative);
+}
+
+function getSessionUsage() {
+  return { cumulative: { ...cumulative }, session: { ...session } };
+}
+
+function resetSessionUsage() {
+  // Only resets the in-memory session; cumulative is untouched
+  Object.assign(session, _emptyEntry());
+}
+
+function resetAllUsage() {
+  // Resets both (called on provider change)
+  Object.assign(cumulative, _emptyEntry());
+  Object.assign(session,    _emptyEntry());
+  saveCumulative(cumulative);
+}
+
+// Anthropic pricing per 1M tokens (claude-sonnet-4-20250514)
+const ANTHROPIC_PRICING = {
+  'claude-sonnet-4-20250514':    { input: 3.00,  output: 15.00  },
+  'claude-haiku-4-5-20251001':   { input: 0.25,  output: 1.25   },
+  'claude-opus-4-20250514':      { input: 15.00, output: 75.00  },
+};
+
+function calcAnthropicCost(model, inputTokens, outputTokens) {
+  const pricing = ANTHROPIC_PRICING[model] || ANTHROPIC_PRICING[MODEL];
+  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+}
+
 // ── Provider detection ────────────────────────────────────────────────────────
 
 /**
@@ -96,15 +159,13 @@ async function callAI(prompt, opts = {}) {
 
 function callCLI(prompt, opts = {}) {
   return new Promise((resolve, reject) => {
-    const timeout = opts.timeout || CALL_TIMEOUT_MS;
-
-    // Use spawn with stdin pipe to avoid shell injection
-    const args    = ['--print'];
+    const timeout   = opts.timeout || CALL_TIMEOUT_MS;
+    const args      = ['--print', '--output-format', 'json'];
     const claudeExe = 'claude';
 
     const child = spawn(claudeExe, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32', // needed on Windows for PATH resolution
+      shell: process.platform === 'win32',
     });
 
     let stdout = '';
@@ -113,7 +174,6 @@ function callCLI(prompt, opts = {}) {
     child.stdout.on('data', d => { stdout += d.toString(); });
     child.stderr.on('data', d => { stderr += d.toString(); });
 
-    // Write prompt to stdin and close it
     child.stdin.write(prompt, 'utf8');
     child.stdin.end();
 
@@ -128,7 +188,21 @@ function callCLI(prompt, opts = {}) {
         reject(new Error(`Claude CLI exited with code ${code}: ${stderr.trim() || 'unknown error'}`));
         return;
       }
-      resolve(stdout.trim());
+      const raw = stdout.trim();
+      try {
+        const parsed = JSON.parse(raw);
+        const text   = parsed.result ?? raw;
+        const usage  = parsed.usage || {};
+        trackUsage({
+          inputTokens:  usage.input_tokens  || 0,
+          outputTokens: usage.output_tokens || 0,
+          costUSD:      parsed.total_cost_usd || 0,
+        });
+        resolve(text.trim());
+      } catch {
+        // Old CLI version without JSON output — use raw text, no usage data
+        resolve(raw);
+      }
     });
 
     child.on('error', (err) => {
@@ -159,6 +233,13 @@ async function callAPI(prompt, apiKey, opts = {}) {
     model:      MODEL,
     max_tokens: opts.maxTokens || 1500,
     messages:   [{ role: 'user', content: prompt }],
+  });
+
+  const usage = message.usage || {};
+  trackUsage({
+    inputTokens:  usage.input_tokens  || 0,
+    outputTokens: usage.output_tokens || 0,
+    costUSD:      calcAnthropicCost(message.model || MODEL, usage.input_tokens || 0, usage.output_tokens || 0),
   });
 
   return message.content
@@ -197,7 +278,12 @@ async function callGitHub(prompt, githubToken, model, opts = {}) {
     throw new Error(`GitHub Models API error: ${msg}`);
   }
 
-  const data = await response.json();
+  const data  = await response.json();
+  const usage = data.usage || {};
+  trackUsage({
+    inputTokens:  usage.prompt_tokens     || 0,
+    outputTokens: usage.completion_tokens || 0,
+  });
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -545,6 +631,12 @@ async function callAIChat(messages, opts = {}) {
     };
     if (opts.systemPrompt) params.system = opts.systemPrompt;
     const result = await client.messages.create(params);
+    const usage  = result.usage || {};
+    trackUsage({
+      inputTokens:  usage.input_tokens  || 0,
+      outputTokens: usage.output_tokens || 0,
+      costUSD:      calcAnthropicCost(result.model || MODEL, usage.input_tokens || 0, usage.output_tokens || 0),
+    });
     return result.content.filter(b => b.type === 'text').map(b => b.text).join('');
   }
 
@@ -565,7 +657,12 @@ async function callAIChat(messages, opts = {}) {
       const err = await response.json().catch(() => ({}));
       throw new Error(`GitHub Models error: ${err.error?.message || response.statusText}`);
     }
-    const data = await response.json();
+    const data  = await response.json();
+    const usage = data.usage || {};
+    trackUsage({
+      inputTokens:  usage.prompt_tokens     || 0,
+      outputTokens: usage.completion_tokens || 0,
+    });
     return data.choices?.[0]?.message?.content || '';
   }
 
@@ -633,4 +730,7 @@ module.exports = {
   clearSuggestionsCache,
   getProviderStatus,
   isCLIAvailable,
+  getSessionUsage,
+  resetSessionUsage,
+  resetAllUsage,
 };

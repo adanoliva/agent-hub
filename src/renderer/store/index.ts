@@ -12,11 +12,16 @@ interface AppState {
   // Wizard
   showWizard: boolean;
 
+  // Pending action (consumed by target page on mount)
+  pendingAction: string | null;
+
   // Toasts
   toasts: Toast[];
 
   // Actions
   setView: (v: View) => void;
+  navigateTo: (v: View, action?: string) => void;
+  setPendingAction: (a: string | null) => void;
   setConfig: (c: Config) => void;
   setProjects: (p: Project[]) => void;
   setAppVersion: (v: string) => void;
@@ -27,14 +32,17 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  view: 'projects',
+  view: 'dashboard',
   config: null,
   projects: [],
   appVersion: null,
   showWizard: !localStorage.getItem('cdm-wizard-done'),
+  pendingAction: null,
   toasts: [],
 
   setView: (view) => set({ view }),
+  navigateTo: (view, action = null) => set({ view, pendingAction: action }),
+  setPendingAction: (pendingAction) => set({ pendingAction }),
   setConfig: (config) => set({ config }),
   setProjects: (projects) => set({ projects }),
   setAppVersion: (appVersion) => set({ appVersion }),

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { req } from '../api';
 import { useToast } from '../hooks/useToast';
@@ -13,10 +13,12 @@ import { Modal } from '../components/ui/Modal';
 import type { Project } from '../types';
 
 export function Projects() {
-  const config         = useStore((s) => s.config);
-  const projects       = useStore((s) => s.projects);
-  const fetchProjects  = useStore((s) => s.fetchProjects);
-  const toast          = useToast();
+  const config            = useStore((s) => s.config);
+  const projects          = useStore((s) => s.projects);
+  const fetchProjects     = useStore((s) => s.fetchProjects);
+  const pendingAction     = useStore((s) => s.pendingAction);
+  const setPendingAction  = useStore((s) => s.setPendingAction);
+  const toast             = useToast();
   const { catName, techName } = useCategoryHelpers();
 
   const [drawerProject,   setDrawerProject]   = useState<Project | null>(null);
@@ -24,6 +26,13 @@ export function Projects() {
   const [deleteProject,   setDeleteProject]   = useState<Project | null>(null);
   const [showCreate,      setShowCreate]      = useState(false);
   const [showImport,      setShowImport]      = useState(false);
+
+  useEffect(() => {
+    if (pendingAction === 'new-project') {
+      setShowCreate(true);
+      setPendingAction(null);
+    }
+  }, []);
 
   const cats = config?.categories ?? [];
 
@@ -94,8 +103,6 @@ export function Projects() {
     </>
   );
 
-  const sub = `${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`;
-
   // Group by category
   const knownCats   = new Set(cats.map((c) => c.id));
   const catsWithProj = cats.filter((c) => projects.some((p) => p.categoryId === c.id));
@@ -105,7 +112,7 @@ export function Projects() {
 
   return (
     <div className="view active" id="view-projects">
-      <Topbar title="Proyectos" sub={sub} actions={topbarActions} />
+      <Topbar title="Proyectos" actions={topbarActions} />
 
       <div className="projects-view">
         {projects.length === 0 ? (

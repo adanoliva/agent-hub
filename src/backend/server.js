@@ -61,7 +61,10 @@ app.put('/api/config', (req, res) => {
   const { apiKey, aiProvider, githubToken, githubModel, theme, closeAction,
           agentsDirectoryUrl, agentsDirectoryEnabled } = req.body;
   if (apiKey                !== undefined) cfg.apiKey                = apiKey;
-  if (aiProvider            !== undefined) cfg.aiProvider            = aiProvider;
+  if (aiProvider            !== undefined) {
+    if (aiProvider !== cfg.aiProvider) resetAllUsage();
+    cfg.aiProvider = aiProvider;
+  }
   if (githubToken           !== undefined) cfg.githubToken           = githubToken;
   if (githubModel           !== undefined) cfg.githubModel           = githubModel;
   if (theme                 !== undefined) cfg.theme                 = theme;
@@ -598,6 +601,174 @@ Formato: Markdown limpio y profesional, máximo 1000 palabras. Solo devuelve el 
   }
 });
 
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+function buildDashboardNotifications(allAgents, projects) {
+  const notifications = [];
+
+  for (const agent of allAgents) {
+    if (!agent.tools || agent.tools.length === 0) {
+      notifications.push({
+        id:         `agent-no-tools-${agent.name}`,
+        type:       'optimization',
+        target:     'agent',
+        targetName: agent.name,
+        message:    'Sin herramientas configuradas',
+        action:     'open-agent',
+        level:      agent.level,
+        categoryId: agent.categoryId || null,
+        techId:     agent.techId     || null,
+      });
+    }
+    if (!agent.optimized && agent.system && agent.system.length > 30) {
+      notifications.push({
+        id:         `agent-not-optimized-${agent.name}`,
+        type:       'optimization',
+        target:     'agent',
+        targetName: agent.name,
+        message:    'Prompt no optimizado con IA',
+        action:     'optimize-agent',
+        level:      agent.level,
+        categoryId: agent.categoryId || null,
+        techId:     agent.techId     || null,
+      });
+    }
+  }
+
+  const MIN_CONTEXT_LENGTH = 80;
+
+  for (const project of projects) {
+    if (!project.pathExists) continue;
+
+    const needsClaude = project.aiProvider === 'claude' || project.aiProvider === 'both';
+    const needsGithub = project.aiProvider === 'github' || project.aiProvider === 'both';
+
+    if (needsClaude) {
+      const claudeMdPath = path.join(project.path, 'CLAUDE.md');
+      if (!fs.existsSync(claudeMdPath)) {
+        notifications.push({
+          id:         `project-no-claude-md-${project.id}`,
+          type:       'critical',
+          target:     'project',
+          targetName: project.name,
+          targetId:   project.id,
+          message:    'Sin CLAUDE.md',
+          action:     'generate-context',
+        });
+      } else {
+        const content = fs.readFileSync(claudeMdPath, 'utf8').trim();
+        if (content.length < MIN_CONTEXT_LENGTH) {
+          notifications.push({
+            id:         `project-empty-claude-md-${project.id}`,
+            type:       'optimization',
+            target:     'project',
+            targetName: project.name,
+            targetId:   project.id,
+            message:    'CLAUDE.md sin contexto del proyecto',
+            action:     'generate-context',
+          });
+        }
+      }
+    }
+
+    if (needsGithub) {
+      const githubInstrPath = path.join(project.path, '.github', 'copilot-instructions.md');
+      if (!fs.existsSync(githubInstrPath)) {
+        notifications.push({
+          id:         `project-no-github-instr-${project.id}`,
+          type:       'critical',
+          target:     'project',
+          targetName: project.name,
+          targetId:   project.id,
+          message:    'Sin copilot-instructions.md',
+          action:     'generate-context',
+        });
+      } else {
+        const content = fs.readFileSync(githubInstrPath, 'utf8').trim();
+        if (content.length < MIN_CONTEXT_LENGTH) {
+          notifications.push({
+            id:         `project-empty-github-instr-${project.id}`,
+            type:       'optimization',
+            target:     'project',
+            targetName: project.name,
+            targetId:   project.id,
+            message:    'copilot-instructions.md sin contexto del proyecto',
+            action:     'generate-context',
+          });
+        }
+      }
+    }
+
+    if ((project.pendingUpdates || 0) > 0) {
+      notifications.push({
+        id:         `project-pending-${project.id}`,
+        type:       'optimization',
+        target:     'project',
+        targetName: project.name,
+        targetId:   project.id,
+        message:    `${project.pendingUpdates} agente${project.pendingUpdates === 1 ? '' : 's'} pendiente${project.pendingUpdates === 1 ? '' : 's'} de sync`,
+        action:     'sync-project',
+      });
+    }
+  }
+
+  const priority = { critical: 0, optimization: 1, info: 2 };
+  return notifications.sort((a, b) => priority[a.type] - priority[b.type]);
+}
+
+app.get('/api/dashboard', (req, res) => {
+  try {
+    const cfg      = readConfig();
+    const projects = listProjectsWithStatus();
+
+    const globalAgents  = listAgentsByLevel('global');
+    const uncatAgents   = listAgentsByLevel('uncategorized');
+    const sectionAgents = cfg.categories.flatMap(cat => listAgentsByLevel('section', cat.id));
+    const techAgents    = cfg.categories.flatMap(cat =>
+      cat.technologies.flatMap(tech => listAgentsByLevel('tech', cat.id, tech.id)),
+    );
+    const allAgents = [...globalAgents, ...sectionAgents, ...techAgents, ...uncatAgents];
+
+    const dirState = agentsSync.getSyncState();
+    const dirMeta  = agentsSync.readMeta ? agentsSync.readMeta() : null;
+
+    const lastSyncAt = projects
+      .map(p => p.lastSyncAt)
+      .filter(Boolean)
+      .sort()
+      .pop() || null;
+
+    res.json({
+      agents: {
+        total:         allAgents.length,
+        global:        globalAgents.length,
+        section:       sectionAgents.length,
+        tech:          techAgents.length,
+        uncategorized: uncatAgents.length,
+      },
+      projects: {
+        total:       projects.length,
+        active:      projects.filter(p => p.status === 'active').length,
+        paused:      projects.filter(p => p.status === 'paused').length,
+        archived:    projects.filter(p => p.status === 'archived').length,
+        withPending: projects.filter(p => (p.pendingUpdates || 0) > 0).length,
+        totalPending: projects.reduce((s, p) => s + (p.pendingUpdates || 0), 0),
+      },
+      lastSyncAt,
+      dirStatus: {
+        enabled:          cfg.agentsDirectoryEnabled !== false,
+        syncing:          dirState.syncing,
+        lastSync:         dirMeta?.lastSync || null,
+        pendingConflicts: dirState.pendingConflicts || [],
+        lastResult:       dirState.lastResult || null,
+      },
+      notifications: buildDashboardNotifications(allAgents, projects),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 const {
@@ -607,7 +778,27 @@ const {
   generateProjectSuggestions,
   clearSuggestionsCache,
   callAIChat,
+  getSessionUsage,
+  resetSessionUsage,
+  resetAllUsage,
 } = require('./ai');
+
+// GET /api/ai/usage — session token usage stats
+app.get('/api/ai/usage', (req, res) => {
+  res.json(getSessionUsage());
+});
+
+// POST /api/ai/usage/reset — reset session stats
+app.post('/api/ai/usage/reset', (req, res) => {
+  resetSessionUsage();
+  res.json(getSessionUsage());
+});
+
+// POST /api/ai/usage/reset-all — reset session + cumulative
+app.post('/api/ai/usage/reset-all', (req, res) => {
+  resetAllUsage();
+  res.json(getSessionUsage());
+});
 
 // GET /api/ai/status — check which provider is configured and ready
 app.get('/api/ai/status', async (req, res) => {

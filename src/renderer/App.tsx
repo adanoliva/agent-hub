@@ -9,10 +9,11 @@ import { Wizard } from './components/ui/Wizard';
 import { CloseDialog } from './components/ui/CloseDialog';
 import type { Config, Project } from './types';
 
-const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
-const Agents   = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
-const Chat     = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })));
-const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const Projects  = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
+const Agents    = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
+const Chat      = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })));
+const Settings  = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -77,10 +78,11 @@ function AppInner() {
       <Sidebar />
       <div className="main">
         <Suspense fallback={null}>
-          {view === 'projects' && <Projects />}
-          {view === 'agents'   && <Agents />}
-          {view === 'chat'     && <Chat />}
-          {view === 'settings' && <Settings />}
+          {view === 'dashboard' && <Dashboard />}
+          {view === 'projects'  && <Projects />}
+          {view === 'agents'    && <Agents />}
+          {view === 'chat'      && <Chat />}
+          {view === 'settings'  && <Settings />}
         </Suspense>
         <Statusbar />
       </div>

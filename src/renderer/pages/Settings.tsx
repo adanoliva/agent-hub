@@ -29,6 +29,7 @@ export function Settings() {
   const setShowWizardFromSettings = useStore((s) => s.setShowWizard);
 
   const [tab,         setTab]         = useState<Tab>('general');
+  const [editorTab,   setEditorTab]   = useState<'vscode' | 'intellij' | 'eclipse'>('vscode');
   const [aiStatus,    setAiStatus]    = useState<{ provider: string; ready: boolean } | null>(null);
   const [updateMsg,   setUpdateMsg]   = useState('');
   const [importUrl,   setImportUrl]   = useState('');
@@ -404,9 +405,23 @@ export function Settings() {
 
               {/* Right: How to use */}
               <div>
-                <div className="settings-head">Cómo usar los agentes en VS Code</div>
+                <div className="settings-head">Cómo usar los agentes</div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {(['vscode', 'intellij', 'eclipse'] as const).map((e) => (
+                    <button
+                      key={e}
+                      className={`btn sm${editorTab === e ? ' primary' : ' ghost'}`}
+                      onClick={() => setEditorTab(e)}
+                    >
+                      <i className={`ti ${e === 'vscode' ? 'ti-brand-vscode' : e === 'intellij' ? 'ti-brand-kotlin' : 'ti-eclipse'}`} />
+                      {e === 'vscode' ? 'VS Code' : e === 'intellij' ? 'IntelliJ' : 'Eclipse'}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {isGitHub ? <GitHubUsageCards /> : <CLIUsageCards />}
+                  {editorTab === 'vscode'   && (isGitHub ? <GitHubUsageCards /> : <CLIUsageCards />)}
+                  {editorTab === 'intellij' && <IntelliJUsageCards isGitHub={isGitHub} />}
+                  {editorTab === 'eclipse'  && <EclipseUsageCards  isGitHub={isGitHub} />}
                 </div>
               </div>
             </div>
@@ -801,6 +816,104 @@ function CLIUsageCards() {
           </div>
         </div>
       </InfoCard>
+    </>
+  );
+}
+
+function IntelliJUsageCards({ isGitHub }: { isGitHub: boolean }) {
+  return (
+    <>
+      {!isGitHub && (
+        <>
+          <InfoCard title="PLUGIN CLAUDE CODE">
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Instala el plugin oficial <strong>Claude Code</strong> de Anthropic desde <strong>JetBrains Marketplace</strong>: <Mono>Settings → Plugins → Marketplace → "Claude Code"</Mono>. Requiere tener Claude Code CLI instalado en el sistema.</div>
+          </InfoCard>
+          <InfoCard title="INVOCAR UN AGENTE">
+            <CodeLine>@unity-dev crea un sistema de inventario</CodeLine>
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>El plugin carga automáticamente los agentes de <Mono>.claude/agents/</Mono> y los globales de <Mono>~/.claude/agents/</Mono>. Usa <Mono>@nombre-del-agente</Mono> en el panel de Claude.</div>
+          </InfoCard>
+          <InfoCard title="DÓNDE VIVEN LOS AGENTES">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'var(--mono)', background: 'var(--green-dim)', color: 'var(--green)', padding: '2px 7px', borderRadius: 4, fontSize: 10, flexShrink: 0 }}>global</span>
+                <span style={{ color: 'var(--text1)', fontFamily: 'var(--mono)', fontSize: 10 }}>~/.claude/agents/</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'var(--mono)', background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 7px', borderRadius: 4, fontSize: 10, flexShrink: 0 }}>proyecto</span>
+                <span style={{ color: 'var(--text1)', fontFamily: 'var(--mono)', fontSize: 10 }}>{'{proyecto}'}/.claude/agents/</span>
+              </div>
+            </div>
+          </InfoCard>
+        </>
+      )}
+      {isGitHub && (
+        <>
+          <InfoCard title="PLUGIN GITHUB COPILOT">
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Instala el plugin oficial desde JetBrains Marketplace: <Mono>Settings → Plugins → Marketplace → "GitHub Copilot"</Mono>. Inicia sesión con tu cuenta de GitHub que tenga acceso a Copilot.</div>
+          </InfoCard>
+          <InfoCard title="INVOCAR UN AGENTE">
+            <CodeLine>@code-reviewer revisa DatabaseManager.java</CodeLine>
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Abre el chat de Copilot con <Mono>Alt+Shift+C</Mono>. Escribe <Mono>@</Mono> para ver los agentes disponibles de <Mono>.github/agents/</Mono>. La experiencia es similar a VS Code.</div>
+          </InfoCard>
+          <InfoCard title="DÓNDE VIVEN LOS AGENTES">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'var(--mono)', background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 7px', borderRadius: 4, fontSize: 10, flexShrink: 0 }}>proyecto</span>
+                <span style={{ color: 'var(--text1)', fontFamily: 'var(--mono)', fontSize: 10 }}>{'{proyecto}'}/.github/agents/</span>
+              </div>
+            </div>
+          </InfoCard>
+        </>
+      )}
+    </>
+  );
+}
+
+function EclipseUsageCards({ isGitHub }: { isGitHub: boolean }) {
+  return (
+    <>
+      {!isGitHub && (
+        <>
+          <InfoCard title="CLAUDE CODE VÍA TERMINAL">
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Eclipse no dispone de plugin oficial de Claude Code. La forma recomendada es abrir un terminal integrado: <Mono>Window → Show View → Terminal</Mono> y ejecutar <Mono>claude</Mono> desde ahí. Los agentes de <Mono>.claude/agents/</Mono> se cargan automáticamente.</div>
+          </InfoCard>
+          <InfoCard title="INVOCAR UN AGENTE">
+            <CodeLine>@unity-dev crea un sistema de inventario</CodeLine>
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Usa <Mono>@nombre-del-agente</Mono> seguido de la tarea directamente en el terminal donde corre <Mono>claude</Mono>.</div>
+          </InfoCard>
+          <InfoCard title="DÓNDE VIVEN LOS AGENTES">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'var(--mono)', background: 'var(--green-dim)', color: 'var(--green)', padding: '2px 7px', borderRadius: 4, fontSize: 10, flexShrink: 0 }}>global</span>
+                <span style={{ color: 'var(--text1)', fontFamily: 'var(--mono)', fontSize: 10 }}>~/.claude/agents/</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'var(--mono)', background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 7px', borderRadius: 4, fontSize: 10, flexShrink: 0 }}>proyecto</span>
+                <span style={{ color: 'var(--text1)', fontFamily: 'var(--mono)', fontSize: 10 }}>{'{proyecto}'}/.claude/agents/ — vía terminal integrado</span>
+              </div>
+            </div>
+          </InfoCard>
+        </>
+      )}
+      {isGitHub && (
+        <>
+          <InfoCard title="PLUGIN GITHUB COPILOT">
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Instala el plugin oficial desde Eclipse Marketplace: <Mono>Help → Eclipse Marketplace → buscar "GitHub Copilot"</Mono>. Requiere Eclipse 2023-03 o superior y Java 17+.</div>
+          </InfoCard>
+          <InfoCard title="INVOCAR UN AGENTE">
+            <CodeLine>@code-reviewer revisa DatabaseManager.java</CodeLine>
+            <div style={{ fontSize: 11, color: 'var(--text1)' }}>Abre el chat desde <Mono>Window → Show View → GitHub Copilot Chat</Mono>. Escribe <Mono>@</Mono> para ver los agentes de <Mono>.github/agents/</Mono>.</div>
+          </InfoCard>
+          <InfoCard title="DÓNDE VIVEN LOS AGENTES">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'var(--mono)', background: 'var(--blue-dim)', color: 'var(--blue)', padding: '2px 7px', borderRadius: 4, fontSize: 10, flexShrink: 0 }}>proyecto</span>
+                <span style={{ color: 'var(--text1)', fontFamily: 'var(--mono)', fontSize: 10 }}>{'{proyecto}'}/.github/agents/</span>
+              </div>
+            </div>
+          </InfoCard>
+        </>
+      )}
     </>
   );
 }

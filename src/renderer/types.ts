@@ -92,13 +92,47 @@ export interface AgentDirectoryStatus {
   lastResult:       { updated: number; skipped: number; errors: { path: string; error: string }[]; error?: string; upToDate?: boolean } | null;
 }
 
-export type View = 'projects' | 'agents' | 'chat' | 'settings';
+export type View = 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings';
+
+export interface DashboardNotification {
+  id:         string;
+  type:       'critical' | 'optimization' | 'info';
+  target:     'agent' | 'project';
+  targetName: string;
+  targetId?:  string;
+  message:    string;
+  action:     'open-agent' | 'open-project' | 'sync-project' | 'generate-context' | 'optimize-agent';
+  level?:     string;
+  categoryId?: string | null;
+  techId?:    string | null;
+}
+
+export interface DashboardData {
+  agents:    { total: number; global: number; section: number; tech: number; uncategorized: number };
+  projects:  { total: number; active: number; paused: number; archived: number; withPending: number; totalPending: number };
+  lastSyncAt: string | null;
+  dirStatus: { enabled: boolean; syncing: boolean; lastSync: string | null; pendingConflicts: SyncConflict[]; lastResult: any };
+  notifications: DashboardNotification[];
+}
 
 export interface SelectedNode {
   level: 'global' | 'section' | 'tech' | 'project' | 'uncategorized';
   categoryId: string | null;
   techId: string | null;
   projectId: string | null;
+}
+
+export interface AIUsageEntry {
+  calls:            number;
+  inputTokens:      number;
+  outputTokens:     number;
+  estimatedCostUSD: number;
+  since:            string;
+}
+
+export interface AIUsage {
+  cumulative: AIUsageEntry;
+  session:    AIUsageEntry;
 }
 
 export type ToastType = 'ok' | 'err' | 'info' | 'warn';
