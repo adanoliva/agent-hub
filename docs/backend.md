@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-22
+> Última actualización: 2026-05-23
 
 ---
 
@@ -12,13 +12,14 @@
 3. [Configuración (`config.js`)](#3-configuración-configjs)
 4. [API REST (`server.js`)](#4-api-rest-serverjs)
 5. [Gestión de agentes (`agents.js`)](#5-gestión-de-agentes-agentsjs)
-6. [Gestión de proyectos (`projects.js`)](#6-gestión-de-proyectos-projectsjs)
-7. [Integración IA (`ai.js`)](#7-integración-ia-aijs)
-8. [Bandeja del sistema (`tray.js`)](#8-bandeja-del-sistema-trayjs)
-9. [Bridge IPC (`preload.js`)](#9-bridge-ipc-preloadjs)
-10. [Agentes por defecto (`defaults.js`)](#10-agentes-por-defecto-defaultsjs)
-11. [Plantillas de contexto (`templates.js`)](#11-plantillas-de-contexto-templatesjs)
-12. [Flujos clave end-to-end](#12-flujos-clave-end-to-end)
+6. [Sincronización del directorio de agentes (`agents-sync.js`)](#6-sincronización-del-directorio-de-agentes-agents-syncjs)
+7. [Gestión de proyectos (`projects.js`)](#7-gestión-de-proyectos-projectsjs)
+8. [Integración IA (`ai.js`)](#8-integración-ia-aijs)
+9. [Bandeja del sistema (`tray.js`)](#9-bandeja-del-sistema-trayjs)
+10. [Bridge IPC (`preload.js`)](#10-bridge-ipc-preloadjs)
+11. [Agentes por defecto (`defaults.js`)](#11-agentes-por-defecto-defaultsjs)
+12. [Plantillas de contexto (`templates.js`)](#12-plantillas-de-contexto-templatesjs)
+13. [Flujos clave end-to-end](#13-flujos-clave-end-to-end)
 
 ---
 
@@ -32,16 +33,17 @@ El backend es el proceso principal de Electron (`main process`). Corre en Node.j
 ```
 Electron main process (Node.js)
   │
-  ├── main.js         ← punto de entrada, BrowserWindow, ciclo de vida
-  ├── server.js       ← Express: todas las rutas /api/*
-  ├── config.js       ← lectura/escritura de config.json
-  ├── agents.js       ← CRUD de agentes (.md con frontmatter YAML)
-  ├── projects.js     ← CRUD de proyectos, sync de agentes a proyectos
-  ├── ai.js           ← llamadas a IA (CLI / Anthropic API / GitHub)
-  ├── tray.js         ← icono en la bandeja del sistema
-  ├── preload.js      ← contextBridge: window.api expuesto al renderer
-  ├── defaults.js     ← definición de agentes iniciales por nivel
-  └── templates.js    ← plantillas CLAUDE.md / copilot-instructions.md
+  ├── main.js          ← punto de entrada, BrowserWindow, ciclo de vida
+  ├── server.js        ← Express: todas las rutas /api/*
+  ├── config.js        ← lectura/escritura de config.json
+  ├── agents.js        ← CRUD de agentes (.md con frontmatter YAML)
+  ├── agents-sync.js   ← sincronización con el Directorio de Agentes (GitHub)
+  ├── projects.js      ← CRUD de proyectos, sync de agentes a proyectos
+  ├── ai.js            ← llamadas a IA (CLI / Anthropic API / GitHub)
+  ├── tray.js          ← icono en la bandeja del sistema
+  ├── preload.js       ← contextBridge: window.api expuesto al renderer
+  ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
+  └── templates.js     ← plantillas CLAUDE.md / copilot-instructions.md
 ```
 
 ### Dos modos de ejecución
@@ -65,13 +67,16 @@ app.whenReady()
   ├── readConfig()                        ← lee config.json
   ├── bootstrapDirectories(cfg)           ← crea carpetas necesarias
   ├── migrateAgentFiles()                 ← actualiza formato de .md antiguos
-  ├── seedDefaultAgents()                 ← reseed de agentes por defecto si han cambiado
-  ├── syncGlobalAgentsToClaudeDir()       ← copia globales a ~/.claude/agents/
   ├── startServer()                       ← levanta Express en :3737
   ├── createWindow()                      ← BrowserWindow 1280×800
   ├── createTray(mainWindow)              ← icono en bandeja
-  └── setupAutoUpdater()                  ← solo en producción
+  ├── setupAutoUpdater()                  ← solo en producción
+  └── agentsSync.triggerSync(url, isFirstSync)  ← sync async del directorio
 ```
+
+**Nota sobre el sync del directorio:** a diferencia del arranque anterior (que bloqueaba con `seedDefaultAgents`), la sincronización es completamente asíncrona. El servidor ya está levantado y la ventana visible cuando el sync comienza. El renderer detecta si está en curso consultando `GET /api/agents-directory/status` y muestra un overlay de progreso si es el primer arranque.
+
+`isFirstSync = !agentsSync.metaExists()` — es `true` si no existe aún `cache/agents-meta.json`. En ese caso el renderer muestra el overlay de descarga.
 
 ### BrowserWindow
 
@@ -90,8 +95,6 @@ new BrowserWindow({
   },
 })
 ```
-
-La URL cargada es `http://localhost:5173` en dev Vite o `http://localhost:${PORT}` en producción.
 
 ### Comportamiento al cerrar
 
@@ -127,10 +130,6 @@ Solo activo en producción. Comprueba actualizaciones en el repo privado `adanol
 | `update:download` | `autoUpdater.downloadUpdate()` |
 | `update:install` | `autoUpdater.quitAndInstall()` |
 
-### Instancia única
-
-`app.requestSingleInstanceLock()` garantiza que solo hay una instancia de la app. Si se intenta abrir una segunda, la primera se trae al frente.
-
 ---
 
 ## 3. Configuración (`config.js`)
@@ -158,13 +157,15 @@ path.resolve(__dirname, '../../')
 
 ```json
 {
-  "version": "1.1.0",
+  "version": "1.5.0",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
   "githubModel": "gpt-4o-mini",
   "theme": "dark",
   "closeAction": "ask",
+  "agentsDirectoryUrl": "https://github.com/adanoliva/agents-directory",
+  "agentsDirectoryEnabled": true,
   "categories": [
     {
       "id": "web",
@@ -176,24 +177,11 @@ path.resolve(__dirname, '../../')
       ]
     }
   ],
-  "projects": [
-    {
-      "id": "p1234567890abc",
-      "name": "Mi Proyecto",
-      "categoryId": "web",
-      "techId": "react",
-      "path": "C:/proyectos/mi-proyecto",
-      "description": "",
-      "status": "active",
-      "aiProvider": "claude",
-      "selectedAgents": [],
-      "excludedAgents": [],
-      "agentHashes": {},
-      "createdAt": "2025-01-01T00:00:00.000Z"
-    }
-  ]
+  "projects": [...]
 }
 ```
+
+Los campos `agentsDirectoryUrl` y `agentsDirectoryEnabled` se fusionan automáticamente desde `DEFAULT_CONFIG` si no están presentes en el JSON guardado (el merge se hace con spread en `readConfig()`).
 
 ### Funciones exportadas
 
@@ -202,15 +190,16 @@ path.resolve(__dirname, '../../')
 | `readConfig()` | Lee y parsea `config.json`; si no existe, devuelve `DEFAULT_CONFIG` |
 | `writeConfig(cfg)` | Serializa y escribe `config.json` |
 | `getAgentDir(level, catId, techId)` | Calcula la ruta de carpeta de agentes según nivel |
-| `bootstrapDirectories(cfg)` | Crea `agents/global/`, `agents/section-*`, `agents/tech-*` si no existen |
+| `bootstrapDirectories(cfg)` | Crea `agents/global/`, `agents/section-*`, `agents/tech-*`, `agents/uncategorized/` y `cache/` si no existen |
 | `ensureDir(p)` | `fs.mkdirSync(p, { recursive: true })` |
 
 ### `getAgentDir` — lógica de nivel
 
 ```js
-level === 'global'   → agents/global/
-level === 'section'  → agents/section-{catId}/
-level === 'tech'     → agents/tech-{catId}-{techId}/
+level === 'global'        → agents/global/
+level === 'section'       → agents/section-{catId}/
+level === 'tech'          → agents/tech-{catId}-{techId}/
+level === 'uncategorized' → agents/uncategorized/
 ```
 
 ---
@@ -226,10 +215,10 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/health` | `{ status: 'ok', port }` |
-| GET | `/api/config` | Config completa (sin `projects`) |
-| PUT | `/api/config` | Actualiza campos: `aiProvider`, `apiKey`, `githubToken`, `githubModel`, `theme`, `closeAction` |
+| GET | `/api/config` | Config completa |
+| PUT | `/api/config` | Actualiza campos: `aiProvider`, `apiKey`, `githubToken`, `githubModel`, `theme`, `closeAction`, `agentsDirectoryUrl`, `agentsDirectoryEnabled` |
 | GET | `/api/detect-cli` | `{ found: bool, path? }` — busca `claude` en PATH |
-| POST | `/api/setup` | Wizard: guarda `aiProvider` + credenciales, detecta CLI |
+| POST | `/api/setup` | Wizard: guarda proveedor + credenciales y dispara sync del directorio |
 
 #### Categorías
 
@@ -242,11 +231,19 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | POST | `/api/categories/:catId/technologies` | Añade `{ id, name }` a una categoría |
 | DELETE | `/api/categories/:catId/technologies/:techId` | Elimina tecnología |
 
-#### Agentes (niveles 1–3)
+#### Directorio de Agentes
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/agents?level=&categoryId=&techId=` | Lista agentes de un nivel |
+| GET | `/api/agents-directory/status` | Estado del sync: `{ enabled, url, syncing, firstSync, progress, lastSync, agentCount, pendingConflicts, lastResult }` |
+| POST | `/api/agents-directory/sync` | Dispara una sincronización manual (no bloqueante) |
+| POST | `/api/agents-directory/resolve-conflict` | Resuelve un conflicto: `{ fileKey, action: 'keep'\|'update' }` |
+
+#### Agentes (niveles 1–3 + Sin categoría)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/agents?level=&categoryId=&techId=` | Lista agentes de un nivel (incluye `level=uncategorized`) |
 | GET | `/api/agents/flat` | Todos los agentes de todos los niveles (para @mention) |
 | GET | `/api/agents/applicable?projectId=` | Global + section + tech aplicables al proyecto |
 | POST | `/api/agents` | Crea agente `{ level, categoryId?, techId?, agent }` |
@@ -334,7 +331,6 @@ optimized: true
 ---
 
 System prompt del agente aquí.
-El resto del fichero es el body.
 ```
 
 ### Modelos disponibles (alias → ID completo)
@@ -345,8 +341,6 @@ El resto del fichero es el body.
 | `sonnet` | `claude-sonnet-4-20250514` |
 | `opus` | `claude-opus-4-20250514` |
 
-`parseAgentFile` normaliza cualquiera de estos valores al ID completo al leer, y `serializeAgent` puede volver a escribir el alias o el ID completo según convenga.
-
 ### Jerarquía de niveles
 
 | Nivel | Carpeta | Aplica a |
@@ -354,6 +348,7 @@ El resto del fichero es el body.
 | `global` | `agents/global/` | Todos los proyectos |
 | `section` | `agents/section-{catId}/` | Proyectos de esa categoría |
 | `tech` | `agents/tech-{catId}-{techId}/` | Proyectos de esa tecnología |
+| `uncategorized` | `agents/uncategorized/` | Agentes del directorio sin carpeta estándar |
 | `project` | `{projectPath}/.claude/agents/` o `.github/agents/` | Un proyecto concreto |
 
 ### Funciones principales
@@ -364,8 +359,8 @@ El resto del fichero es el body.
 - `serializeAgent(agent)` — construye el string `.md` con frontmatter + body.
 - `hashAgent(agent)` — SHA-256 del string serializado. Usado para detectar si un agente ha cambiado respecto a la copia en el proyecto.
 
-**CRUD niveles 1–3:**
-- `listAgentsByLevel(level, catId, techId)` — lista `.md` de la carpeta correspondiente.
+**CRUD niveles 1–3 + uncategorized:**
+- `listAgentsByLevel(level, catId, techId)` — lista `.md` de la carpeta correspondiente. Funciona también para `level='uncategorized'`.
 - `getApplicableAgents(project)` — combina global + section + tech del proyecto.
 - `createAgent(level, catId, techId, agent)` — valida unicidad de nombre y escribe el fichero.
 - `updateAgent(level, catId, techId, agent)` — sobreescribe el fichero existente.
@@ -376,41 +371,149 @@ El resto del fichero es el body.
 - `saveProjectAgent(project, agent)` — escribe en la carpeta del proyecto (formato GitHub si es `github`).
 - `deleteProjectAgent(project, name)` — elimina el fichero del proyecto.
 
-**Migración y seeding:**
-- `migrateAgentFiles()` — detecta agentes en formato antiguo (sin frontmatter) y los convierte. Devuelve el número migrado.
-- `seedDefaultAgents()` — compara los agentes en `defaults.js` con los existentes en disco usando hashes; reescribe los que han cambiado. Nunca borra agentes personalizados.
-- `syncGlobalAgentsToClaudeDir()` — copia todos los agentes globales a `~/.claude/agents/` para que Claude Code los cargue automáticamente.
+**Migración:**
+- `migrateAgentFiles()` — detecta agentes en formato antiguo y los convierte al formato actual. Devuelve el número migrado.
+- `syncGlobalAgentsToClaudeDir()` — copia todos los agentes globales a `~/.claude/agents/` para que Claude Code los cargue automáticamente. Se llama también después de cada sync del directorio.
 
 ### Formato GitHub vs. Claude
 
-Los agentes para proyectos con `aiProvider: 'github'` se guardan en `.github/agents/` con un header diferente en el frontmatter (`# Agent: nombre`). `saveProjectAgent` detecta el provider del proyecto y adapta el formato automáticamente.
+Los agentes para proyectos con `aiProvider: 'github'` se guardan en `.github/agents/` con un header simplificado. `saveProjectAgent` detecta el provider del proyecto y adapta el formato automáticamente.
 
 ---
 
-## 6. Gestión de proyectos (`projects.js`)
+## 6. Sincronización del directorio de agentes (`agents-sync.js`)
+
+Este módulo gestiona la descarga y versionado de agentes desde un repositorio GitHub externo (por defecto `https://github.com/adanoliva/agents-directory`).
+
+### Algoritmo de versionado
+
+El versionado se hace por archivo usando **git blob SHA** — el mismo algoritmo que GitHub usa internamente:
+
+```js
+function gitBlobSHA(content) {
+  const buf    = Buffer.from(content, 'utf8');
+  const header = `blob ${buf.length}\0`;
+  return crypto.createHash('sha1').update(header).update(buf).digest('hex');
+}
+```
+
+Esto permite comparar el SHA devuelto por la GitHub API con el SHA del archivo local sin descargar nada.
+
+### Fichero de estado: `cache/agents-meta.json`
+
+```json
+{
+  "directoryUrl": "https://github.com/adanoliva/agents-directory",
+  "lastSync": "2026-05-23T10:00:00Z",
+  "repoCommitSHA": "abc123...",
+  "files": {
+    "agents/global/doc-writer.md": {
+      "remoteSHA": "def456...",
+      "localSHA":  "def456...",
+      "remotePath": "agents/global/doc-writer.md"
+    }
+  }
+}
+```
+
+- `remoteSHA` — git blob SHA del archivo tal como está en el repo remoto en el momento del último sync.
+- `localSHA` — git blob SHA del archivo tal como quedó escrito en disco (debería coincidir con `remoteSHA` salvo modificación local).
+
+### Detección de conflictos
+
+Para cada archivo `.md` del árbol remoto:
+
+| Condición | Acción |
+|---|---|
+| `remoteSHA === meta.remoteSHA` | Sin cambios upstream → saltar |
+| `remoteSHA !== meta.remoteSHA` + `diskSHA === meta.localSHA` | Actualización segura → descargar y escribir |
+| `remoteSHA !== meta.remoteSHA` + `diskSHA !== meta.localSHA` | **Conflicto** → encolar, dejar en mano del usuario |
+| Archivo no existe en disco | Nuevo → descargar y escribir |
+
+### Mapeo de rutas remotas → locales
+
+El repositorio remoto puede organizar los archivos de cualquier forma. La lógica de mapeo reconoce carpetas estándar y clasifica el resto como `uncategorized`:
+
+| Ruta en el repo | Destino local |
+|---|---|
+| `agents/global/{name}.md` | `agents/global/{name}.md` |
+| `global/{name}.md` | `agents/global/{name}.md` |
+| `agents/section-{x}/{name}.md` | `agents/section-{x}/{name}.md` |
+| `agents/tech-{x}-{y}/{name}.md` | `agents/tech-{x}-{y}/{name}.md` |
+| Cualquier otra ruta | `agents/uncategorized/{name}.md` |
+
+### Estado en memoria (para polling del renderer)
+
+```js
+const syncState = {
+  syncing:          false,   // sync en curso
+  firstSync:        false,   // true solo en el primer arranque (sin meta)
+  progress:         { done: 0, total: 0, current: '' },
+  lastResult:       null,    // resultado del último sync
+  pendingConflicts: [],      // conflictos pendientes de resolución
+};
+```
+
+El renderer consulta `GET /api/agents-directory/status` cada 600ms mientras `syncing: true`.
+
+### Flujo del sync
+
+```
+triggerSync(url, isFirst)
+  │
+  ├── fetchHeadSHA()          ← GET /repos/{owner}/{repo}/commits/HEAD (1 req API)
+  │   └── si SHA === meta.repoCommitSHA → upToDate, salir
+  │
+  ├── fetchTree(sha)          ← GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1 (1 req API)
+  │
+  └── para cada .md en el árbol:
+      ├── comparar SHAs → skip / download / conflict
+      ├── downloadRaw()       ← raw.githubusercontent.com (sin rate limit)
+      └── writeFile() + actualizar meta
+  │
+  └── syncGlobalAgentsToClaudeDir()   ← si hubo actualizaciones
+```
+
+### Resolución de conflictos
+
+`resolveConflict(fileKey, action, url)`:
+- `action: 'keep'` — actualiza `localSHA` en meta al valor actual del disco, para que futuros syncs no lo re-detecten como conflicto.
+- `action: 'update'` — descarga el archivo remoto, lo escribe y actualiza el meta.
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `metaExists()` | `true` si existe `cache/agents-meta.json` (= no es primer arranque) |
+| `readMeta()` | Lee y parsea el meta JSON |
+| `getSyncState()` | Snapshot del estado en memoria (para el endpoint de status) |
+| `triggerSync(url, isFirst)` | Dispara el sync async; sin-op si ya hay uno en curso |
+| `resolveConflict(fileKey, action, url)` | Resuelve un conflicto pendiente |
+
+---
+
+## 7. Gestión de proyectos (`projects.js`)
 
 ### Estructura de un proyecto en config.json
 
 ```js
 {
-  id: 'p1234567890abc',    // makeProjectId(): timestamp + random
+  id: 'p1234567890abc',
   name: 'Mi Proyecto',
   categoryId: 'web',
   techId: 'react',
-  path: 'C:/proyectos/mi-proyecto',   // absoluto
+  path: 'C:/proyectos/mi-proyecto',
   description: '',
-  status: 'active',                    // active | paused | archived
-  aiProvider: 'claude',                // claude | github | both
-  selectedAgents: [],                  // nombres de agentes explícitamente incluidos
-  excludedAgents: [],                  // nombres de agentes excluidos del sync
-  agentHashes: {},                     // { agentName: sha256 } — hashes en la copia del proyecto
+  status: 'active',                   // active | paused | archived
+  aiProvider: 'claude',               // claude | github | both
+  selectedAgents: [],
+  excludedAgents: [],
+  agentHashes: {},                    // { agentName: sha256 }
   createdAt: '2025-01-01T00:00:00.000Z',
 }
 ```
 
 ### Sync de agentes
-
-El sync copia los agentes aplicables (global + section + tech) al directorio del proyecto, respetando las exclusiones.
 
 ```
 syncProject(projectId)
@@ -432,27 +535,18 @@ syncProject(projectId)
 | `ok` | El hash coincide; el agente está actualizado |
 | `outdated` | El hash difiere; hay una versión más nueva |
 | `new` | El agente no existe aún en el proyecto |
-| `local` | El agente existe en el proyecto pero no en los niveles 1–3 (agente local) |
+| `local` | El agente existe en el proyecto pero no en los niveles 1–3 |
 | `excluded` | El agente está en `excludedAgents` |
 
 ### Ciclo de vida de un proyecto
 
-**`createProject(data)`:**
-1. Genera `id` con `makeProjectId()`.
-2. Crea la carpeta si no existe.
-3. Escribe `CLAUDE.md` o `copilot-instructions.md` desde `templates.js`.
-4. Llama a `syncProject()` para copiar los agentes iniciales.
-5. Añade el proyecto a `config.projects` y persiste.
+**`createProject(data)`:** genera id, crea carpeta, escribe fichero de contexto, sincroniza agentes, persiste en config.
 
-**`importProject(data)`:**
-Como `createProject` pero la carpeta ya existe. Solo sincroniza agentes y guarda en config.
+**`importProject(data)`:** como `createProject` pero la carpeta ya existe.
 
-**`updateProject(id, changes)`:**
-- Si `aiProvider` cambia: llama a `migrateProjectProvider()` que copia los agentes de nivel 4 al nuevo directorio y crea el fichero de contexto para el nuevo provider.
-- Persiste los cambios en config.
+**`updateProject(id, changes)`:** si `aiProvider` cambia, migra los agentes de nivel 4 al nuevo directorio.
 
-**`deleteProject(id, { deleteFolder })`:**
-Elimina de `config.projects`. Si `deleteFolder: true`, borra el directorio del proyecto del disco.
+**`deleteProject(id, { deleteFolder })`:** elimina de config. Si `deleteFolder: true`, borra el directorio del disco.
 
 ### Ficheros de contexto
 
@@ -462,11 +556,9 @@ Elimina de `config.projects`. Si `deleteFolder: true`, borra el directorio del p
 | `github` | `{path}/.github/copilot-instructions.md` | `getGitHubTemplate(catId, techId, name)` |
 | `both` | Ambos | Ambas |
 
-`getContextFile(project, type)` y `saveContextFile(project, type, content)` abstraen la ruta según provider.
-
 ---
 
-## 7. Integración IA (`ai.js`)
+## 8. Integración IA (`ai.js`)
 
 ### Proveedores soportados
 
@@ -478,213 +570,157 @@ Elimina de `config.projects`. Si `deleteFolder: true`, borra el directorio del p
 
 ### `callAI(prompt, systemPrompt?)`
 
-Punto de entrada único. Lee `config.aiProvider` y delega:
-
-```
-callAI(prompt, system)
-  ├── 'cli'    → callCLI(prompt, system)
-  ├── 'api'    → callAPI(prompt, system)
-  └── 'github' → callGitHub(prompt, system)
-```
-
-**`callCLI`:** Construye el prompt como `[SYSTEM]\n...\n[USER]\n...` y lo pasa por stdin a `claude --print`. En Windows usa `shell: true` para resolver PATH. Timeout de 60 s.
-
-**`callAPI`:** Usa `anthropic.messages.create()` con modelo `claude-sonnet-4-20250514`, `max_tokens: 1500`.
-
-**`callGitHub`:** POST a `https://models.inference.ai.azure.com/chat/completions` con el modelo configurado en `config.githubModel` (por defecto `gpt-4o-mini`), Authorization Bearer con `githubToken`.
+Punto de entrada único. Lee `config.aiProvider` y delega a `callCLI`, `callAPI` o `callGitHub`.
 
 ### Chat multi-turno (`callAIChat`)
 
-Para API y GitHub, convierte `messages[]` al formato nativo del proveedor y envía con `systemPrompt` separado. Para CLI, aplana la conversación en un único prompt de texto (el CLI no soporta mensajes estructurados):
-
-```
-[SYSTEM]
-{systemPrompt}
-
-[USER]
-{messages[0].content}
-
-[ASSISTANT]
-{messages[1].content}
-
-[USER]
-{messages[2].content}
-```
+Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación en texto plano.
 
 ### Funciones de generación
 
-**`generateAgentPrompt({ description, level, tools, lang })`**
-Genera un system prompt completo para un nuevo agente a partir de una descripción informal. El prompt incluye el nivel (global/section/tech), las herramientas disponibles y el idioma de salida (`en`|`es`).
-
-**`generateSuggestions({ level, categoryId, techId, existingNames })`**
-Devuelve un array de 3 agentes en JSON: `[{ name, description, tools, model, system }]`. Usa `parseJSONSafely()` para extraer el JSON aunque la IA envuelva la respuesta en markdown fences.
-
-**`generateProjectSuggestions({ project, contextContent, existingNames })`**
-Similar a `generateSuggestions` pero el prompt incluye el contenido del CLAUDE.md del proyecto como contexto principal. Las sugerencias salen siempre en español.
-
-**`optimizeAgent({ name, description, system, tools, model })`**
-Pide a la IA que mejore el system prompt existente y la descripción manteniendo el foco del agente. Devuelve `{ description, system }`.
+- `generateAgentPrompt({ description, level, tools, lang })` — genera un system prompt desde descripción informal.
+- `generateSuggestions({ level, categoryId, techId, existingNames })` — 3 agentes sugeridos en JSON.
+- `generateProjectSuggestions({ project, contextContent, existingNames })` — sugerencias contextualizadas con el CLAUDE.md del proyecto.
+- `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Devuelve `{ description, system }`.
 
 ### Caché de sugerencias
 
-Las sugerencias por nivel se cachean en `cache/suggestions.json` para evitar llamadas repetidas a la IA.
+Fichero `cache/suggestions.json`. Clave de caché:
 
 ```js
-// Clave de caché
-key = `${level}::${categoryId ?? ''}::${techId ?? ''}`     // niveles 1-3
-key = `project::${projectId}`                               // nivel proyecto
+key = `${level}::${categoryId ?? ''}::${techId ?? ''}`  // niveles 1-3
+key = `project::${projectId}`                            // nivel proyecto
 ```
 
-`getSuggestions()` devuelve el valor cacheado si existe; si no, llama a `generateSuggestions()` y almacena el resultado. `clearSuggestionsCache()` borra el fichero completo.
+---
 
-### `parseJSONSafely(text)`
+## 9. Bandeja del sistema (`tray.js`)
 
-Strips markdown fences (\`\`\`json...\`\`\`), encuentra el primer `[` y el `]` correspondiente, y parsea. Si falla, devuelve `[]`. Imprescindible porque los modelos de IA frecuentemente envuelven el JSON en markdown.
+Icono en la bandeja de Windows. Click izquierdo muestra la ventana; click derecho abre menú con "Abrir", "Reiniciar" y "Salir". `destroyTray()` se llama desde `app.on('before-quit')`.
 
 ---
 
-## 8. Bandeja del sistema (`tray.js`)
+## 10. Bridge IPC (`preload.js`)
 
-### Creación del icono
-
-Intenta cargar `assets/icon.ico` o `assets/icon.png`. Si ninguno existe, genera un `NativeImage` programáticamente (cuadrado sólido 16×16). El icono se redimensiona a 16×16 para el tray de Windows.
-
-### Comportamiento
-
-- **Click izquierdo:** muestra y enfoca la ventana principal.
-- **Click derecho:** menú contextual con tres opciones:
-  - *Abrir Agent Hub* — `mainWindow.show()`
-  - *Reiniciar* — `app.relaunch(); app.quit()`
-  - *Salir* — `app.isQuiting = true; app.quit()`
-
-`createTray(mainWindow)` registra el icono y los handlers. `destroyTray()` se llama desde `app.on('before-quit')` para limpieza.
-
----
-
-## 9. Bridge IPC (`preload.js`)
-
-`contextBridge.exposeInMainWorld('api', {...})` expone un objeto `window.api` al renderer con acceso seguro al main process. El renderer **nunca** usa `require` ni accede directamente a Node.
+`contextBridge.exposeInMainWorld('api', {...})` expone `window.api` al renderer. El renderer **nunca** usa `require` ni accede directamente a Node.
 
 ### API expuesta
 
 ```ts
 window.api = {
-  // App
-  getVersion()         → Promise<string>
-  getAppDir()          → Promise<string>
-  isDev()              → Promise<boolean>
-
-  // Ventana
-  minimize()           → void
-  hide()               → void
-
-  // Shell
-  openPath(p)          → void
-  openExternal(url)    → void
-  openVSCode(p)        → Promise<{ ok: boolean; error?: string }>
-
-  // Diálogos
-  pickFolder()         → Promise<string | null>
-
-  // Diálogo de cierre
-  onCloseRequested(cb) → void   // escucha 'app:close-requested'
-  closeResponse(action, remember) → void  // envía 'app:close-response'
-
-  // Actualizaciones
-  checkForUpdate()     → Promise<any>
-  downloadUpdate()     → Promise<any>
-  installUpdate()      → void
-  onUpdateAvailable(cb)  → void
-  onUpdateProgress(cb)   → void
-  onUpdateReady(cb)      → void
-  onUpdateError(cb)      → void
+  getVersion()             → Promise<string>
+  getAppDir()              → Promise<string>
+  isDev()                  → Promise<boolean>
+  minimize()               → void
+  hide()                   → void
+  openPath(p)              → void
+  openExternal(url)        → void
+  openVSCode(p)            → Promise<{ ok: boolean; error?: string }>
+  pickFolder()             → Promise<string | null>
+  onCloseRequested(cb)     → void
+  closeResponse(action, remember) → void
+  checkForUpdate()         → Promise<any>
+  downloadUpdate()         → Promise<any>
+  installUpdate()          → void
+  onUpdateAvailable(cb)    → void
+  onUpdateProgress(cb)     → void
+  onUpdateReady(cb)        → void
+  onUpdateError(cb)        → void
 }
 ```
 
-### Seguridad
+---
 
-- `nodeIntegration: false` — el renderer no puede usar `require`.
-- `contextIsolation: true` — el renderer y el preload tienen contextos JS separados.
-- Solo se exponen las operaciones necesarias, nunca acceso genérico a IPC o al sistema de archivos.
+## 11. Agentes por defecto (`defaults.js`)
+
+`DEFAULT_AGENTS` está vacío (`{}`). Los agentes ya no se seedean desde código: provienen del Directorio de Agentes externo descargado en el arranque. El fichero se conserva para no romper la importación en `agents.js`, pero no define ningún agente.
 
 ---
 
-## 10. Agentes por defecto (`defaults.js`)
-
-Define `DEFAULT_AGENTS`, un objeto con agentes agrupados por nivel. Se usa en `seedDefaultAgents()` para escribir los `.md` iniciales al arrancar la app por primera vez, y para reseedear cuando un agente por defecto ha sido modificado en una versión nueva.
-
-### Agentes globales (nivel 1)
-
-| Nombre | Modelo | Herramientas | Propósito |
-|---|---|---|---|
-| `code-reviewer` | haiku | Read, Grep | Bugs, antipatrones, performance |
-| `git-helper` | haiku | Bash, Read | Commits, ramas, resolución de conflictos |
-| `test-writer` | sonnet | Read, Write, Grep | Tests unitarios e integración |
-| `doc-writer` | sonnet | Read, Write, Grep | Documentación técnica |
-| `refactor-agent` | sonnet | Read, Write, Grep | Refactorización manteniendo funcionalidad |
-
-### Agentes de sección (nivel 2)
-
-| Sección | Agente | Modelo |
-|---|---|---|
-| games | `game-designer` | sonnet |
-| games | `performance-optimizer` | sonnet |
-| web | `api-designer` | sonnet |
-| web | `security-audit` | sonnet |
-| web | `accessibility` | haiku |
-| mobile | `mobile-ux` | sonnet |
-| docs | `tech-writer` | sonnet |
-| docs | `diagram-maker` | sonnet |
-
-### Agentes de tecnología (nivel 3)
-
-| Tech | Agentes |
-|---|---|
-| games-unity | `unity-dev`, `unity-shader`, `unity-ui` |
-| games-godot | `godot-dev` |
-| web-react | `react-dev`, `css-designer` |
-| web-fullstack | `backend-dev` |
-| web-nextjs | `nextjs-dev` |
-| mobile-react-native | `rn-dev` |
-| mobile-pwa | `pwa-dev` |
-
-### Lógica de reseed
-
-`seedDefaultAgents()` compara el hash del agente en `defaults.js` con el hash del fichero en disco. Si difieren (la definición por defecto cambió en una actualización), sobreescribe el fichero. Si el agente no existe en disco, lo crea. **Nunca borra agentes que existen en disco pero no en `defaults.js`** — esos son agentes personalizados del usuario.
-
----
-
-## 11. Plantillas de contexto (`templates.js`)
+## 12. Plantillas de contexto (`templates.js`)
 
 Genera el contenido inicial de `CLAUDE.md` y `.github/copilot-instructions.md` al crear un proyecto.
 
 ### `getTemplate(categoryId, techId, projectName)`
 
-Devuelve una plantilla específica por combinación categoría-tecnología:
+Plantillas específicas por combinación categoría-tecnología:
 
 | Combinación | Stack documentado |
 |---|---|
-| `games-unity` | Unity 2023 LTS, URP, C#, convenciones de carpetas |
-| `games-godot` | Godot 4, GDScript, señales, type hints |
-| `web-react` | React 18, Vite, TypeScript strict, TailwindCSS, Zustand |
-| `web-fullstack` | React + Express + PostgreSQL + Prisma, monorepo |
-| `web-nextjs` | Next.js 14 App Router, server components, Prisma, NextAuth |
-| `mobile-react-native` | Expo + Expo Router, Reanimated 3, Platform.select |
-| `mobile-pwa` | Vite + Workbox, Lighthouse 90+, 44px touch targets |
-| `docs` | Docusaurus 3, MDX, estructura guides/api/tutorials |
+| `games-unity` | Unity 2023 LTS, URP, C# |
+| `games-godot` | Godot 4, GDScript |
+| `web-react` | React 18, Vite, TypeScript, TailwindCSS, Zustand |
+| `web-fullstack` | React + Express + PostgreSQL + Prisma |
+| `web-nextjs` | Next.js 14 App Router, Prisma, NextAuth |
+| `mobile-react-native` | Expo + Expo Router, Reanimated 3 |
+| `mobile-pwa` | Vite + Workbox, Lighthouse 90+ |
+| `docs` | Docusaurus 3, MDX |
 
-Si no hay plantilla específica para la combinación, devuelve una plantilla genérica mínima con el nombre del proyecto.
+Si no hay plantilla específica, devuelve una plantilla genérica mínima.
 
 ### `getGitHubTemplate(categoryId, techId, projectName)`
 
-Misma lógica que `getTemplate` pero adapta el contenido para Copilot:
-- Sustituye "Rules" → "Coding standards".
-- Elimina referencias a "Claude Code".
-- Ajusta el tono para instrucciones de Copilot.
+Misma lógica adaptada para Copilot: sustituye "Rules" → "Coding standards" y elimina referencias a Claude Code.
 
 ---
 
-## 12. Flujos clave end-to-end
+## 13. Flujos clave end-to-end
+
+### Primer arranque con Directorio de Agentes
+
+```
+main.js: app.whenReady()
+  │
+  ├── bootstrapDirectories()
+  ├── migrateAgentFiles()
+  ├── startServer()                      ← Express levantado
+  ├── createWindow()                     ← ventana visible
+  │
+  └── agentsSync.triggerSync(url, isFirst=true)  ← async, no bloquea
+        │
+        ├── fetchHeadSHA()               ← 1 req a GitHub API
+        ├── fetchTree()                  ← 1 req a GitHub API
+        └── para cada .md:
+            └── downloadRaw()            ← raw.githubusercontent.com
+                writeFile()
+
+  Renderer: GET /api/agents-directory/status → { firstSync: true, syncing: true }
+    └── muestra overlay de progreso
+    └── polling cada 600ms
+    └── cuando syncing=false → recarga agentes, quita overlay
+```
+
+### Sync manual desde Settings
+
+```
+Usuario: botón "Sincronizar ahora"
+Frontend: POST /api/agents-directory/sync
+  │
+  server.js → agentsSync.triggerSync(url, false)  ← fire and forget
+  ← { ok: true }
+  │
+  Frontend: polling de GET /api/agents-directory/status cada 600ms
+    └── cuando syncing=false → toast con resultado
+```
+
+### Resolución de conflictos
+
+```
+Sync detecta: remoteSHA cambió + diskSHA ≠ meta.localSHA
+  └── conflict encola en syncState.pendingConflicts
+
+Renderer: GET /api/agents-directory/status → pendingConflicts.length > 0
+  └── muestra modal de conflicto
+
+Usuario elige:
+  ├── "Mantener mi versión"
+  │   → POST /resolve-conflict { action: 'keep' }
+  │   → meta.localSHA = diskSHA actual (no descarga nada)
+  │
+  └── "Actualizar desde directorio"
+      → POST /resolve-conflict { action: 'update' }
+      → downloadRaw() + writeFile() + actualizar meta
+```
 
 ### Crear un proyecto nuevo
 
@@ -692,33 +728,29 @@ Misma lógica que `getTemplate` pero adapta el contenido para Copilot:
 Frontend: POST /api/projects { name, categoryId, techId, path, aiProvider }
   │
   server.js → projects.createProject(data)
-    ├── makeProjectId()                    → id = 'p' + Date.now() + random
+    ├── makeProjectId()
     ├── fs.mkdirSync(path, recursive)
     ├── templates.getTemplate(catId, tech) → escribe CLAUDE.md
     ├── syncProject(id)
     │   └── getApplicableAgents(project)  → global + section + tech
     │       para cada agente → saveProjectAgent() + hash
     └── writeConfig(cfg con nuevo proyecto)
-  │
   ← { project }
 ```
 
 ### Sync de un agente actualizado
 
 ```
-Usuario edita un agente global en la UI
+Usuario edita agente global en la UI
 Frontend: PUT /api/agents { level:'global', agent }
   │
-  server.js → agents.updateAgent() → sobreescribe agents/global/nombre.md
+  agents.updateAgent() → sobreescribe agents/global/nombre.md
   │
   Frontend: POST /api/projects/:id/sync
     │
-    server.js → projects.syncProject(id)
-      ├── getApplicableAgents()        → lista agentes aplicables
+    projects.syncProject(id)
       ├── hashAgent(agente modificado) ≠ project.agentHashes['nombre']
-      └── saveProjectAgent()           → copia a .claude/agents/nombre.md
-          + actualiza agentHashes['nombre'] en config
-  │
+      └── saveProjectAgent() → copia a .claude/agents/nombre.md
   ← { added: 0, updated: 1, skipped: N }
 ```
 
@@ -727,51 +759,9 @@ Frontend: PUT /api/agents { level:'global', agent }
 ```
 Frontend: POST /api/chat { messages, systemPrompt }
   │
-  server.js → ai.callAIChat(messages, systemPrompt)
-    │
-    ├── provider 'cli'    → texto aplanado → spawn claude --print
-    ├── provider 'api'    → anthropic.messages.create({ system, messages })
-    └── provider 'github' → fetch Azure inference endpoint
-  │
+  ai.callAIChat(messages, systemPrompt)
+    ├── 'cli'    → texto aplanado → spawn claude --print
+    ├── 'api'    → anthropic.messages.create({ system, messages })
+    └── 'github' → fetch Azure inference endpoint
   ← { reply: string }
-```
-
-El `systemPrompt` lo construye el renderer concatenando los system prompts de todos los agentes activos (@mention) + la instrucción de sugerir acciones.
-
-### Generación de sugerencias de agentes
-
-```
-Frontend: GET /api/ai/suggestions?level=section&categoryId=web
-  │
-  server.js → ai.getSuggestions({ level, categoryId })
-    │
-    ├── getCachedSuggestions('section::web::') → ¿existe en cache/suggestions.json?
-    │   └── sí → devuelve array cacheado
-    │   └── no →
-    │       generateSuggestions({ level, categoryId })
-    │         └── callAI(prompt) → parseJSONSafely(respuesta)
-    │       writeSuggestionsCache('section::web::', result)
-    └── ← [{ name, description, tools, model, system }, ...]
-```
-
-### Cierre de ventana con diálogo personalizado
-
-```
-Usuario pulsa X en la ventana
-  │
-  main.js: mainWindow.on('close') → handleClose()
-    │
-    ├── readConfig().closeAction === 'ask'
-    │   │
-    │   ├── mainWindow.webContents.send('app:close-requested')
-    │   └── ipcMain.once('app:close-response', handler)
-    │
-  renderer: preload.onCloseRequested → setShowCloseDialog(true)
-  renderer: <CloseDialog> → usuario elige tray/quit + remember
-  renderer: preload.closeResponse(action, remember)
-    │
-  main.js: ipcMain.once handler recibe { action, remember }
-    ├── remember === true → writeConfig({ closeAction: action })
-    ├── action === 'tray' → mainWindow.hide()
-    └── action === 'quit' → app.isQuiting = true; app.quit()
 ```

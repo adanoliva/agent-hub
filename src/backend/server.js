@@ -22,6 +22,7 @@ const {
   syncGlobalAgentsToClaudeDir,
   parseAgentFromString,
 } = require('./agents');
+const agentsSync = require('./agents-sync');
 const {
   createProject,
   importProject,
@@ -57,13 +58,16 @@ app.get('/api/config', (req, res) => {
 
 app.put('/api/config', (req, res) => {
   const cfg = readConfig();
-  const { apiKey, aiProvider, githubToken, githubModel, theme, closeAction } = req.body;
-  if (apiKey       !== undefined) cfg.apiKey       = apiKey;
-  if (aiProvider   !== undefined) cfg.aiProvider   = aiProvider;
-  if (githubToken  !== undefined) cfg.githubToken  = githubToken;
-  if (githubModel  !== undefined) cfg.githubModel  = githubModel;
-  if (theme        !== undefined) cfg.theme        = theme;
-  if (closeAction  !== undefined && ['ask','tray','quit'].includes(closeAction)) cfg.closeAction = closeAction;
+  const { apiKey, aiProvider, githubToken, githubModel, theme, closeAction,
+          agentsDirectoryUrl, agentsDirectoryEnabled } = req.body;
+  if (apiKey                !== undefined) cfg.apiKey                = apiKey;
+  if (aiProvider            !== undefined) cfg.aiProvider            = aiProvider;
+  if (githubToken           !== undefined) cfg.githubToken           = githubToken;
+  if (githubModel           !== undefined) cfg.githubModel           = githubModel;
+  if (theme                 !== undefined) cfg.theme                 = theme;
+  if (closeAction           !== undefined && ['ask','tray','quit'].includes(closeAction)) cfg.closeAction = closeAction;
+  if (agentsDirectoryUrl    !== undefined) cfg.agentsDirectoryUrl    = agentsDirectoryUrl;
+  if (agentsDirectoryEnabled !== undefined) cfg.agentsDirectoryEnabled = Boolean(agentsDirectoryEnabled);
   writeConfig(cfg);
   res.json({ ok: true });
 });
@@ -87,9 +91,14 @@ app.post('/api/setup', (req, res) => {
   if (apiKey)     cfg.apiKey     = apiKey;
   if (aiProvider) cfg.aiProvider = aiProvider;
   bootstrapDirectories(cfg);
-  const created = seedDefaultAgents();
   writeConfig(cfg);
-  res.json({ ok: true, appDir: APP_DIR, agentsCreated: created });
+  // Trigger directory sync after wizard completes (non-blocking)
+  if (cfg.agentsDirectoryEnabled !== false) {
+    const agentsSync = require('./agents-sync');
+    const url = cfg.agentsDirectoryUrl || 'https://github.com/adanoliva/agents-directory';
+    agentsSync.triggerSync(url, !agentsSync.metaExists()).catch(() => {});
+  }
+  res.json({ ok: true, appDir: APP_DIR, agentsCreated: 0 });
 });
 
 // ── Categories ────────────────────────────────────────────────────────────────
@@ -156,6 +165,51 @@ app.delete('/api/categories/:catId/technologies/:techId', (req, res) => {
   cat.technologies = cat.technologies.filter(t => t.id !== req.params.techId);
   writeConfig(cfg);
   res.json({ ok: true });
+});
+
+// ── Agents Directory ──────────────────────────────────────────────────────────
+
+app.get('/api/agents-directory/status', (req, res) => {
+  const cfg   = readConfig();
+  const state = agentsSync.getSyncState();
+  const meta  = agentsSync.readMeta();
+  res.json({
+    enabled:          cfg.agentsDirectoryEnabled !== false,
+    url:              cfg.agentsDirectoryUrl || 'https://github.com/adanoliva/agents-directory',
+    syncing:          state.syncing,
+    firstSync:        state.firstSync,
+    progress:         state.progress,
+    lastSync:         meta?.lastSync || null,
+    repoCommitSHA:    meta?.repoCommitSHA || null,
+    agentCount:       Object.keys(meta?.files || {}).length,
+    pendingConflicts: state.pendingConflicts,
+    lastResult:       state.lastResult,
+  });
+});
+
+app.post('/api/agents-directory/sync', (req, res) => {
+  const cfg = readConfig();
+  if (cfg.agentsDirectoryEnabled === false) {
+    return res.status(400).json({ error: 'Directorio de agentes desactivado' });
+  }
+  const url = cfg.agentsDirectoryUrl || 'https://github.com/adanoliva/agents-directory';
+  agentsSync.triggerSync(url, false).catch(() => {});
+  res.json({ ok: true });
+});
+
+app.post('/api/agents-directory/resolve-conflict', async (req, res) => {
+  const { fileKey, action } = req.body;
+  if (!fileKey || !['keep', 'update'].includes(action)) {
+    return res.status(400).json({ error: 'fileKey y action (keep|update) son obligatorios' });
+  }
+  const cfg = readConfig();
+  const url = cfg.agentsDirectoryUrl || 'https://github.com/adanoliva/agents-directory';
+  try {
+    await agentsSync.resolveConflict(fileKey, action, url);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Agent import from URL ─────────────────────────────────────────────────────

@@ -27,7 +27,12 @@
       "PowerShell(Get-NetTCPConnection *)",
       "Bash(git tag *)",
       "Bash(Select-Object FullName)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(node -e \"require\\('./src/backend/config'\\)\")",
+      "Bash(node --check src/backend/agents-sync.js)",
+      "Bash(node --check src/backend/defaults.js)",
+      "Bash(node --check src/backend/server.js)",
+      "Bash(node --check src/backend/main.js)"
     ]
   }
 }

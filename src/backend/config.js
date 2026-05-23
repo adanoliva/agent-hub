@@ -58,6 +58,8 @@ const DEFAULT_CONFIG = {
   githubModel: 'gpt-4o-mini',
   theme: 'dark',       // 'dark' | 'light'
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
+  agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
+  agentsDirectoryEnabled: true,
   categories: [
     {
       id: 'games',
@@ -125,10 +127,11 @@ function writeConfig(cfg) {
 
 function getAgentDir(level, sectionId, techId) {
   switch (level) {
-    case 'global':  return path.join(AGENTS_DIR, 'global');
-    case 'section': return path.join(AGENTS_DIR, `section-${sectionId}`);
-    case 'tech':    return path.join(AGENTS_DIR, `tech-${sectionId}-${techId}`);
-    default:        return null;
+    case 'global':        return path.join(AGENTS_DIR, 'global');
+    case 'section':       return path.join(AGENTS_DIR, `section-${sectionId}`);
+    case 'tech':          return path.join(AGENTS_DIR, `tech-${sectionId}-${techId}`);
+    case 'uncategorized': return path.join(AGENTS_DIR, 'uncategorized');
+    default:              return null;
   }
 }
 
@@ -142,6 +145,7 @@ function bootstrapDirectories(cfg) {
   ensureDir(AGENTS_DIR);
   ensureDir(CACHE_DIR);
   ensureDir(path.join(AGENTS_DIR, 'global'));
+  ensureDir(path.join(AGENTS_DIR, 'uncategorized'));
 
   for (const cat of (cfg.categories || [])) {
     ensureDir(path.join(AGENTS_DIR, `section-${cat.id}`));

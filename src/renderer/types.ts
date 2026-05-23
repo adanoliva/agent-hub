@@ -58,14 +58,44 @@ export interface Config {
   githubModel: string;
   theme: 'dark' | 'light';
   closeAction?: 'ask' | 'tray' | 'quit';
+  agentsDirectoryUrl?: string;
+  agentsDirectoryEnabled?: boolean;
   categories: Category[];
   projects: Project[];
+}
+
+export interface SyncConflict {
+  fileKey:    string;
+  localPath:  string;
+  remotePath: string;
+  remoteSHA:  string;
+  localSHA:   string;
+  name:       string;
+}
+
+export interface AgentSyncProgress {
+  done:    number;
+  total:   number;
+  current: string;
+}
+
+export interface AgentDirectoryStatus {
+  enabled:          boolean;
+  url:              string;
+  syncing:          boolean;
+  firstSync:        boolean;
+  progress:         AgentSyncProgress;
+  lastSync:         string | null;
+  repoCommitSHA:    string | null;
+  agentCount:       number;
+  pendingConflicts: SyncConflict[];
+  lastResult:       { updated: number; skipped: number; errors: { path: string; error: string }[]; error?: string; upToDate?: boolean } | null;
 }
 
 export type View = 'projects' | 'agents' | 'chat' | 'settings';
 
 export interface SelectedNode {
-  level: 'global' | 'section' | 'tech' | 'project';
+  level: 'global' | 'section' | 'tech' | 'project' | 'uncategorized';
   categoryId: string | null;
   techId: string | null;
   projectId: string | null;

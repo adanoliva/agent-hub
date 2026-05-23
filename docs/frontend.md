@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-22
+> Última actualización: 2026-05-23
 
 ---
 
@@ -254,7 +254,7 @@ interface Agent {
   system:      string;           // system prompt
   optimized?:  boolean;          // true si fue optimizado con IA
   // Solo en agentes de la lista (no en editor)
-  level?:      'global' | 'section' | 'tech' | 'project';
+  level?:      'global' | 'section' | 'tech' | 'project' | 'uncategorized';
   categoryId?: string | null;
   techId?:     string | null;
   projectId?:  string | null;
@@ -280,15 +280,17 @@ interface Project {
 }
 
 interface Config {
-  version:      string;
-  aiProvider:   'cli' | 'api' | 'github';
-  apiKey:       string;
-  githubToken:  string;
-  githubModel:  string;
-  theme:        'dark' | 'light';
-  closeAction?: 'ask' | 'tray' | 'quit';
-  categories:   Category[];
-  projects:     Project[];
+  version:                 string;
+  aiProvider:              'cli' | 'api' | 'github';
+  apiKey:                  string;
+  githubToken:             string;
+  githubModel:             string;
+  theme:                   'dark' | 'light';
+  closeAction?:            'ask' | 'tray' | 'quit';
+  agentsDirectoryUrl?:     string;   // URL del repo GitHub de agentes externos
+  agentsDirectoryEnabled?: boolean;  // false para deshabilitar sync al inicio
+  categories:              Category[];
+  projects:                Project[];
 }
 
 interface SyncEntry {
@@ -298,10 +300,45 @@ interface SyncEntry {
 type SyncStatus = Record<string, SyncEntry>;
 
 interface SelectedNode {
-  level:      'global' | 'section' | 'tech' | 'project';
+  level:      'global' | 'section' | 'tech' | 'project' | 'uncategorized';
   categoryId: string | null;
   techId:     string | null;
   projectId:  string | null;
+}
+
+// Sync del directorio de agentes (agents-sync.js)
+interface SyncConflict {
+  fileKey:    string;   // clave única: ruta relativa en el repo remoto
+  localPath:  string;   // ruta absoluta en disco
+  remotePath: string;   // ruta relativa en el repo
+  remoteSHA:  string;   // git blob SHA del archivo remoto actual
+  localSHA:   string;   // git blob SHA del archivo en disco actual
+  name:       string;   // nombre del agente
+}
+
+interface AgentSyncProgress {
+  done:    number;
+  total:   number;
+  current: string;  // nombre del archivo en proceso
+}
+
+interface AgentDirectoryStatus {
+  enabled:          boolean;
+  url:              string;
+  syncing:          boolean;
+  firstSync:        boolean;   // true si cache/agents-meta.json no existía al iniciar
+  progress:         AgentSyncProgress;
+  lastSync:         string | null;      // ISO timestamp
+  repoCommitSHA:    string | null;
+  agentCount:       number;
+  pendingConflicts: SyncConflict[];
+  lastResult: {
+    updated:   number;
+    skipped:   number;
+    errors:    Array<{ file: string; error: string }>;
+    error?:    string;   // error global (ej. fallo de red)
+    upToDate?: boolean;  // sin cambios
+  } | null;
 }
 ```
 
@@ -345,6 +382,7 @@ interface SelectedNode {
 | `section` | `var(--blue)` |
 | `tech` | `var(--green)` |
 | `project` | `var(--amber)` |
+| `uncategorized` | `var(--text3)` |
 
 ### `hooks/useToast.ts`
 
@@ -761,11 +799,14 @@ Panel izquierdo de la vista de agentes. Árbol de nodos navegables:
 ▾ Proyectos
     Mi App                        ← nivel project
     Otro Proyecto  [2↑]           ← badge de pendingUpdates
+Sin categoría                     ← nivel uncategorized (ti-folder-question)
 ```
 
 Cada nodo es clickable y selecciona el `SelectedNode` activo. Los nodos de categoría y la sección "Proyectos" son colapsables con estado en `Set<string>` local.
 
 `isActive(node)` compara el nodo dado con el seleccionado para aplicar `.active`.
+
+**Nodo "Sin categoría":** se muestra siempre al final del árbol (con `marginTop: 8`). Representa los agentes descargados del directorio remoto que no siguen la nomenclatura estándar de carpetas (`global/`, `section-*/`, `tech-*-*/`). Usa el icono `ti-folder-question` y color `var(--text3)`. Al seleccionarlo se carga el nivel `uncategorized` desde el backend (`GET /api/agents?level=uncategorized`).
 
 ### `AgentsCenter.tsx`
 
@@ -841,7 +882,7 @@ Después de cualquier mutación (crear, editar, borrar, sync) llama a `fetchProj
 
 Vista de tres paneles.
 
-**Estado local (todo en `useState`):**
+**Estado local (todo en `useState` / `useRef`):**
 
 ```ts
 const [node,               setNode]               = useState<SelectedNode>(DEFAULT_NODE);
@@ -852,7 +893,61 @@ const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 const [selectedAgent,      setSelectedAgent]      = useState<Agent | null>(null);
 const [editorAgent,        setEditorAgent]        = useState<Agent | null>(null);
 const [editorIsNew,        setEditorIsNew]        = useState(false);
+// Directorio de agentes externos
+const [syncStatus,         setSyncStatus]         = useState<AgentDirectoryStatus | null>(null);
+const [showConflicts,      setShowConflicts]      = useState(false);
+const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 ```
+
+**Polling del estado de sync:** al montar la página, se inicia un `setInterval` de 600 ms que llama a `GET /api/agents-directory/status`. Cuando `syncing` pasa de `true` a `false`, se recargan los agentes del nodo activo. El intervalo se limpia en el `useEffect` de cleanup.
+
+```ts
+useEffect(() => {
+  pollRef.current = setInterval(async () => {
+    const st = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
+    setSyncStatus(prev => {
+      if (prev?.syncing && !st.syncing) loadAgents(node); // sync terminó → recargar
+      return st;
+    });
+  }, 600);
+  return () => { if (pollRef.current) clearInterval(pollRef.current); };
+}, []);
+```
+
+**Overlay de primer arranque:** cuando `syncStatus.firstSync && syncStatus.syncing` es `true`, se renderiza un overlay de pantalla completa que bloquea la interacción. Muestra una barra de progreso determinada (`done / total`) y el nombre del archivo en proceso (`current`).
+
+```tsx
+{syncStatus?.firstSync && syncStatus.syncing && (
+  <div className="sync-overlay">
+    <i className="ti ti-cloud-download" />
+    <p>Descargando directorio de agentes…</p>
+    <div className="sync-progress-bar">
+      <div style={{ width: `${(syncStatus.progress.done / syncStatus.progress.total) * 100}%` }} />
+    </div>
+    <span>{syncStatus.progress.done} / {syncStatus.progress.total} — {syncStatus.progress.current}</span>
+  </div>
+)}
+```
+
+**Modal de conflictos:** cuando `syncStatus.pendingConflicts.length > 0`, aparece un botón en el topbar `"N conflictos"` (badge coral). Al hacer click abre `showConflicts = true`. El modal lista cada conflicto con dos botones:
+- **Usar remoto** → `POST /api/agents-directory/resolve-conflict { fileKey, action: 'remote' }`
+- **Mantener local** → `POST /api/agents-directory/resolve-conflict { fileKey, action: 'local' }`
+
+Tras resolver todos, el modal se cierra y se recargan los agentes.
+
+```ts
+async function resolveConflict(fileKey: string, action: 'remote' | 'local') {
+  await req('POST', '/agents-directory/resolve-conflict', { fileKey, action });
+  const updated = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
+  setSyncStatus(updated);
+  if (updated.pendingConflicts.length === 0) {
+    setShowConflicts(false);
+    loadAgents(node);
+  }
+}
+```
+
+**`loadAgents`:** acepta `level === 'uncategorized'` → llama `GET /api/agents?level=uncategorized`. Las sugerencias de IA se omiten cuando el nivel es `uncategorized` (no hay contexto de categoría/tecnología para generarlas).
 
 **AbortController por nodo:** cada vez que cambia el nodo seleccionado, se aborta la petición de sugerencias en curso y se lanza una nueva. Evita condiciones de carrera si el usuario navega rápido.
 
@@ -864,7 +959,7 @@ function selectNode(n: SelectedNode) {
   abortRef.current = new AbortController();
   setNode(n);
   loadAgents(n);
-  loadSuggestions(n, abortRef.current.signal);
+  if (n.level !== 'uncategorized') loadSuggestions(n, abortRef.current.signal);
 }
 ```
 
@@ -964,7 +1059,9 @@ async function handleSend() {
 
 ### `Settings.tsx`
 
-Tres tabs: **General**, **Categorías**, **Agentes externos**.
+Tres tabs: **General**, **Categorías**, **Directorio de Agentes**.
+
+> El tab se llamaba "Agentes externos" hasta la v1.5. Renombrado a "Directorio de Agentes" a partir de v1.6 para reflejar la integración con el repositorio remoto configurable.
 
 **Estado local:**
 
@@ -975,6 +1072,11 @@ const [updateMsg,  setUpdateMsg]  = useState('');
 const [ghToken,    setGhToken]    = useState('');
 const [ghModel,    setGhModel]    = useState('gpt-4o-mini');
 const [apiKey,     setApiKey]     = useState('');
+// Directorio de agentes
+const [dirUrl,     setDirUrl]     = useState('');
+const [dirEnabled, setDirEnabled] = useState(true);
+const [dirStatus,  setDirStatus]  = useState<AgentDirectoryStatus | null>(null);
+const [dirSyncing, setDirSyncing] = useState(false);
 // + estados de modales: addCat, addTech, importReview
 ```
 
@@ -1013,10 +1115,40 @@ Row 3 (full-width):
 
 **Tab Categorías:** lista todas las categorías con sus tecnologías. Modales para añadir/borrar categorías y tecnologías. `POST/DELETE /categories`, `POST/DELETE /categories/:id/technologies`.
 
-**Tab Agentes externos:** importa un agente desde una URL de GitHub raw o similar. Flujo en dos pasos:
-1. `POST /agents/import-url` → parsea el `.md` y devuelve el agente.
-2. Modal de revisión con campos editables + selector de destino (global / section / tech).
-3. `POST /agents` con el agente revisado.
+**Tab Directorio de Agentes:**
+
+Al abrir este tab se llama `GET /api/agents-directory/status` para obtener el estado actual y poblar `dirUrl` y `dirEnabled` desde la configuración.
+
+```
+Sección "Repositorio":
+├── Toggle "Habilitar sincronización" → PUT /api/config { agentsDirectoryEnabled }
+└── Input URL del repositorio + botón "Guardar"
+    → PUT /api/config { agentsDirectoryUrl }
+    → Valida que sea URL de GitHub válida antes de guardar
+
+Sección "Estado":
+├── Última sincronización (ISO → formato legible)
+├── Commit SHA del repo (últimas 7 chars)
+├── Número de agentes descargados (si > 0)
+└── Botón "Sincronizar ahora" → POST /api/agents-directory/sync
+    (deshabilitado si dirSyncing o !dirEnabled)
+
+Sección "Conflictos" (solo si pendingConflicts.length > 0):
+└── Lista de conflictos, por cada uno:
+    ├── Nombre del agente + ruta remota
+    ├── btn "Usar remoto" → POST /api/agents-directory/resolve-conflict { action: 'remote' }
+    └── btn "Mantener local" → POST /api/agents-directory/resolve-conflict { action: 'local' }
+
+Separador "— Importar agente externo —"
+
+Sección "Importar desde URL":
+├── Input URL de un agente .md individual
+├── Botón "Importar" → POST /api/agents/import-url
+└── Modal de revisión con campos editables + selector de destino
+    → POST /api/agents con el agente revisado
+```
+
+`saveDirConfig()` guarda la URL y el estado habilitado. `triggerSync()` lanza el sync y espera polling del estado cada 600 ms hasta que `syncing` vuelva a `false`, actualizando `dirStatus`.
 
 **`ProviderOption`** — sub-componente inline:
 

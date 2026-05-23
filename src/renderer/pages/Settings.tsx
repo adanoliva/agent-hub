@@ -5,7 +5,7 @@ import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
-import type { Agent, Category, Config } from '../types';
+import type { Agent, AgentDirectoryStatus, Category, Config } from '../types';
 
 type Tab = 'general' | 'cats' | 'ext-agents';
 
@@ -34,6 +34,13 @@ export function Settings() {
   const [ghToken,     setGhToken]     = useState(config?.githubToken ?? '');
   const [ghModel,     setGhModel]     = useState(config?.githubModel ?? 'gpt-4o-mini');
   const [apiKey,      setApiKey]      = useState(config?.apiKey ?? '');
+
+  // Directory state
+  const DEFAULT_DIR_URL = 'https://github.com/adanoliva/agents-directory';
+  const [dirUrl,      setDirUrl]      = useState(config?.agentsDirectoryUrl ?? DEFAULT_DIR_URL);
+  const [dirEnabled,  setDirEnabled]  = useState(config?.agentsDirectoryEnabled ?? true);
+  const [dirStatus,   setDirStatus]   = useState<AgentDirectoryStatus | null>(null);
+  const [dirSyncing,  setDirSyncing]  = useState(false);
 
   // modals
   const [addCat,      setAddCat]      = useState<AddCatForm | null>(null);
@@ -68,8 +75,19 @@ export function Settings() {
       setGhToken(config.githubToken ?? '');
       setGhModel(config.githubModel ?? 'gpt-4o-mini');
       setApiKey(config.apiKey ?? '');
+      setDirUrl(config.agentsDirectoryUrl ?? DEFAULT_DIR_URL);
+      setDirEnabled(config.agentsDirectoryEnabled ?? true);
     }
   }, [config]);
+
+  // Load directory status when tab is open
+  React.useEffect(() => {
+    if (tab === 'ext-agents') {
+      req<AgentDirectoryStatus>('GET', '/agents-directory/status')
+        .then(setDirStatus)
+        .catch(() => {});
+    }
+  }, [tab]);
 
   // ── provider actions ─────────────────────────────────────────────────────────
 
@@ -172,6 +190,36 @@ export function Settings() {
     toast('Tecnología eliminada');
   }
 
+  // ── agents directory ─────────────────────────────────────────────────────────
+
+  async function saveDirConfig() {
+    await req('PUT', '/config', { agentsDirectoryUrl: dirUrl.trim(), agentsDirectoryEnabled: dirEnabled });
+    await refreshConfig();
+    toast('Configuración del directorio guardada');
+  }
+
+  async function triggerSync() {
+    setDirSyncing(true);
+    try {
+      await req('POST', '/agents-directory/sync');
+      // Poll until done
+      const poll = async () => {
+        const s = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
+        setDirStatus(s);
+        if (s.syncing) setTimeout(poll, 600);
+        else {
+          setDirSyncing(false);
+          if (s.lastResult?.error) toast('Error: ' + s.lastResult.error, 'err');
+          else toast(`Sincronizado: ${s.lastResult?.updated ?? 0} actualizado(s), ${s.lastResult?.skipped ?? 0} sin cambios`);
+        }
+      };
+      setTimeout(poll, 600);
+    } catch (e: any) {
+      setDirSyncing(false);
+      toast('Error al sincronizar: ' + e.message, 'err');
+    }
+  }
+
   // ── import agent from URL ────────────────────────────────────────────────────
 
   async function importFromUrl() {
@@ -247,7 +295,7 @@ export function Settings() {
         <div className="drawer-tabs" style={{ margin: '-32px -32px 24px', paddingLeft: 32 }}>
           {(['general', 'cats', 'ext-agents'] as Tab[]).map((t) => (
             <div key={t} className={`drawer-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : 'Agentes externos'}
+              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : 'Directorio de Agentes'}
             </div>
           ))}
         </div>
@@ -451,28 +499,129 @@ export function Settings() {
           </div>
         )}
 
-        {/* ── Tab: Agentes externos ── */}
+        {/* ── Tab: Directorio de Agentes ── */}
         {tab === 'ext-agents' && (
-          <div className="settings-section">
-            <div className="settings-head">Importar agente externo</div>
-            <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 16, marginTop: 0 }}>
-              Introduce la URL de un archivo de agente (<code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>.md</code> con frontmatter). Agent Hub lo descargará, lo mostrará para revisión y lo guardará como un agente real en la categoría que elijas.
-            </p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-                <label>URL del agente</label>
-                <input
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                  placeholder="https://ejemplo.com/mi-agente.md"
-                  style={{ fontFamily: 'var(--mono)', fontSize: 12 }}
-                />
+          <>
+            {/* Directory config */}
+            <div className="settings-section">
+              <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Directorio de Agentes</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, fontSize: 12, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={dirEnabled}
+                    onChange={(e) => setDirEnabled(e.target.checked)}
+                  />
+                  Activado
+                </label>
               </div>
-              <button className="btn" onClick={importFromUrl} disabled={importBusy} style={{ flexShrink: 0, marginBottom: 0 }}>
-                {importBusy ? <><i className="ti ti-loader-2" /> Importando…</> : <><i className="ti ti-download" /> Importar</>}
-              </button>
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 16, marginTop: 0 }}>
+                Repositorio GitHub que actúa como fuente de agentes. Los agentes se descargan al arrancar y se versionan por archivo.
+              </p>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16 }}>
+                <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>URL del repositorio</label>
+                  <input
+                    value={dirUrl}
+                    onChange={(e) => setDirUrl(e.target.value)}
+                    placeholder="https://github.com/owner/repo"
+                    style={{ fontFamily: 'var(--mono)', fontSize: 12 }}
+                    disabled={!dirEnabled}
+                  />
+                </div>
+                <button className="btn" onClick={saveDirConfig} style={{ flexShrink: 0, marginBottom: 0 }}>
+                  <i className="ti ti-device-floppy" /> Guardar
+                </button>
+              </div>
+
+              {/* Status row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {dirStatus?.lastSync ? (
+                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+                    <i className="ti ti-clock" style={{ marginRight: 4 }} />
+                    Última sync: {new Date(dirStatus.lastSync).toLocaleString()}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>Sin sincronizar</span>
+                )}
+                {(dirStatus?.agentCount ?? 0) > 0 && (
+                  <span className="badge gray">
+                    <i className="ti ti-cpu" />{dirStatus!.agentCount} agentes
+                  </span>
+                )}
+                {(dirStatus?.pendingConflicts?.length ?? 0) > 0 && (
+                  <span className="badge amber">
+                    <i className="ti ti-git-merge" />{dirStatus!.pendingConflicts.length} conflicto(s)
+                  </span>
+                )}
+                <button
+                  className="btn sm"
+                  onClick={triggerSync}
+                  disabled={dirSyncing || !dirEnabled}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  {dirSyncing
+                    ? <><i className="ti ti-loader-2" /> Sincronizando…</>
+                    : <><i className="ti ti-refresh" /> Sincronizar ahora</>}
+                </button>
+              </div>
+
+              {/* Pending conflicts */}
+              {dirStatus && dirStatus.pendingConflicts?.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--amber)' }}>
+                    <i className="ti ti-git-merge" style={{ marginRight: 6 }} />Conflictos pendientes
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {dirStatus.pendingConflicts.map((c) => (
+                      <div key={c.fileKey} style={{
+                        background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                      }}>
+                        <i className="ti ti-file-text" style={{ color: 'var(--text3)' }} />
+                        <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--mono)' }}>{c.name}</span>
+                        <button className="btn sm" onClick={async () => {
+                          await req('POST', '/agents-directory/resolve-conflict', { fileKey: c.fileKey, action: 'keep' });
+                          const s = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
+                          setDirStatus(s);
+                          toast('Versión local conservada');
+                        }}>Mantener la mía</button>
+                        <button className="btn sm accent" onClick={async () => {
+                          await req('POST', '/agents-directory/resolve-conflict', { fileKey: c.fileKey, action: 'update' });
+                          const s = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
+                          setDirStatus(s);
+                          toast('Agente actualizado desde el directorio');
+                        }}>Actualizar</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+
+            {/* Import single agent from URL */}
+            <div className="settings-section">
+              <div className="settings-head">Importar agente puntual</div>
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 16, marginTop: 0 }}>
+                Introduce la URL de un archivo <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>.md</code> con frontmatter para importarlo una sola vez.
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>URL del agente</label>
+                  <input
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    placeholder="https://ejemplo.com/mi-agente.md"
+                    style={{ fontFamily: 'var(--mono)', fontSize: 12 }}
+                  />
+                </div>
+                <button className="btn" onClick={importFromUrl} disabled={importBusy} style={{ flexShrink: 0, marginBottom: 0 }}>
+                  {importBusy ? <><i className="ti ti-loader-2" /> Importando…</> : <><i className="ti ti-download" /> Importar</>}
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 

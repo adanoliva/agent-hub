@@ -8,7 +8,8 @@ const path = require('path');
 const { startServer, PORT }                                      = require('./server');
 const { createTray, destroyTray }                                = require('./tray');
 const { readConfig, bootstrapDirectories, APP_DIR }              = require('./config');
-const { migrateAgentFiles, seedDefaultAgents, syncGlobalAgentsToClaudeDir } = require('./agents');
+const { migrateAgentFiles, syncGlobalAgentsToClaudeDir }         = require('./agents');
+const agentsSync                                                  = require('./agents-sync');
 
 const isDev = !app.isPackaged;
 
@@ -180,14 +181,11 @@ app.whenReady().then(async () => {
   const cfg = readConfig();
   bootstrapDirectories(cfg);
 
-  // Migrate existing agent files to current format, reseed defaults,
-  // and mirror global agents to ~/.claude/agents/
+  // Migrate existing agent files to current serialization format
   const migrated = migrateAgentFiles();
-  const seeded   = seedDefaultAgents();
-  const synced   = syncGlobalAgentsToClaudeDir();
-  console.log(`[main] Agents: ${migrated} migrated, ${seeded} reseeded, ${synced} synced to ~/.claude/agents/`);
+  console.log(`[main] Agents: ${migrated} migrated`);
 
-  // Start Express server
+  // Start Express server (must be up before createWindow)
   try {
     server = await startServer();
     console.log('[main] Server started');
@@ -200,6 +198,22 @@ app.whenReady().then(async () => {
   createWindow();
   createTray(mainWindow);
   setupAutoUpdater();
+
+  // Sync agents from directory (async — renderer polls for progress)
+  const syncEnabled  = cfg.agentsDirectoryEnabled !== false;
+  const directoryUrl = cfg.agentsDirectoryUrl || 'https://github.com/adanoliva/agents-directory';
+  const isFirstSync  = !agentsSync.metaExists();
+
+  if (syncEnabled) {
+    console.log(`[main] Starting agents sync (firstSync=${isFirstSync})`);
+    agentsSync.triggerSync(directoryUrl, isFirstSync).catch((e) => {
+      console.warn('[main] Agents sync error:', e.message);
+    });
+  } else {
+    // Directory disabled: just mirror globals to ~/.claude/agents/
+    syncGlobalAgentsToClaudeDir();
+  }
+
   console.log('[main] Ready');
 });
 

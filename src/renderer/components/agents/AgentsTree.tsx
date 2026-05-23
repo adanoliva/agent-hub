@@ -124,6 +124,16 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle }: Props) {
           )}
         </>
       )}
+
+      {/* Sin Categoría — agents from directory that don't follow standard folder naming */}
+      <div
+        className={`tree-node${isActive(selected, 'uncategorized', null, null, null) ? ' active' : ''}`}
+        style={{ marginTop: 8 }}
+        onClick={() => selectNode('uncategorized', null, null, null)}
+      >
+        <i className="ti ti-folder-question tree-icon" style={{ color: 'var(--text3)' }} />
+        <span className="tree-label" style={{ color: 'var(--text2)' }}>Sin categoría</span>
+      </div>
     </div>
   );
 }
