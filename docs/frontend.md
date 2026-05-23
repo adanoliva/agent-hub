@@ -154,7 +154,7 @@ const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.S
 
 `React.lazy` requiere default exports. Como las páginas usan named exports (`export function Projects()`), el `.then()` crea el default export dinámicamente.
 
-**Wizard** — se muestra si `localStorage.getItem('cdm-wizard-done')` no existe (primer arranque). Una vez completado o saltado, guarda la clave y no vuelve a aparecer.
+**Wizard** — se muestra si `localStorage.getItem('cdm-wizard-done')` no existe, o si `store.showWizard` es `true` (lanzado desde Ajustes). Siempre visible al arrancar salvo que el usuario haya marcado "No mostrar al inicio".
 
 ---
 
@@ -177,12 +177,16 @@ interface AppState {
   // Sistema de toasts
   toasts:     Toast[];
 
+  // Wizard
+  showWizard:     boolean;        // true si localStorage 'cdm-wizard-done' no existe
+
   // Acciones
   setView:        (view: View) => void;
   setConfig:      (config: Config) => void;
   setProjects:    (projects: Project[]) => void;
   setAppVersion:  (v: string) => void;
   fetchProjects:  () => Promise<void>;
+  setShowWizard:  (v: boolean) => void;   // usado desde Settings para relanzar el wizard
   addToast:       (msg: string, type?: ToastType) => void;
   removeToast:    (id: string) => void;
 }
@@ -646,7 +650,11 @@ Grid de tarjetas de características (agentes, proyectos, chat, sync). Botón "E
 - Muestra un log de progreso en tiempo real.
 - Botón "Finalizar" activo solo cuando el setup ha terminado.
 
-Al completar o saltar: `localStorage.setItem('cdm-wizard-done', '1')` + `onDone()`.
+Al completar o saltar, `close()` evalúa el checkbox "No mostrar al inicio" (`noShowAgain`):
+- Si marcado → `localStorage.setItem('cdm-wizard-done', '1')` + `onDone()`.
+- Si no marcado → `localStorage.removeItem('cdm-wizard-done')` + `onDone()` (el wizard vuelve en el siguiente arranque).
+
+Desde Ajustes → sección "Aplicación", el botón "Ver wizard" llama a `setShowWizard(true)` del store para relanzarlo en cualquier momento.
 
 ### `CloseDialog.tsx`
 
@@ -930,13 +938,13 @@ useEffect(() => {
 ```
 
 **Modal de conflictos:** cuando `syncStatus.pendingConflicts.length > 0`, aparece un botón en el topbar `"N conflictos"` (badge coral). Al hacer click abre `showConflicts = true`. El modal lista cada conflicto con dos botones:
-- **Usar remoto** → `POST /api/agents-directory/resolve-conflict { fileKey, action: 'remote' }`
-- **Mantener local** → `POST /api/agents-directory/resolve-conflict { fileKey, action: 'local' }`
+- **Usar remoto** → `POST /api/agents-directory/resolve-conflict { fileKey, action: 'update' }`
+- **Mantener local** → `POST /api/agents-directory/resolve-conflict { fileKey, action: 'keep' }`
 
 Tras resolver todos, el modal se cierra y se recargan los agentes.
 
 ```ts
-async function resolveConflict(fileKey: string, action: 'remote' | 'local') {
+async function resolveConflict(fileKey: string, action: 'update' | 'keep') {
   await req('POST', '/agents-directory/resolve-conflict', { fileKey, action });
   const updated = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
   setSyncStatus(updated);
@@ -1096,7 +1104,10 @@ Row 2 (full-width):
 └── Comportamiento al cerrar (radio: Preguntar / Tray / Salir)
 
 Row 3 (full-width):
-└── Actualizaciones (comprobar / descargar / instalar)
+└── Aplicación
+    ├── versión actual (string, e.g. "v1.6.1") o mensaje de actualización disponible
+    ├── btn "Buscar actualizaciones" → `checkForUpdate()` vía IPC
+    └── btn "Ver wizard" → `setShowWizard(true)` (relanza el wizard sin recargar la app)
 ```
 
 **Toggle de tema** — en el `Topbar` de esta página a través de la prop `actions`:
@@ -1136,8 +1147,8 @@ Sección "Estado":
 Sección "Conflictos" (solo si pendingConflicts.length > 0):
 └── Lista de conflictos, por cada uno:
     ├── Nombre del agente + ruta remota
-    ├── btn "Usar remoto" → POST /api/agents-directory/resolve-conflict { action: 'remote' }
-    └── btn "Mantener local" → POST /api/agents-directory/resolve-conflict { action: 'local' }
+    ├── btn "Usar remoto" → POST /api/agents-directory/resolve-conflict { action: 'update' }
+    └── btn "Mantener local" → POST /api/agents-directory/resolve-conflict { action: 'keep' }
 
 Separador "— Importar agente externo —"
 

@@ -157,7 +157,7 @@ path.resolve(__dirname, '../../')
 
 ```json
 {
-  "version": "1.5.0",
+  "version": "1.6.1",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",

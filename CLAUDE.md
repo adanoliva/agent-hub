@@ -1,10 +1,13 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **1.5.0** · Actualizar este campo en cada release.
+> Versión actual: **1.6.1** · Actualizar este campo en cada release.
+
+@docs/backend.md
+@docs/frontend.md
 
 ## Qué es esto
 
-**Agent Hub** (nombre de paquete: `agent-hub`) es una aplicación de escritorio **Electron + Express + Vanilla JS** para gestionar agentes de IA y proyectos de desarrollo. Distribuida como portable `.exe` para Windows x64.
+**Agent Hub** (nombre de paquete: `agent-hub`) es una aplicación de escritorio **Electron + Express + React 19 + TypeScript** para gestionar agentes de IA y proyectos de desarrollo. Distribuida como portable `.exe` para Windows x64.
 
 Permite:
 - Organizar proyectos por categorías y tecnologías
@@ -14,78 +17,106 @@ Permite:
 - Generar y optimizar prompts de agente automáticamente con IA
 - Generar ficheros de contexto (CLAUDE.md / copilot-instructions.md) desde análisis del proyecto
 - Sugerir agentes específicos para cada proyecto usando su documentación como contexto
+- Sincronizar agentes desde un repositorio externo (directorio de agentes)
 
 ---
 
 ## Arquitectura
 
 ```
-Electron main process
-  ├── main.js          — BrowserWindow, IPC handlers, auto-updater
-  ├── server.js        — Express en localhost:3737 (API REST)
-  ├── config.js        — Gestión de config.json (portable-aware)
-  ├── agents.js        — CRUD de agentes (.md con frontmatter)
-  ├── projects.js      — CRUD de proyectos, sync de agentes
-  ├── ai.js            — Integración IA (CLI/API/GitHub)
-  ├── tray.js          — Icono de bandeja del sistema
-  ├── preload.js       — Context bridge (window.api)
-  ├── defaults.js      — Agentes por defecto al inicializar
-  └── templates.js     — Plantillas CLAUDE.md / copilot-instructions.md
+src/backend/                  — Electron main process + Express API
+  ├── main.js                 — BrowserWindow, IPC handlers, auto-updater
+  ├── server.js               — Express en localhost:3737 (API REST)
+  ├── config.js               — Gestión de config.json (portable-aware, CDM_DATA_DIR)
+  ├── agents.js               — CRUD de agentes (.md con frontmatter)
+  ├── agents-sync.js          — Sync de agentes desde repositorio externo (GitHub)
+  ├── projects.js             — CRUD de proyectos, sync de agentes
+  ├── ai.js                   — Integración IA (CLI/API/GitHub)
+  ├── tray.js                 — Icono de bandeja del sistema
+  ├── preload.js              — Context bridge (window.api)
+  ├── defaults.js             — Agentes por defecto al inicializar
+  ├── templates.js            — Plantillas CLAUDE.md / copilot-instructions.md
+  └── icon.js                 — Generación de icono de ventana
 
-Renderer (Vanilla JS, sin frameworks)
-  src/renderer/
-  ├── index.html       — Shell de la app
-  ├── styles.css       — Todos los estilos + variables CSS de tema
-  └── js/
-      ├── state.js         — Estado global S (único objeto mutable)
-      ├── api.js           — Helper req(method, path, body)
-      ├── utils.js         — esc(), renderMarkdown(), applyTheme(), setTheme()
-      ├── init.js          — Arranca la app, carga config, aplica tema
-      ├── view-manager.js  — switchView()
-      ├── projects-view.js — Vista de proyectos
-      ├── agents-view.js   — Vista de agentes (árbol + editor)
-      ├── settings-view.js — Vista de ajustes (tabs: general/cats/ext-agents)
-      ├── chat-view.js     — Vista de chat IA (@mention, contexto de agentes, historial por proyecto, acciones)
-      ├── wizard.js        — Wizard de primer arranque
-      ├── update.js        — Banner de actualización
-      ├── toast.js         — Sistema de notificaciones toast
-      ├── modal.js         — Modales genéricos
-      └── category-helpers.js — Helpers de categorías
+src/renderer/                 — React 19 + TypeScript + Vite + Zustand
+  ├── main.tsx                — Entry point React
+  ├── App.tsx                 — Router, estado global inicial, wizard, close dialog
+  ├── index.html              — Shell de la app
+  ├── styles.css              — Todos los estilos + variables CSS de tema
+  ├── api.ts                  — Helper req(method, path, body?)
+  ├── types.ts                — Tipos TypeScript compartidos
+  ├── vite-env.d.ts
+  ├── store/
+  │   └── index.ts            — Zustand store global (view, config, projects, toasts, wizard)
+  ├── hooks/
+  │   ├── useCategoryHelpers.ts
+  │   ├── useElectron.ts
+  │   └── useToast.ts
+  ├── constants/
+  │   └── tools.ts            — Lista de herramientas disponibles para agentes
+  ├── pages/
+  │   ├── Projects.tsx        — Vista de proyectos
+  │   ├── Agents.tsx          — Vista de agentes (árbol + editor + sync directorio)
+  │   ├── Chat.tsx            — Vista de chat IA (@mention, acciones, historial)
+  │   └── Settings.tsx        — Vista de ajustes (general / categorías / directorio agentes)
+  └── components/
+      ├── layout/
+      │   ├── Sidebar.tsx     — Navegación lateral
+      │   ├── Topbar.tsx      — Cabecera con selector de proyecto (usada en Chat)
+      │   └── Statusbar.tsx   — Barra de estado inferior
+      ├── agents/
+      │   ├── AgentsTree.tsx  — Árbol de niveles global/sección/tech/proyecto
+      │   ├── AgentsCenter.tsx — Panel central con lista + sugerencias
+      │   ├── AgentCard.tsx   — Tarjeta de agente
+      │   └── AgentEditor.tsx — Editor de agente (frontmatter + system prompt)
+      ├── projects/
+      │   ├── ProjectCard.tsx
+      │   ├── ProjectDrawer.tsx — Drawer lateral con agentes y contexto del proyecto
+      │   ├── CreateProjectModal.tsx
+      │   ├── EditProjectModal.tsx
+      │   ├── ImportProjectModal.tsx
+      │   ├── ExcludeAgentModal.tsx
+      │   └── StatusBadge.tsx
+      └── ui/
+          ├── Wizard.tsx      — Wizard de primer arranque (siempre visible, "no mostrar" en checkbox)
+          ├── Modal.tsx       — Modal genérico
+          ├── Toast.tsx       — Sistema de notificaciones toast
+          └── CloseDialog.tsx — Diálogo de confirmación al cerrar
 ```
 
 ---
 
 ## Flujo de arranque
 
-1. `main.js` → `readConfig()` → `bootstrapDirectories()` → `migrateAgentFiles()` → `seedDefaultAgents()` → `syncGlobalAgentsToClaudeDir()` → `startServer()` → `createWindow()`
-2. BrowserWindow carga `http://localhost:3737` (servido por Express)
-3. `index.html` carga scripts en orden: `utils → state → api → toast → modal → category-helpers → view-manager → projects-view → agents-view → settings-view → chat-view → wizard → update → init`
-4. `init()` llama `GET /api/health`, `GET /api/config`, `GET /api/projects`, aplica tema, renderiza vista de proyectos
+1. `main.js` → `readConfig()` → `bootstrapDirectories()` → `migrateAgentFiles()` → `syncGlobalAgentsToClaudeDir()` → `startServer()` → `createWindow()`
+2. En producción, Express sirve el renderer desde `dist/renderer/` (Vite build)
+3. En dev, Vite dev server corre en puerto 5173 y el BrowserWindow carga desde allí
+4. `App.tsx` monta, carga `GET /config` y `GET /projects`, aplica tema, muestra wizard si corresponde
 
 ---
 
-## Estado global (`src/renderer/js/state.js`)
+## Estado global (`src/renderer/store/index.ts`)
 
-```js
-const S = {
-  view: 'projects',           // vista activa
-  config: null,               // objeto de config.json (cargado en init)
-  projects: [],               // lista de proyectos
-  appVersion: null,
-  // agents view
-  treeExpanded: Set,          // nodos expandidos en árbol
-  selectedNode: { level, categoryId, techId, projectId },
-  agents: [], suggestions: [], suggestionsLoading: false,
-  selectedAgent: null, editorAgent: null,
-  editorIsNew: false, editorDirty: false, editorLang: 'en',
-  // drawer
-  drawerProject: null, drawerTab: 'claude',
-  // settings
-  settingsTab: 'general',     // 'general' | 'cats' | 'ext-agents'
-  // wizard
-  wizStep: 0, cliFound: false, cliPath: null, aiChoice: 'cli',
-};
+Zustand store. Acceso via `useStore(s => s.campo)`.
+
+```ts
+interface AppState {
+  view: View;              // 'projects' | 'agents' | 'chat' | 'settings'
+  config: Config | null;
+  projects: Project[];
+  appVersion: string | null;
+  showWizard: boolean;     // true si localStorage 'cdm-wizard-done' no existe
+  toasts: Toast[];
+
+  setView, setConfig, setProjects, setAppVersion,
+  fetchProjects,           // GET /projects y actualiza store
+  setShowWizard,           // usado desde Settings para relanzar el wizard
+  addToast,                // ok: 3.5s · err/warn: 5s
+  removeToast,
+}
 ```
+
+El wizard siempre se muestra al arrancar a menos que `localStorage.getItem('cdm-wizard-done')` exista. El checkbox "No mostrar al inicio" del wizard escribe/borra esa clave.
 
 ---
 
@@ -96,55 +127,62 @@ const S = {
 | GET | `/api/health` | Estado del servidor |
 | GET/PUT | `/api/config` | Leer/actualizar config |
 | GET | `/api/detect-cli` | Detectar Claude CLI en PATH |
-| POST | `/api/setup` | Setup del wizard |
+| POST | `/api/setup` | Setup del wizard (crea dirs + inicia sync) |
 | GET/POST | `/api/categories` | Categorías |
 | PUT/DELETE | `/api/categories/:id` | Editar/borrar categoría |
 | POST/DELETE | `/api/categories/:catId/technologies` | Tecnologías |
+| GET | `/api/agents-directory/status` | Estado del directorio de agentes externo |
+| POST | `/api/agents-directory/sync` | Forzar sync con repositorio externo |
+| POST | `/api/agents-directory/resolve-conflict` | Resolver conflicto (keep\|update) |
 | GET | `/api/agents` | Agentes por nivel (`?level=global\|section\|tech&categoryId&techId`) |
 | GET | `/api/agents/applicable` | Agentes aplicables a un proyecto |
+| GET | `/api/agents/flat` | Todos los agentes aplanados (para @mention autocomplete) |
 | POST/PUT/DELETE | `/api/agents` | CRUD de agentes |
 | POST | `/api/agents/import-url` | Importar agente desde URL |
-| GET/POST/PUT/DELETE | `/api/projects/:id/agents` | Agentes de proyecto |
+| GET/POST/PUT | `/api/projects/:id/agents` | Agentes de proyecto |
+| DELETE | `/api/projects/:id/agents/:name` | Borrar agente de proyecto |
 | GET/POST | `/api/projects` | Proyectos |
 | POST | `/api/projects/import` | Importar proyecto existente |
 | PUT/DELETE | `/api/projects/:id` | Editar/borrar proyecto |
-| GET/POST | `/api/projects/:id/sync-status` | Estado de sync |
+| GET | `/api/projects/:id/sync-status` | Estado de sync de agentes del proyecto |
 | POST | `/api/projects/:id/sync` | Sincronizar agentes al proyecto |
 | POST | `/api/sync-all` | Sync de todos los proyectos |
 | GET/PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md |
+| POST | `/api/projects/:id/generate-context` | Generar contexto con IA (`?type=claude\|github`) |
 | GET | `/api/ai/status` | Estado del proveedor de IA |
 | POST | `/api/ai/generate-prompt` | Generar prompt de agente desde descripción |
 | POST | `/api/ai/optimize-agent` | Optimizar system prompt existente con IA |
-| GET | `/api/ai/suggestions?level=&categoryId=&techId=` | Sugerencias de agentes por nivel |
+| GET | `/api/ai/suggestions` | Sugerencias de agentes por nivel |
 | POST | `/api/ai/suggestions/refresh` | Forzar regeneración de sugerencias |
 | DELETE | `/api/ai/suggestions/cache` | Limpiar caché de sugerencias |
-| GET | `/api/ai/project-suggestions?projectId=` | Sugerencias específicas para un proyecto |
+| GET | `/api/ai/project-suggestions` | Sugerencias específicas para un proyecto |
 | POST | `/api/ai/project-suggestions/refresh` | Forzar regeneración de sugerencias de proyecto |
-| POST | `/api/projects/:id/generate-context` | Generar CLAUDE.md / copilot-instructions con IA |
 | POST | `/api/chat` | Chat multi-turno |
-| GET/PUT/DELETE | `/api/chat/history?projectId=` | Historial de chat por proyecto (global si no se pasa projectId) |
-| GET | `/api/agents/flat` | Todos los agentes de todos los niveles aplanados (para @mention autocomplete) |
+| GET/PUT/DELETE | `/api/chat/history` | Historial de chat por proyecto (`?projectId=`) |
 
-El helper del renderer es: `req(method, path, body?)` → hace fetch a `http://localhost:3737/api{path}`.
+El helper del renderer es: `req<T>(method, path, body?)` en `src/renderer/api.ts` → hace fetch a `http://localhost:3737/api{path}`.
 
 ---
 
 ## config.json
 
 Localización:
-- **Dev**: raíz del proyecto (`config.json`)
-- **Portable/Producción**: junto al `.exe` (variable `PORTABLE_EXECUTABLE_DIR`)
+- **Dev**: raíz del proyecto (o `CDM_DATA_DIR` si está definida)
+- **Portable/Producción**: junto al `.exe` (`PORTABLE_EXECUTABLE_DIR`)
 
 Estructura completa:
 
 ```json
 {
-  "version": "1.1.0",
+  "version": "1.6.1",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
   "githubModel": "gpt-4o-mini",
   "theme": "dark",
+  "closeAction": "ask",
+  "agentsDirectoryUrl": "https://github.com/adanoliva/agents-directory",
+  "agentsDirectoryEnabled": true,
   "categories": [
     {
       "id": "games",
@@ -173,7 +211,7 @@ Estructura completa:
 }
 ```
 
-Campos editables por `PUT /api/config`: `apiKey`, `aiProvider`, `githubToken`, `githubModel`, `theme`.
+Campos editables por `PUT /api/config`: `apiKey`, `aiProvider`, `githubToken`, `githubModel`, `theme`, `closeAction`, `agentsDirectoryUrl`, `agentsDirectoryEnabled`.
 
 ---
 
@@ -213,38 +251,51 @@ Los globales también se sincronizan a `~/.claude/agents/` para que Claude Code 
 
 ---
 
-## Chat IA (`chat-view.js`)
+## Directorio de agentes externo (`agents-sync.js`)
 
-El chat soporta conversación multi-turno con el proveedor configurado. Estado en `chatState` (local al módulo, no en `S`).
+Permite sincronizar agentes desde un repositorio GitHub público. Configurado en Ajustes → Directorio de agentes.
+
+- **URL configurable**: por defecto `https://github.com/adanoliva/agents-directory`
+- **Primera sync**: ocurre al finalizar el wizard (paso 3), descarga todos los agentes
+- **Syncs posteriores**: compara SHA del commit remoto con el local (`.sync-meta.json`)
+- **Conflictos**: si un agente local fue modificado respecto al remoto, se crea un conflicto. El usuario elige: `keep` (conservar local) o `update` (usar remoto)
+- **Estado**: `GET /api/agents-directory/status` devuelve `AgentDirectoryStatus`
+- **Metadata**: guardada en `agents/global/.sync-meta.json`
+
+---
+
+## Chat IA (`src/renderer/pages/Chat.tsx`)
+
+El chat soporta conversación multi-turno con el proveedor configurado. Estado local con `useState` (no en Zustand).
 
 **Características:**
-- **Historial por proyecto**: se guarda en `cache/chat-{projectId}.json` (o `chat-global.json` si no hay proyecto). Al cambiar de proyecto se guarda el actual y se carga el nuevo.
-- **@mention de agentes**: escribe `@nombre` en el input para añadir un agente como contexto activo. Se muestra un dropdown autocomplete filtrado. Los agentes activos aparecen como chips en la barra de contexto y se incluyen en el system prompt de cada mensaje.
-- **Acciones sugeridas**: la IA puede incluir `<!--ACTIONS:[{"label":"...","action":"..."}]-->` al final de su respuesta. El renderer los extrae y muestra como botones clickables. Acciones soportadas: `create-agent`, `open-agents`, `open-settings`.
-- **Selector de proyecto**: en el topbar del chat, permite cambiar el proyecto activo sin salir de la vista.
+- **Historial por proyecto**: se guarda en `cache/chat-{projectId}.json` (o `chat-global.json`). Al cambiar de proyecto se guarda el actual y se carga el nuevo.
+- **@mention de agentes**: escribe `@nombre` para añadir un agente como contexto activo. Dropdown autocomplete filtrado desde `GET /api/agents/flat`. Los agentes activos aparecen como chips y se incluyen en el system prompt de cada mensaje.
+- **Acciones sugeridas**: la IA puede incluir `<!--ACTIONS:[{"label":"...","type":"..."}]-->`. El renderer los extrae y muestra como botones. Tipos soportados: `create-agent`, `open-agents`, `open-settings`.
+- **Quick prompts**: botones de acceso rápido para casos frecuentes (optimizar agente, crear CLAUDE.md, etc.)
+- **Selector de proyecto**: en el topbar, permite cambiar el proyecto activo sin salir de la vista.
 
-**Flujo de datos del system prompt:**
-`chatBuildSystem()` concatena los system prompts de todos los agentes activos + instrucción para sugerir acciones → se envía como `systemPrompt` en `POST /api/chat`.
+**System prompt:** `buildSystem()` concatena los system prompts de todos los agentes activos + instrucción base de rol.
 
 ---
 
 ## Agentes — funciones IA adicionales
 
 ### Optimizar agente (`POST /api/ai/optimize-agent`)
-Recibe `{name, description, system, tools, model}`. Construye un prompt que pide a la IA mejorar el system prompt y la descripción manteniendo el foco del agente. Devuelve `{description, system}`. El editor muestra el botón "Optimizar con IA" solo si `!agent.optimized && agent.system`. Tras guardar, el fichero `.md` incluye `optimized: true` en el frontmatter.
+Recibe `{name, description, system, tools, model}`. Construye un prompt que pide a la IA mejorar el system prompt y la descripción. Devuelve `{description, system}`. El editor muestra el botón solo si `!agent.optimized && agent.system`. Tras guardar, el fichero `.md` incluye `optimized: true`.
 
 ### Generar contexto del proyecto (`POST /api/projects/:id/generate-context?type=claude|github`)
-Analiza el directorio del proyecto: detecta lenguajes (por extensión de archivo), lee `package.json` / `requirements.txt` / `pyproject.toml`, detecta framework de testing, linting, build tool, CI/CD y Docker. Construye el prompt con toda esa información y llama al proveedor de IA. Devuelve el contenido generado para que el usuario lo revise y guarde manualmente.
+Analiza el directorio del proyecto: detecta lenguajes (por extensión), lee `package.json` / `requirements.txt` / `pyproject.toml`, detecta testing, linting, build tool, CI/CD y Docker. Genera el contenido del fichero para revisión manual.
 
 ### Sugerencias por proyecto (`GET /api/ai/project-suggestions?projectId=`)
-A diferencia de las sugerencias por nivel (global/section/tech), las sugerencias de proyecto leen el CLAUDE.md o copilot-instructions.md del proyecto como contexto principal. El prompt incluye nombre, categoría, tecnología, contenido del fichero de contexto (hasta 3000 chars) y los agentes ya existentes. Las sugerencias salen en español. Cache en `suggestions.json` con clave `project::{projectId}`.
+Lee el CLAUDE.md o copilot-instructions.md del proyecto como contexto principal. Cache en `cache/suggestions.json` con clave `project::{projectId}`.
 
 ### Exclusión de agentes con opciones
-Al excluir un agente desde el drawer de proyecto, aparece un modal con dos opciones:
-1. **Excluir y eliminar archivo** → llama `DELETE /api/projects/:id/agents/:name` (borra el `.md` del disco)
-2. **Solo excluir** → añade a `project.excludedAgents[]` pero el archivo permanece
+Al excluir un agente desde el drawer de proyecto, modal con dos opciones:
+1. **Excluir y eliminar archivo** → `DELETE /api/projects/:id/agents/:name`
+2. **Solo excluir** → añade a `project.excludedAgents[]`, el archivo permanece
 
-Al volver a incluir un agente se llama automáticamente `POST /api/projects/:id/sync` para restaurar el archivo si fue borrado.
+Al volver a incluir se llama `POST /api/projects/:id/sync` para restaurar el archivo si fue borrado.
 
 ---
 
@@ -253,7 +304,7 @@ Al volver a incluir un agente se llama automáticamente `POST /api/projects/:id/
 Iconografía exclusivamente via **Tabler Icons** (`ti ti-*`) desde CDN v3.6.0.
 
 ### Badges (`.badge`)
-Variantes: `green`, `amber`, `blue`, `accent`, `gray`, `coral`. Siempre incluir icono dentro del badge para claridad visual.
+Variantes: `green`, `amber`, `blue`, `accent`, `gray`, `coral`. Siempre incluir icono dentro del badge.
 
 | Concepto | Color | Icono |
 |----------|-------|-------|
@@ -272,7 +323,7 @@ Tipos: `ok` (`ti-circle-check`), `err` (`ti-alert-circle`, 5 s), `info` (`ti-inf
 
 ### Navegación
 - Logo: `ti-robot` (identidad de la app)
-- Nav Agentes: `ti-cpu` (diferenciado del logo)
+- Nav Agentes: `ti-cpu`
 - Nav Proyectos: `ti-layout-grid`
 - Nav Chat: `ti-message-chatbot`
 - Nav Ajustes: `ti-settings`
@@ -286,9 +337,7 @@ Sistema de temas basado en variables CSS en `src/renderer/styles.css`:
 - **Oscuro** (defecto): variables en `:root`
 - **Claro**: variables en `body.light`
 
-Funciones relevantes en `utils.js`:
-- `applyTheme(theme)` — añade/quita clase `light` en `<body>`
-- `setTheme(theme)` — aplica + persiste via `PUT /api/config`
+El tema se aplica en `App.tsx` al cargar config: `document.body.classList.add/remove('light')`.
 
 Colores accent principal: `#7c6af7` (dark) / `#6c5ce7` (light).
 
@@ -296,7 +345,7 @@ Colores accent principal: `#7c6af7` (dark) / `#6c5ce7` (light).
 
 ## IPC — `window.api` (preload.js)
 
-```js
+```ts
 window.api.getVersion()       // string
 window.api.getAppDir()        // string (path)
 window.api.isDev()            // boolean
@@ -313,6 +362,8 @@ window.api.onUpdateAvailable(cb)
 window.api.onUpdateProgress(cb)
 window.api.onUpdateReady(cb)
 window.api.onUpdateError(cb)
+window.api.onCloseRequested(cb)   // dispara CloseDialog cuando el usuario cierra la ventana
+window.api.closeResponse(action, remember)  // responde al cierre: 'tray'|'quit'
 ```
 
 ---
@@ -320,7 +371,7 @@ window.api.onUpdateError(cb)
 ## Build y distribución
 
 ```bash
-npm run dev          # Electron en modo dev (devTools abiertos)
+npm run dev          # Electron + Vite dev server (devTools abiertos)
 npm run build        # Portable .exe en dist/
 npm run release      # Build + publish a GitHub Releases
 ```
@@ -340,12 +391,11 @@ npm run dev
 
 ## Convenciones de código
 
-- **Sin frameworks en renderer**: Vanilla JS, sin React/Vue/etc.
-- **Render = innerHTML**: Las vistas se renderizan como strings HTML con template literals.
-- **Estado centralizado**: Todo en `S` (objeto global `state.js`). No hay props ni eventos entre módulos.
-- **Estilos**: Una sola hoja `styles.css` con variables CSS; sin preprocesadores.
+- **React 19 + TypeScript**: renderer completamente en React con Vite. Sin Vanilla JS.
+- **Estado centralizado**: Zustand store en `src/renderer/store/index.ts`. Estado local con `useState` solo cuando es realmente local a un componente.
+- **Estilos**: Una sola hoja `styles.css` con variables CSS; sin preprocesadores ni CSS Modules.
 - **Sin comentarios redundantes**: Solo cuando el "por qué" no es obvio.
-- **Español en UI**: Todos los textos de interfaz en español. Código en inglés.
+- **Español en UI**: Todos los textos de interfaz en español. Código y tipos en inglés.
 - **Tabler Icons**: Iconografía via clase `ti ti-*` (CDN).
 - **Fuentes**: JetBrains Mono (mono) + Syne (sans), ambas de Google Fonts.
 
@@ -354,7 +404,7 @@ npm run dev
 ## Checklist al actualizar versión
 
 1. Actualizar `version` en `package.json`
-2. Actualizar el campo `version` en `DEFAULT_CONFIG` de `src/main/config.js`
+2. Actualizar el campo `version` en `DEFAULT_CONFIG` de `src/backend/config.js`
 3. Actualizar la línea `> Versión actual:` al inicio de este archivo
 4. Commit y tag git → `npm run release`
 
