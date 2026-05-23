@@ -5,6 +5,7 @@ model: claude-sonnet-4-20250514
 tools:
   - Read
   - Write
+optimized: true
 ---
 
 You are an API design expert. Design APIs that developers love to use.

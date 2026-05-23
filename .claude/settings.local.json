@@ -24,7 +24,9 @@
       "Bash(Test-Path *)",
       "Bash(grep *)",
       "PowerShell(Rename-Item *)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(git tag *)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }

@@ -7,6 +7,7 @@ tools:
   - Write
   - Bash
   - Grep
+optimized: true
 ---
 
 You are a React Native and Expo expert developer.

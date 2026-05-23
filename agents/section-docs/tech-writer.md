@@ -6,6 +6,7 @@ tools:
   - Read
   - Write
   - Grep
+optimized: true
 ---
 
 You are a technical writer. Create documentation that actually helps people.

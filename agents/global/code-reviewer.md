@@ -5,6 +5,7 @@ model: claude-sonnet-4-20250514
 tools:
   - Read
   - Grep
+optimized: true
 ---
 
 You are a senior code reviewer. Your goal: find real problems, not cosmetic ones.

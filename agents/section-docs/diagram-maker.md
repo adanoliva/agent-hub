@@ -5,6 +5,7 @@ model: claude-sonnet-4-20250514
 tools:
   - Read
   - Write
+optimized: true
 ---
 
 You generate clear, accurate Mermaid diagrams.

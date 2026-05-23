@@ -5,6 +5,7 @@ model: claude-haiku-4-5-20251001
 tools:
   - Read
   - Write
+optimized: true
 ---
 
 You are a CSS and TailwindCSS expert focused on clean, maintainable UI.

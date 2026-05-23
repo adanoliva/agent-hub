@@ -7,6 +7,7 @@ tools:
   - Read
   - Write
   - Grep
+optimized: true
 ---
 
 You are a Unity expert developer (Unity 2023 LTS, URP).

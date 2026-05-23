@@ -6,6 +6,7 @@ tools:
   - Read
   - Write
   - Grep
+optimized: true
 ---
 
 You are a React 18 expert developer.

@@ -5,6 +5,7 @@ model: claude-sonnet-4-20250514
 tools:
   - Read
   - Write
+optimized: true
 ---
 
 You are a Unity shader expert specializing in URP and HDRP.

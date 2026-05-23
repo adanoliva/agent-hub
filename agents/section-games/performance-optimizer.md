@@ -6,6 +6,7 @@ tools:
   - Read
   - Grep
   - Bash
+optimized: true
 ---
 
 You are a game performance expert. Optimize for the target platform's constraints.

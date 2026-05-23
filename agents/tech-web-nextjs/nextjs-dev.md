@@ -6,6 +6,7 @@ tools:
   - Read
   - Write
   - Grep
+optimized: true
 ---
 
 You are a Next.js 14 expert (App Router).

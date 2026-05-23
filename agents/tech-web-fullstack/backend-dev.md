@@ -7,6 +7,7 @@ tools:
   - Write
   - Bash
   - Grep
+optimized: true
 ---
 
 You are a Node.js backend expert (Express + TypeScript + PostgreSQL).
