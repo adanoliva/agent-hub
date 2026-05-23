@@ -16,6 +16,7 @@ const {
   hashFile,
   serializeAgent,
   serializeAgentForProvider,
+  serializeAgentForProviderAsync,
   getAgentsDirForProvider,
   parseAgentFile,
 } = require('./agents');
@@ -51,7 +52,7 @@ function getProviders(project) {
  * If selectedAgents is provided (array of names), only those are copied.
  * Writes to every provider directory. Returns a hash map.
  */
-function copyAgentsToProject(projectPath, categoryId, techId, providers = ['claude'], selectedAgents = null) {
+async function copyAgentsToProject(projectPath, categoryId, techId, providers = ['claude'], selectedAgents = null) {
   const allApplicable = getApplicableAgents(categoryId, techId);
   const applicable    = selectedAgents
     ? allApplicable.filter(a => selectedAgents.includes(a.name))
@@ -62,11 +63,8 @@ function copyAgentsToProject(projectPath, categoryId, techId, providers = ['clau
     const agentsDir = getAgentsDirForProvider(projectPath, provider);
     ensureDir(agentsDir);
     for (const agent of applicable) {
-      fs.writeFileSync(
-        path.join(agentsDir, `${agent.name}.md`),
-        serializeAgentForProvider(agent, provider),
-        'utf8',
-      );
+      const content = await serializeAgentForProviderAsync(agent, provider);
+      fs.writeFileSync(path.join(agentsDir, `${agent.name}.md`), content, 'utf8');
     }
   }
 
@@ -159,7 +157,7 @@ function countPendingUpdates(project) {
  * Local (level-4) agents are never touched.
  * Returns { updated: number, added: number }
  */
-function syncProject(project) {
+async function syncProject(project) {
   const providers = getProviders(project);
   const status    = getProjectSyncStatus(project);
 
@@ -178,11 +176,8 @@ function syncProject(project) {
     for (const provider of providers) {
       const agentsDir = getAgentsDirForProvider(project.path, provider);
       ensureDir(agentsDir);
-      fs.writeFileSync(
-        path.join(agentsDir, `${name}.md`),
-        serializeAgentForProvider(entry.agent, provider),
-        'utf8',
-      );
+      const content = await serializeAgentForProviderAsync(entry.agent, provider);
+      fs.writeFileSync(path.join(agentsDir, `${name}.md`), content, 'utf8');
     }
 
     cfg.projects[projIdx].agentHashes[name] = {
@@ -207,7 +202,7 @@ function syncProject(project) {
  * Syncs all registered projects.
  * Returns array of { projectId, projectName, updated, added, error }
  */
-function syncAllProjects() {
+async function syncAllProjects() {
   const cfg     = readConfig();
   const results = [];
 
@@ -217,7 +212,7 @@ function syncAllProjects() {
       continue;
     }
     try {
-      const { updated, added } = syncProject(project);
+      const { updated, added } = await syncProject(project);
       results.push({ projectId: project.id, projectName: project.name, updated, added });
     } catch (err) {
       results.push({ projectId: project.id, projectName: project.name, error: err.message });
@@ -260,7 +255,7 @@ const saveClaudeMd = (project, content) => saveContextFile(project, 'claude', co
  * Creates a new project: folder structure + CLAUDE.md + copies agents.
  * selectedAgents: optional array of agent names to copy; omitted agents are stored in excludedAgents.
  */
-function createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }) {
+async function createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }) {
   const cleanPath = projectPath.replace(/^~/, require('os').homedir());
 
   if (fs.existsSync(cleanPath)) {
@@ -287,7 +282,7 @@ function createProject({ name, categoryId, techId, projectPath, description, sta
   const excludedAgents = selectedAgents
     ? allApplicable.filter(a => !selectedAgents.includes(a.name)).map(a => a.name)
     : [];
-  const agentHashes    = copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
+  const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
 
   const project = {
     id:             makeProjectId(),
@@ -317,7 +312,7 @@ function createProject({ name, categoryId, techId, projectPath, description, sta
  * Creates provider agent dirs if missing, copies applicable agents.
  * selectedAgents: optional array of agent names to copy; omitted agents are stored in excludedAgents.
  */
-function importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }) {
+async function importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }) {
   const cleanPath = projectPath.replace(/^~/, require('os').homedir());
 
   if (!fs.existsSync(cleanPath)) {
@@ -354,7 +349,7 @@ function importProject({ name, categoryId, techId, projectPath, description, sta
   const excludedAgents = selectedAgents
     ? allApplicable.filter(a => !selectedAgents.includes(a.name)).map(a => a.name)
     : [];
-  const agentHashes    = copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
+  const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
 
   const project = {
     id:             makeProjectId(),

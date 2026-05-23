@@ -7,7 +7,7 @@
  *   ---
  *   name: agent-name
  *   description: Short description
- *   model: claude-sonnet-4-20250514
+ *   model: sonnet
  *   tools:
  *     - Bash
  *     - Read
@@ -21,8 +21,10 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const os     = require('os');
-const { AGENTS_DIR, getAgentDir, ensureDir } = require('./config');
+const { AGENTS_DIR, CACHE_DIR, getAgentDir, ensureDir } = require('./config');
 const { DEFAULT_AGENTS } = require('./defaults');
+const { adaptAgentForProvider } = require('./agent-adapters');
+const { adaptSystemPromptForProvider } = require('./ai');
 
 // ── Model name map ────────────────────────────────────────────────────────────
 
@@ -133,14 +135,14 @@ function serializeAgent(agent) {
     .map(t => `  - ${t}`)
     .join('\n');
 
-  const toolsBlock = toolsList ? `tools:\n${toolsList}` : 'tools: []';
-  const modelId    = resolveModel(agent.model);
+  const toolsBlock  = toolsList ? `tools:\n${toolsList}` : 'tools: []';
+  const modelAlias  = shortModel(resolveModel(agent.model)) || 'sonnet';
 
   const lines = [
     '---',
     `name: ${agent.name}`,
     `description: ${agent.description || ''}`,
-    `model: ${modelId}`,
+    `model: ${modelAlias}`,
     toolsBlock,
   ];
   if (agent.optimized) lines.push('optimized: true');
@@ -241,10 +243,15 @@ function getAgentsDirForProvider(projectPath, provider) {
 }
 
 function serializeAgentGitHub(agent) {
+  const toolsList  = (Array.isArray(agent.tools) ? agent.tools : []).filter(Boolean).map(t => `  - ${t}`).join('\n');
+  const toolsBlock = toolsList ? `tools:\n${toolsList}` : 'tools: []';
+
   return [
     '---',
     `name: ${agent.name}`,
     `description: ${agent.description || ''}`,
+    `model: ${agent.model}`,
+    toolsBlock,
     '---',
     '',
     agent.system || '',
@@ -253,8 +260,9 @@ function serializeAgentGitHub(agent) {
 }
 
 function serializeAgentForProvider(agent, provider) {
-  if (provider === 'github') return serializeAgentGitHub(agent);
-  return serializeAgent(agent);
+  const adapted = adaptAgentForProvider(agent, provider);
+  if (provider === 'github') return serializeAgentGitHub(adapted);
+  return serializeAgent(adapted);
 }
 
 // ── Project-level agents ──────────────────────────────────────────────────────
@@ -376,6 +384,57 @@ function syncGlobalAgentsToClaudeDir() {
   return synced;
 }
 
+// ── Async provider serialization (with AI system prompt adaptation) ───────────
+
+const CONVERSIONS_FILE = path.join(CACHE_DIR, 'agent-conversions.json');
+
+function readConversionsCache() {
+  try { return JSON.parse(fs.readFileSync(CONVERSIONS_FILE, 'utf8')); }
+  catch { return {}; }
+}
+
+function writeConversionsCache(cache) {
+  ensureDir(CACHE_DIR);
+  fs.writeFileSync(CONVERSIONS_FILE, JSON.stringify(cache, null, 2), 'utf8');
+}
+
+/**
+ * Serializes an agent for a target provider, adapting the system prompt with AI.
+ * The adapted system prompt is cached by source hash — only re-generated when
+ * the source agent changes.
+ * Falls back to rule-based conversion if the AI call fails.
+ *
+ * @param {object} agent      — Claude-format agent from the source directory
+ * @param {string} provider   — 'claude' | 'github'
+ * @returns {Promise<string>} — file content ready to write to disk
+ */
+async function serializeAgentForProviderAsync(agent, provider) {
+  const adapted = adaptAgentForProvider(agent, provider);
+
+  if (provider === 'claude') return serializeAgent(adapted);
+
+  const sourceHash = hashAgent(agent);
+  const cacheKey   = `${agent.name}:${provider}:${sourceHash}`;
+  const cache      = readConversionsCache();
+
+  let system;
+  if (cache[cacheKey]) {
+    system = cache[cacheKey].system;
+  } else {
+    try {
+      system = await adaptSystemPromptForProvider(agent, provider);
+      cache[cacheKey] = { system, convertedAt: new Date().toISOString() };
+      writeConversionsCache(cache);
+    } catch {
+      system = adapted.system; // rule-based fallback
+    }
+  }
+
+  return provider === 'github'
+    ? serializeAgentGitHub({ ...adapted, system })
+    : serializeAgent({ ...adapted, system });
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -383,6 +442,7 @@ module.exports = {
   parseAgentFromString,
   serializeAgent,
   serializeAgentForProvider,
+  serializeAgentForProviderAsync,
   resolveModel,
   shortModel,
   hashAgent,

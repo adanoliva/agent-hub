@@ -38,7 +38,9 @@
       "Bash(rtk git *)",
       "Bash(rtk npm *)",
       "Bash(rtk read *)",
-      "Bash(rtk grep *)"
+      "Bash(rtk grep *)",
+      "Bash(rtk wc *)",
+      "Bash(node *)"
     ]
   }
 }

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Hub — Gestión de agentes de IA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <i class="ti ti-robot"></i>
+        <span>Agent Hub</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Funcionalidades</a>
+        <a href="#how">Cómo funciona</a>
+        <a href="#collab">Repositorio</a>
+        <a href="#roadmap">Roadmap</a>
+      </div>
+      <a href="#download" class="btn-primary nav-cta">Descargar</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">
+      <i class="ti ti-sparkles"></i> v1.6.1 disponible
+    </div>
+    <h1 class="hero-title">
+      Gestiona tus agentes de IA<br />
+      <span class="gradient-text">como un profesional</span>
+    </h1>
+    <p class="hero-sub">
+      Agent Hub centraliza, organiza y sincroniza todos tus agentes de Claude y Copilot
+      en un solo lugar. Genera prompts con IA, compártelos en equipo y despliégalos
+      a todos tus proyectos automáticamente.
+    </p>
+    <div class="hero-actions">
+      <a href="#download" class="btn-primary">
+        <i class="ti ti-download"></i> Descargar gratis
+      </a>
+      <a href="#how" class="btn-ghost">
+        Ver cómo funciona <i class="ti ti-arrow-right"></i>
+      </a>
+    </div>
+    <p class="hero-tagline">
+      <em>Construida con IA. Para la IA. Con manos humanas al volante.</em>
+    </p>
+
+    <!-- Mock agente card -->
+    <div class="hero-card-wrap">
+      <div class="agent-card">
+        <div class="agent-card-head">
+          <i class="ti ti-eye agent-icon"></i>
+          <div>
+            <div class="agent-name">code-reviewer</div>
+            <div class="agent-level global">global</div>
+          </div>
+          <div class="model-pill sonnet"><i class="ti ti-bolt"></i> sonnet</div>
+        </div>
+        <p class="agent-desc">Revisor de código senior. Analiza bugs, vulnerabilidades y oportunidades de mejora. Directo y específico.</p>
+        <div class="agent-tools">
+          <span class="tool">Read</span>
+          <span class="tool">Bash</span>
+          <span class="tool">Grep</span>
+          <span class="tool">+2</span>
+        </div>
+      </div>
+      <div class="agent-card dim">
+        <div class="agent-card-head">
+          <i class="ti ti-git-commit agent-icon"></i>
+          <div>
+            <div class="agent-name">commit-writer</div>
+            <div class="agent-level tech">tech · react</div>
+          </div>
+          <div class="model-pill haiku"><i class="ti ti-leaf"></i> haiku</div>
+        </div>
+        <p class="agent-desc">Genera mensajes de commit claros y semánticos siguiendo Conventional Commits.</p>
+        <div class="agent-tools">
+          <span class="tool">Bash</span>
+          <span class="tool">Read</span>
+        </div>
+      </div>
+      <div class="agent-card dim">
+        <div class="agent-card-head">
+          <i class="ti ti-test-pipe agent-icon"></i>
+          <div>
+            <div class="agent-name">test-writer</div>
+            <div class="agent-level section">categoría · web</div>
+          </div>
+          <div class="model-pill sonnet"><i class="ti ti-bolt"></i> sonnet</div>
+        </div>
+        <p class="agent-desc">Escribe tests unitarios y de integración con cobertura de casos límite.</p>
+        <div class="agent-tools">
+          <span class="tool">Read</span>
+          <span class="tool">Write</span>
+          <span class="tool">Bash</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROBLEMA -->
+  <section class="problem">
+    <div class="container">
+      <div class="section-label">El problema</div>
+      <h2>Desarrollar con IA hoy es caótico</h2>
+      <div class="problem-grid">
+        <div class="problem-item">
+          <i class="ti ti-files-off"></i>
+          <p>Los agentes se crean manualmente, se pierden y no se reutilizan entre proyectos.</p>
+        </div>
+        <div class="problem-item">
+          <i class="ti ti-git-branch-deleted"></i>
+          <p>Cada proyecto acaba con configuraciones distintas y desincronizadas.</p>
+        </div>
+        <div class="problem-item">
+          <i class="ti ti-users-minus"></i>
+          <p>El conocimiento de cómo usar bien la IA queda en la cabeza de cada persona. No se comparte.</p>
+        </div>
+        <div class="problem-item">
+          <i class="ti ti-pencil-off"></i>
+          <p>Los prompts se escriben a ojo, sin optimización ni base profesional de partida.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-label">Funcionalidades</div>
+      <h2>Todo lo que necesitas, en una sola app</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <i class="ti ti-layout-grid"></i>
+          <h3>Gestión de proyectos</h3>
+          <p>Organiza por categoría y tecnología. Abre en VS Code con un clic.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-cpu"></i>
+          <h3>Editor de agentes</h3>
+          <p>Crea y edita agentes con asistencia de IA integrada. Campos guiados.</p>
+        </div>
+        <div class="feature-card accent">
+          <i class="ti ti-sparkles"></i>
+          <h3>Generación con IA</h3>
+          <p>Describe lo que necesitas en lenguaje natural y la IA escribe el prompt completo.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-refresh"></i>
+          <h3>Sync automático</h3>
+          <p>Los agentes se sincronizan a todos los proyectos que los usan. Un cambio, efecto global.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-message-chatbot"></i>
+          <h3>Chat integrado</h3>
+          <p>Consulta a la IA usando tus agentes como contexto activo con @mention.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-cloud-download"></i>
+          <h3>Directorio de agentes</h3>
+          <p>Descarga un catálogo curado de agentes profesionales, siempre actualizados.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CÓMO FUNCIONA -->
+  <section class="how" id="how">
+    <div class="container">
+      <div class="section-label">Cómo funciona</div>
+      <h2>De la idea al agente en menos de un minuto</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="step-body">
+            <h3>Describe</h3>
+            <p>Escribe qué necesita hacer el agente en lenguaje natural.</p>
+            <div class="code-block">"Quiero un agente que revise mis commits antes de hacer push"</div>
+          </div>
+        </div>
+        <div class="step-arrow"><i class="ti ti-arrow-right"></i></div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="step-body">
+            <h3>La IA genera</h3>
+            <p>Agent Hub llama a Claude y genera el system prompt completo y optimizado.</p>
+          </div>
+        </div>
+        <div class="step-arrow"><i class="ti ti-arrow-right"></i></div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="step-body">
+            <h3>Asignas</h3>
+            <p>Eliges el nivel: global, categoría, tecnología o proyecto específico.</p>
+          </div>
+        </div>
+        <div class="step-arrow"><i class="ti ti-arrow-right"></i></div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <div class="step-body">
+            <h3>Sincronizas</h3>
+            <p>La app copia el agente a todos los proyectos correspondientes automáticamente.</p>
+          </div>
+        </div>
+        <div class="step-arrow"><i class="ti ti-arrow-right"></i></div>
+        <div class="step">
+          <div class="step-num">05</div>
+          <div class="step-body">
+            <h3>Usas</h3>
+            <p>El agente está disponible en Claude Code o GitHub Copilot desde tu editor.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JERARQUÍA -->
+  <section class="hierarchy">
+    <div class="container">
+      <div class="section-label">Arquitectura de agentes</div>
+      <h2>Organización en cuatro niveles</h2>
+      <p class="section-desc">Cada agente aplica al scope correcto. Sin duplicar, sin perder contexto.</p>
+      <div class="levels">
+        <div class="level global-level">
+          <i class="ti ti-world"></i>
+          <div class="level-name">Global</div>
+          <div class="level-desc">Aplica a todos los proyectos</div>
+        </div>
+        <div class="level-arrow"><i class="ti ti-arrow-down"></i></div>
+        <div class="level section-level">
+          <i class="ti ti-folder"></i>
+          <div class="level-name">Categoría</div>
+          <div class="level-desc">Juegos, Web, Mobile, Docs…</div>
+        </div>
+        <div class="level-arrow"><i class="ti ti-arrow-down"></i></div>
+        <div class="level tech-level">
+          <i class="ti ti-code"></i>
+          <div class="level-name">Tecnología</div>
+          <div class="level-desc">React, Unity, React Native…</div>
+        </div>
+        <div class="level-arrow"><i class="ti ti-arrow-down"></i></div>
+        <div class="level project-level">
+          <i class="ti ti-layout-grid"></i>
+          <div class="level-name">Proyecto</div>
+          <div class="level-desc">Un proyecto concreto</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPOSITORIO COLABORATIVO -->
+  <section class="collab" id="collab">
+    <div class="container">
+      <div class="section-label">Repositorio colaborativo</div>
+      <h2>Un catálogo compartido,<br />siempre actualizado</h2>
+      <p class="section-desc">
+        Agent Hub se conecta a un repositorio central en GitHub. Todos los miembros del equipo
+        descargan automáticamente los mismos agentes, en su última versión, sin hacer nada manualmente.
+      </p>
+      <div class="collab-diagram">
+        <div class="collab-node repo">
+          <i class="ti ti-brand-github"></i>
+          <span>Repositorio central</span>
+          <small>GitHub</small>
+        </div>
+        <div class="collab-spokes">
+          <div class="spoke">
+            <div class="spoke-line"></div>
+            <div class="collab-node member">
+              <i class="ti ti-robot"></i>
+              <span>Agent Hub</span>
+              <small>Miembro A</small>
+            </div>
+          </div>
+          <div class="spoke">
+            <div class="spoke-line"></div>
+            <div class="collab-node member">
+              <i class="ti ti-robot"></i>
+              <span>Agent Hub</span>
+              <small>Miembro B</small>
+            </div>
+          </div>
+          <div class="spoke">
+            <div class="spoke-line"></div>
+            <div class="collab-node member">
+              <i class="ti ti-robot"></i>
+              <span>Agent Hub</span>
+              <small>Miembro C</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="collab-benefits">
+        <div class="collab-benefit">
+          <i class="ti ti-point-filled" style="color:var(--accent)"></i>
+          <div>
+            <strong>Un solo punto de verdad</strong>
+            <p>El equipo siempre trabaja con la misma versión de cada agente.</p>
+          </div>
+        </div>
+        <div class="collab-benefit">
+          <i class="ti ti-point-filled" style="color:var(--green)"></i>
+          <div>
+            <strong>Actualizaciones automáticas</strong>
+            <p>Cuando alguien mejora un agente, todos lo reciben en el siguiente arranque.</p>
+          </div>
+        </div>
+        <div class="collab-benefit">
+          <i class="ti ti-point-filled" style="color:var(--amber)"></i>
+          <div>
+            <strong>Control de conflictos</strong>
+            <p>Si modificaste un agente localmente, la app detecta el conflicto y te deja elegir.</p>
+          </div>
+        </div>
+        <div class="collab-benefit">
+          <i class="ti ti-point-filled" style="color:var(--blue)"></i>
+          <div>
+            <strong>Contribución abierta</strong>
+            <p>Cualquier miembro puede proponer nuevos agentes mediante pull request en GitHub.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPATIBILIDAD -->
+  <section class="compat">
+    <div class="container">
+      <div class="section-label">Compatibilidad</div>
+      <h2>Funciona con tu stack actual</h2>
+      <div class="compat-grid">
+        <div class="compat-card">
+          <i class="ti ti-terminal-2"></i>
+          <h3>Claude CLI</h3>
+          <p>Usa tu suscripción de Claude.ai. Sin coste adicional.</p>
+        </div>
+        <div class="compat-card">
+          <i class="ti ti-api"></i>
+          <h3>Anthropic API</h3>
+          <p>Acceso directo a los modelos Claude desde tu API key.</p>
+        </div>
+        <div class="compat-card">
+          <i class="ti ti-brand-github"></i>
+          <h3>GitHub Copilot</h3>
+          <p>Compatible con tu cuenta de GitHub. Capa gratuita disponible.</p>
+        </div>
+      </div>
+      <div class="compat-note">
+        Compatible con cualquier lenguaje o framework ·
+        Claude Code <code>.claude/agents/</code> ·
+        GitHub Copilot <code>.github/agents/</code>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section class="roadmap" id="roadmap">
+    <div class="container">
+      <div class="section-label">Roadmap</div>
+      <h2>v1.6.1 — En uso activo</h2>
+      <div class="roadmap-cols">
+        <div class="roadmap-col">
+          <div class="roadmap-col-head done">
+            <i class="ti ti-circle-check"></i> Hecho
+          </div>
+          <ul class="roadmap-list">
+            <li>Gestión completa de agentes en 4 niveles</li>
+            <li>Sync automático a proyectos</li>
+            <li>Directorio de agentes externo con versionado</li>
+            <li>Chat con historial por proyecto y @mention</li>
+            <li>Generación y optimización de prompts con IA</li>
+            <li>Generación de CLAUDE.md / copilot-instructions con IA</li>
+          </ul>
+        </div>
+        <div class="roadmap-col">
+          <div class="roadmap-col-head next">
+            <i class="ti ti-clock"></i> Próximamente
+          </div>
+          <ul class="roadmap-list">
+            <li>Soporte multi-usuario / equipos</li>
+            <li>Exportar y compartir packs de agentes</li>
+            <li>Integración con Cursor, Windsurf…</li>
+            <li>Versión macOS / Linux</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section class="download" id="download">
+    <div class="container">
+      <i class="ti ti-robot download-icon"></i>
+      <h2>Empieza a trabajar con IA<br />de forma estructurada</h2>
+      <p class="section-desc">
+        Portable para Windows. Sin instalación. Actualizaciones automáticas.
+      </p>
+      <a href="#" class="btn-primary btn-large">
+        <i class="ti ti-download"></i> Descargar Agent Hub v1.6.1
+      </a>
+      <p class="download-note">Windows x64 · Portable .exe · Gratis</p>
+      <p class="closing-quote">
+        <em>"No se trata de usar más IA. Se trata de usarla mejor."</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="nav-logo">
+        <i class="ti ti-robot"></i>
+        <span>Agent Hub</span>
+      </div>
+      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

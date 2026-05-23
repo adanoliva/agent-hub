@@ -578,10 +578,52 @@ async function callAIChat(messages, opts = {}) {
   return callCLI(lines.join('\n\n'), opts);
 }
 
+// ── Agent system prompt cross-provider adaptation ─────────────────────────────
+
+const ADAPTATION_PROMPTS = {
+  github: (agent) => `You are adapting a Claude Code sub-agent's system prompt so it works correctly with GitHub Copilot in VS Code.
+
+Agent name: ${agent.name}
+Agent purpose: ${agent.description}
+
+Original system prompt (written for Claude):
+---
+${agent.system}
+---
+
+Rewrite this system prompt for GitHub Copilot following these rules:
+- GitHub Copilot runs inside VS Code and has access to: codebase search, terminal, GitHub repositories, file editing, fetch
+- Replace Claude tool names with their GitHub Copilot equivalents where needed (e.g. "Read files" → "search the codebase", "run Bash" → "use the terminal")
+- Remove any references to Claude-specific capabilities (extended thinking, etc.)
+- Keep the agent's core role, expertise, tone and approach exactly the same
+- Use second person ("you") consistently
+- Keep the same language as the original
+- Length: similar to the original (do not expand significantly)
+
+Output ONLY the rewritten system prompt. No preamble, no explanation, no code fences.`,
+};
+
+/**
+ * Rewrites an agent's system prompt for a target AI provider using the
+ * configured AI. Falls back to the original system if the provider has no
+ * adaptation prompt defined.
+ *
+ * @param {{ name: string, description: string, system: string }} agent
+ * @param {'github'} targetProvider
+ * @returns {Promise<string>}
+ */
+async function adaptSystemPromptForProvider(agent, targetProvider) {
+  const buildPrompt = ADAPTATION_PROMPTS[targetProvider];
+  if (!buildPrompt || !agent.system) return agent.system;
+  const result = await callAI(buildPrompt(agent), { maxTokens: 800 });
+  return result.trim();
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
   callAI,
+  adaptSystemPromptForProvider,
   generateProjectSuggestions,
   callAIChat,
   generateAgentPrompt,

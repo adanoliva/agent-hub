@@ -349,25 +349,25 @@ app.get('/api/projects', (req, res) => {
   }
 });
 
-app.post('/api/projects', (req, res) => {
+app.post('/api/projects', async (req, res) => {
   const { name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
+    res.json(await createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
   } catch (e) {
     res.status(e.message.includes('already exists') ? 409 : 500).json({ error: e.message });
   }
 });
 
-app.post('/api/projects/import', (req, res) => {
+app.post('/api/projects/import', async (req, res) => {
   const { name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
+    res.json(await importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
   } catch (e) {
     res.status(e.message.includes('not exist') ? 404 : 409).json({ error: e.message });
   }
@@ -402,20 +402,20 @@ app.get('/api/projects/:id/sync-status', (req, res) => {
   }
 });
 
-app.post('/api/projects/:id/sync', (req, res) => {
+app.post('/api/projects/:id/sync', async (req, res) => {
   const cfg     = readConfig();
   const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   try {
-    res.json(syncProject(project));
+    res.json(await syncProject(project));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/api/sync-all', (req, res) => {
+app.post('/api/sync-all', async (req, res) => {
   try {
-    res.json(syncAllProjects());
+    res.json(await syncAllProjects());
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
