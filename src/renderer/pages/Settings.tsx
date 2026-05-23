@@ -466,36 +466,40 @@ export function Settings() {
         {tab === 'cats' && (
           <div className="settings-section">
             <div className="settings-head">Categorías y tecnologías</div>
-            {cats.map((cat) => (
-              <div key={cat.id} className="cat-item">
-                <div className="cat-item-head">
-                  <div className="cat-dot" style={{ background: cat.color }} />
-                  <span className="cat-item-name">{cat.name}</span>
-                  <button className="btn ghost sm" onClick={() => setAddTech({ catId: cat.id, catName: cat.name, id: '', name: '' })}>
-                    <i className="ti ti-plus" /> Tech
-                  </button>
-                  <button className="btn ghost sm danger" onClick={() => deleteCat(cat.id)}>
-                    <i className="ti ti-trash" />
-                  </button>
-                </div>
-                <div className="tech-pills">
-                  {(cat.technologies ?? []).map((t) => (
-                    <span key={t.id} className="tech-pill">
-                      {t.name}
-                      <span className="del" onClick={() => deleteTech(cat.id, t.id)} title="Eliminar">
-                        <i className="ti ti-x" />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <button className="btn sm" onClick={() => setAddCat({ id: '', name: '', color: '#7c6af7' })}>
+                <i className="ti ti-plus" /> Nueva categoría
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+              {cats.map((cat) => (
+                <div key={cat.id} className="cat-item">
+                  <div className="cat-item-head">
+                    <div className="cat-dot" style={{ background: cat.color }} />
+                    <span className="cat-item-name">{cat.name}</span>
+                    <button className="btn ghost sm" onClick={() => setAddTech({ catId: cat.id, catName: cat.name, id: '', name: '' })}>
+                      <i className="ti ti-plus" /> Tech
+                    </button>
+                    <button className="btn ghost sm danger" onClick={() => deleteCat(cat.id)}>
+                      <i className="ti ti-trash" />
+                    </button>
+                  </div>
+                  <div className="tech-pills">
+                    {(cat.technologies ?? []).map((t) => (
+                      <span key={t.id} className="tech-pill">
+                        {t.name}
+                        <span className="del" onClick={() => deleteTech(cat.id, t.id)} title="Eliminar">
+                          <i className="ti ti-x" />
+                        </span>
                       </span>
-                    </span>
-                  ))}
-                  {!(cat.technologies ?? []).length && (
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sin tecnologías</span>
-                  )}
+                    ))}
+                    {!(cat.technologies ?? []).length && (
+                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sin tecnologías</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-            <button className="btn sm" style={{ marginTop: 8 }} onClick={() => setAddCat({ id: '', name: '', color: '#7c6af7' })}>
-              <i className="ti ti-plus" /> Nueva categoría
-            </button>
+              ))}
+            </div>
           </div>
         )}
 
