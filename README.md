@@ -2,7 +2,9 @@
 
 > Aplicación de escritorio para gestionar agentes de IA, organizar proyectos de desarrollo y mantener contexto por proyecto — con asistencia de IA integrada.
 
-![Version](https://img.shields.io/badge/version-1.2.4-7c6af7)
+*Construida con IA. Para la IA. Con manos humanas al volante.*
+
+![Version](https://img.shields.io/badge/version-1.6.0-7c6af7)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Runtime](https://img.shields.io/badge/runtime-Electron-47848F)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -25,7 +27,10 @@ Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en
 - **Badges de actualización** — a golpe de vista qué proyectos tienen cambios pendientes
 - **Tres proveedores de IA** — Claude CLI (suscripción claude.ai), API key de Anthropic, o GitHub Copilot Models API
 - **Creación asistida por IA** — describe el agente en una frase, Claude genera el system prompt completo (ES/EN)
-- **Sugerencias contextuales** — 2-4 agentes sugeridos por IA en cada nivel, cacheadas, no repetitivas
+- **Optimización de agentes con IA** — mejora system prompts y descripciones con un clic
+- **Sugerencias contextuales** — 2-4 agentes sugeridos por IA en cada nivel y por proyecto, cacheadas, no repetitivas
+- **Chat IA multi-turno** — con historial por proyecto, @mention de agentes como contexto y acciones sugeridas
+- **Generación de contexto de proyecto** — genera `CLAUDE.md` o `copilot-instructions.md` analizando el repositorio
 - **Importar agentes externos** — introduce una URL de un `.md` con frontmatter, revisa el preview y guárdalo como agente real
 - **Gestión de proyectos** — crear nuevo (con estructura de carpetas) o importar existente
 - **Abrir en VS Code** o en el Explorador de Windows con un botón
@@ -175,6 +180,8 @@ ScriptableObjects, prefabs y URP. Escribes C# limpio usando
 
 En disco los agentes se serializan siempre con el model ID completo. La UI muestra el alias corto.
 
+El campo `optimized: true` en el frontmatter indica que el agente ha pasado por el optimizador de IA. Si está presente, el editor no muestra el botón "Optimizar con IA".
+
 ---
 
 ## Sistema de sincronización
@@ -233,12 +240,34 @@ En disco los agentes se serializan siempre con el model ID completo. La UI muest
 
 ---
 
+## Chat IA
+
+El chat soporta conversación multi-turno con el proveedor configurado:
+
+- **Historial por proyecto** — se guarda en `cache/chat-{projectId}.json`. Al cambiar de proyecto se guarda el actual y se carga el nuevo.
+- **@mention de agentes** — escribe `@nombre` en el input para añadir un agente como contexto activo. Los agentes activos aparecen como chips y se incluyen en el system prompt de cada mensaje.
+- **Acciones sugeridas** — la IA puede sugerir botones de acción al final de sus respuestas (`create-agent`, `open-agents`, `open-settings`).
+- **Selector de proyecto** — en el topbar del chat, permite cambiar el proyecto activo sin salir de la vista.
+
+---
+
+## Generación de contexto del proyecto
+
+Desde el drawer de cada proyecto puedes generar automáticamente el fichero de contexto:
+
+- **CLAUDE.md** — para Claude Code
+- **copilot-instructions.md** — para GitHub Copilot
+
+La IA analiza el directorio: detecta lenguajes por extensión, lee `package.json` / `requirements.txt` / `pyproject.toml`, detecta framework de testing, linting, build tool, CI/CD y Docker. El contenido generado se muestra para revisión antes de guardar.
+
+---
+
 ## Importar agentes externos
 
 Desde **Ajustes → Agentes externos** puedes importar un agente publicado como `.md` con frontmatter en cualquier URL:
 
 1. Introduce la URL del archivo `.md`
-2. Agent Hub lo descarga y muestra un preview editable con todos los campos (nombre, descripción, modelo, herramientas, system prompt)
+2. Agent Hub lo descarga y muestra un preview editable con todos los campos
 3. Elige en qué nivel guardarlo (Global, Categoría o Tecnología)
 4. Confirma — el agente queda guardado como un agente real en la jerarquía
 
@@ -248,8 +277,8 @@ Desde **Ajustes → Agentes externos** puedes importar un agente publicado como 
 
 La app incluye auto-update via `electron-updater`:
 
-- Al arrancar (con 8 segundos de retraso para no bloquear la carga), comprueba si hay una nueva versión publicada en GitHub Releases
-- Si la hay, aparece un **banner flotante** en la esquina inferior derecha con el número de versión y el botón **Descargar**
+- Al arrancar (con 8 segundos de retraso), comprueba si hay una nueva versión publicada en GitHub Releases
+- Si la hay, aparece un **banner flotante** en la esquina inferior derecha con el botón **Descargar**
 - Una vez descargada, el botón cambia a **Reiniciar ahora** — la instalación se aplica al reiniciar
 - También puedes buscar actualizaciones manualmente desde **Ajustes → General → Buscar actualizaciones**
 
@@ -291,49 +320,117 @@ npm install
 npm run dev
 ```
 
-Esto arranca Electron con las DevTools abiertas. El servidor Express corre en `localhost:3737`.
+Esto compila el renderer con Vite en modo watch y arranca Electron con las DevTools abiertas. El servidor Express corre en `localhost:3737`.
 
 ### Estructura del código fuente
 
 ```
 src/
-├── main/
-│   ├── main.js             ← proceso principal Electron, auto-updater, IPC handlers
-│   ├── tray.js             ← icono y menú de bandeja del sistema
+├── backend/
+│   ├── main.js             ← proceso principal Electron, IPC handlers, auto-updater
 │   ├── server.js           ← servidor Express embebido (puerto 3737)
-│   ├── agents.js           ← lógica de agentes: parse, CRUD, hashes SHA-256, seed
-│   ├── projects.js         ← lógica de proyectos: crear, importar, sync, CLAUDE.md
+│   ├── agents.js           ← lógica de agentes: parse, CRUD, hashes SHA-256
+│   ├── agents-sync.js      ← lógica de sincronización de agentes a proyectos
+│   ├── projects.js         ← lógica de proyectos: crear, importar, sync, contexto
 │   ├── ai.js               ← integración con proveedores de IA
 │   ├── config.js           ← lectura/escritura de config.json, rutas de directorios
 │   ├── defaults.js         ← definición de los agentes incluidos por defecto
+│   ├── templates.js        ← plantillas CLAUDE.md / copilot-instructions.md
+│   ├── tray.js             ← icono y menú de bandeja del sistema
+│   ├── icon.js             ← generación de icono en runtime
 │   └── preload.js          ← context bridge: expone window.api al renderer
 └── renderer/
-    ├── index.html          ← shell HTML
-    ├── styles.css          ← estilos globales (tema oscuro)
-    └── js/                 ← módulos JS (SRP)
-        ├── utils.js        ← helpers (esc, etc.)
-        ├── state.js        ← estado global S
-        ├── api.js          ← función req() para la API REST
-        ├── toast.js        ← notificaciones toast
-        ├── modal.js        ← modal de confirmación
-        ├── category-helpers.js
-        ├── view-manager.js ← switchView()
-        ├── projects-view.js
-        ├── agents-view.js
-        ├── settings-view.js
-        ├── wizard.js
-        ├── update.js       ← listeners de auto-update
-        └── init.js         ← arranque de la app
+    ├── index.html          ← shell HTML (punto de entrada Vite)
+    ├── main.tsx            ← bootstrap React
+    ├── App.tsx             ← router principal (React Router)
+    ├── api.ts              ← helper req() para la API REST
+    ├── types.ts            ← tipos TypeScript compartidos
+    ├── styles.css          ← estilos globales y variables CSS de tema
+    ├── store/
+    │   └── index.ts        ← estado global (Zustand)
+    ├── pages/
+    │   ├── Projects.tsx    ← vista de proyectos
+    │   ├── Agents.tsx      ← vista de agentes
+    │   ├── Chat.tsx        ← vista de chat IA
+    │   └── Settings.tsx    ← vista de ajustes
+    ├── components/
+    │   ├── layout/
+    │   │   ├── Sidebar.tsx
+    │   │   ├── Topbar.tsx
+    │   │   └── Statusbar.tsx
+    │   ├── agents/
+    │   │   ├── AgentsTree.tsx
+    │   │   ├── AgentsCenter.tsx
+    │   │   ├── AgentCard.tsx
+    │   │   └── AgentEditor.tsx
+    │   ├── projects/
+    │   │   ├── ProjectCard.tsx
+    │   │   ├── ProjectDrawer.tsx
+    │   │   ├── CreateProjectModal.tsx
+    │   │   ├── EditProjectModal.tsx
+    │   │   ├── ImportProjectModal.tsx
+    │   │   ├── ExcludeAgentModal.tsx
+    │   │   └── StatusBadge.tsx
+    │   └── ui/
+    │       ├── Modal.tsx
+    │       ├── Toast.tsx
+    │       ├── Wizard.tsx
+    │       └── CloseDialog.tsx
+    ├── hooks/
+    │   ├── useCategoryHelpers.ts
+    │   ├── useElectron.ts
+    │   └── useToast.ts
+    └── constants/
+        └── tools.ts
 ```
 
 ### Scripts disponibles
 
 ```bash
-npm run dev          # Desarrollo con DevTools abiertos
-npm run build        # Compilar el .exe portable para Windows
-npm run build:dir    # Compilar sin empaquetar (para debug del asar)
-npm run release      # Build + publicar en GitHub Releases (requiere GH_TOKEN)
+npm run dev              # Desarrollo: Vite watch + Electron con DevTools
+npm run build:renderer   # Compilar solo el renderer con Vite
+npm run build            # Compilar el .exe portable para Windows
+npm run build:dir        # Compilar sin empaquetar (para debug del asar)
+npm run release          # Build + publicar en GitHub Releases (requiere GH_TOKEN)
 ```
+
+---
+
+## API REST (Express en puerto 3737)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/health` | Estado del servidor |
+| GET / PUT | `/api/config` | Leer / actualizar config |
+| GET | `/api/detect-cli` | Detectar Claude CLI en PATH |
+| POST | `/api/setup` | Setup del wizard |
+| GET / POST | `/api/categories` | Categorías |
+| PUT / DELETE | `/api/categories/:id` | Editar / borrar categoría |
+| POST / DELETE | `/api/categories/:catId/technologies` | Tecnologías |
+| GET | `/api/agents` | Agentes por nivel (`?level=global\|section\|tech`) |
+| GET | `/api/agents/flat` | Todos los agentes aplanados (para @mention) |
+| GET | `/api/agents/applicable` | Agentes aplicables a un proyecto |
+| POST / PUT / DELETE | `/api/agents` | CRUD de agentes |
+| POST | `/api/agents/import-url` | Importar agente desde URL |
+| GET / POST / PUT / DELETE | `/api/projects/:id/agents` | Agentes de proyecto |
+| GET / POST | `/api/projects` | Proyectos |
+| POST | `/api/projects/import` | Importar proyecto existente |
+| PUT / DELETE | `/api/projects/:id` | Editar / borrar proyecto |
+| GET / POST | `/api/projects/:id/sync-status` | Estado de sync |
+| POST | `/api/projects/:id/sync` | Sincronizar agentes al proyecto |
+| POST | `/api/sync-all` | Sync de todos los proyectos |
+| GET / PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md |
+| POST | `/api/projects/:id/generate-context` | Generar contexto con IA |
+| GET | `/api/ai/status` | Estado del proveedor de IA |
+| POST | `/api/ai/generate-prompt` | Generar prompt desde descripción |
+| POST | `/api/ai/optimize-agent` | Optimizar system prompt con IA |
+| GET | `/api/ai/suggestions` | Sugerencias por nivel |
+| POST | `/api/ai/suggestions/refresh` | Forzar regeneración de sugerencias |
+| DELETE | `/api/ai/suggestions/cache` | Limpiar caché de sugerencias |
+| GET | `/api/ai/project-suggestions` | Sugerencias específicas para un proyecto |
+| POST | `/api/ai/project-suggestions/refresh` | Regenerar sugerencias de proyecto |
+| POST | `/api/chat` | Chat multi-turno |
+| GET / PUT / DELETE | `/api/chat/history` | Historial de chat por proyecto |
 
 ---
 
@@ -373,9 +470,9 @@ compression: maximum
 git status
 
 # 2. Actualiza la versión en package.json si corresponde
-npm version patch   # 1.2.4 → 1.2.5
-npm version minor   # 1.2.4 → 1.3.0
-npm version major   # 1.2.4 → 2.0.0
+npm version patch   # 1.6.0 → 1.6.1
+npm version minor   # 1.6.0 → 1.7.0
+npm version major   # 1.6.0 → 2.0.0
 
 # 3. Compila
 npm run build
@@ -385,8 +482,6 @@ npm run build
 ```
 
 ### Publicar nueva versión en GitHub Releases
-
-El script `release` usa `electron-builder --publish always` para subir el `.exe` y el fichero `latest.yml` (necesario para el auto-update) directamente a GitHub Releases.
 
 ```bash
 # 1. Necesitas un GitHub token con permisos de escritura en el repo
@@ -403,14 +498,12 @@ Esto genera:
 
 > Los usuarios con versiones anteriores verán el banner de actualización automáticamente en su próximo arranque.
 
-### Icono de la aplicación
+### Checklist al actualizar versión
 
-Coloca el icono en `assets/icon.ico` (formato ICO, 256×256px mínimo).  
-Para generarlo desde un PNG usa ImageMagick:
-
-```bash
-magick convert icon.png -resize 256x256 assets/icon.ico
-```
+1. Actualizar `version` en `package.json`
+2. Actualizar el campo `version` en `DEFAULT_CONFIG` de `src/backend/config.js`
+3. Actualizar la línea `> Versión actual:` en `CLAUDE.md`
+4. Commit y tag git → `npm run release`
 
 ---
 
@@ -420,11 +513,12 @@ El fichero `config.json` se genera automáticamente en la primera ejecución. Es
 
 ```json
 {
-  "version": "1.2.4",
+  "version": "1.6.0",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
   "githubModel": "gpt-4o-mini",
+  "theme": "dark",
   "categories": [
     {
       "id": "games",
@@ -445,11 +539,14 @@ El fichero `config.json` se genera automáticamente en la primera ejecución. Es
       "techId": "unity",
       "status": "active",
       "path": "C:/Proyectos/mi-rpg",
-      "createdAt": "2025-05-01T10:00:00.000Z",
+      "description": "",
+      "selectedAgents": [],
+      "excludedAgents": [],
       "agentHashes": {
         "code-reviewer": "abc123...",
         "unity-dev": "def456..."
-      }
+      },
+      "createdAt": "2025-05-01T10:00:00.000Z"
     }
   ]
 }
@@ -498,25 +595,20 @@ Sí. `electron-updater` soporta portables. El fichero `latest.yml` publicado en 
 
 ---
 
-## Documentación
-
-| Documento | Descripción |
-|---|---|
-| `README.md` | Este fichero — guía completa para desarrolladores |
-| `MANUAL.html` | Guía visual de uso para el usuario final |
-| `SPEC.html` | Especificación técnica completa del proyecto |
-
----
-
 ## Tecnologías utilizadas
 
-- [Electron](https://www.electronjs.org/) v29 — framework de escritorio
+- [Electron](https://www.electronjs.org/) v42 — framework de escritorio
+- [React](https://react.dev/) v19 — UI del renderer
+- [TypeScript](https://www.typescriptlang.org/) v6 — tipado estático en el renderer
+- [Zustand](https://zustand-demo.pmnd.rs/) v5 — estado global del renderer
+- [React Router](https://reactrouter.com/) v7 — navegación entre vistas
+- [Vite](https://vitejs.dev/) v8 — bundler del renderer
 - [Express](https://expressjs.com/) — servidor HTTP embebido (puerto 3737)
-- [electron-builder](https://www.electron.build/) v24 — compilación y empaquetado
+- [electron-builder](https://www.electron.build/) v26 — compilación y empaquetado
 - [electron-updater](https://www.electron.build/auto-update) v6 — auto-update
 - [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-node) — integración con Claude API
 - [JetBrains Mono](https://www.jetbrains.com/lp/mono/) — tipografía monoespaciada
-- [Tabler Icons](https://tabler.io/icons) — iconografía
+- [Tabler Icons](https://tabler.io/icons) — iconografía (CDN v3.6.0)
 
 ---
 
