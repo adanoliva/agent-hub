@@ -1,6 +1,6 @@
 {
   "name": "agent-hub",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Visual manager for IA agents and dev projects",
   "main": "src/backend/main.js",
   "scripts": {
