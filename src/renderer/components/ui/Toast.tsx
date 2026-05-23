@@ -13,7 +13,7 @@ export function ToastContainer() {
   const remove = useStore((s) => s.removeToast);
 
   return (
-    <div id="toasts">
+    <div id="toasts" className="toast-wrap">
       {toasts.map((t) => (
         <div key={t.id} className={`toast ${t.type}`} onClick={() => remove(t.id)}>
           <i className={`ti ${ICONS[t.type] ?? 'ti-info-circle'}`} />

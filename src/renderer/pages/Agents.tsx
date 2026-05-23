@@ -26,6 +26,7 @@ export function Agents() {
   const [syncStatus,         setSyncStatus]         = useState<AgentDirectoryStatus | null>(null);
   const [showConflicts,      setShowConflicts]      = useState(false);
   const pollRef                                      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wasSyncingRef                                = useRef(false);
 
   const sugAbortRef = useRef<AbortController | null>(null);
 
@@ -113,17 +114,27 @@ export function Agents() {
       const status = await req<AgentDirectoryStatus>('GET', '/agents-directory/status');
       setSyncStatus(status);
 
-      if (!status.syncing) {
+      if (status.syncing) {
+        wasSyncingRef.current = true;
+      } else {
         // Stop polling when done
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
 
-        // Show conflict modal if any unresolved
-        if (status.pendingConflicts.length > 0) setShowConflicts(true);
+        // Only react to a sync that finished during this session
+        if (wasSyncingRef.current) {
+          wasSyncingRef.current = false;
 
-        // Reload agents after a completed sync that brought updates
-        if (status.lastResult && !status.lastResult.error && status.lastResult.updated > 0) {
-          await loadAgents(node);
-          toast(`Directorio sincronizado: ${status.lastResult.updated} agente(s) actualizado(s)`);
+          if (status.pendingConflicts.length > 0) setShowConflicts(true);
+
+          if (status.lastResult && !status.lastResult.error) {
+            await loadAgents(node);
+            if (status.lastResult.updated > 0) {
+              toast(`Directorio sincronizado: ${status.lastResult.updated} agente(s) actualizado(s)`);
+            }
+          }
+        } else if (status.pendingConflicts.length > 0) {
+          // Surface unresolved conflicts that existed before this session
+          setShowConflicts(true);
         }
       }
     } catch {}

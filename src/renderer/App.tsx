@@ -48,7 +48,9 @@ function AppInner() {
   const setVersion  = useStore((s) => s.setAppVersion);
   const addToast    = useStore((s) => s.addToast);
 
-  const [showWizard,      setShowWizard]      = useState(() => !localStorage.getItem('cdm-wizard-done'));
+  const showWizard    = useStore((s) => s.showWizard);
+  const setShowWizard = useStore((s) => s.setShowWizard);
+
   const [showCloseDialog, setShowCloseDialog] = useState(false);
 
   useEffect(() => {

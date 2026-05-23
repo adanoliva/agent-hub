@@ -34,7 +34,11 @@
       "Bash(node --check src/backend/server.js)",
       "Bash(node --check src/backend/main.js)",
       "Bash(rtk ls *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(rtk git *)",
+      "Bash(rtk npm *)",
+      "Bash(rtk read *)",
+      "Bash(rtk grep *)"
     ]
   }
 }

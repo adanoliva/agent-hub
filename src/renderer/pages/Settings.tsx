@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import { Topbar } from '../components/layout/Topbar';
 import { Modal } from '../components/ui/Modal';
 import { req } from '../api';
@@ -21,10 +22,11 @@ interface ImportAgentReview {
 // ── Settings page ──────────────────────────────────────────────────────────────
 
 export function Settings() {
-  const toast     = useToast();
-  const config    = useStore((s) => s.config);
-  const setConfig = useStore((s) => s.setConfig);
-  const version   = useStore((s) => s.appVersion);
+  const toast                   = useToast();
+  const config                  = useStore((s) => s.config);
+  const setConfig               = useStore((s) => s.setConfig);
+  const version                 = useStore((s) => s.appVersion);
+  const setShowWizardFromSettings = useStore((s) => s.setShowWizard);
 
   const [tab,         setTab]         = useState<Tab>('general');
   const [aiStatus,    setAiStatus]    = useState<{ provider: string; ready: boolean } | null>(null);
@@ -447,15 +449,18 @@ export function Settings() {
               </div>
             </div>
 
-            {/* Row 3: Updates (always last) */}
+            {/* Row 3: Updates + wizard (compact row) */}
             <div className="settings-section">
-              <div className="settings-head">Actualizaciones</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1, fontSize: 12, color: 'var(--text2)' }}>
-                  {updateMsg || `Versión actual: v${version ?? '—'}`}
-                </div>
+              <div className="settings-head">Aplicación</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12, color: 'var(--text2)', flex: 1 }}>
+                  {updateMsg || `v${version ?? '—'}`}
+                </span>
                 <button className="btn sm" onClick={checkUpdate}>
                   <i className="ti ti-refresh" /> Buscar actualizaciones
+                </button>
+                <button className="btn sm" onClick={() => setShowWizardFromSettings(true)}>
+                  <i className="ti ti-wand" /> Ver wizard
                 </button>
               </div>
             </div>

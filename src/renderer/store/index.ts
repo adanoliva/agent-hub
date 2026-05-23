@@ -9,6 +9,9 @@ interface AppState {
   projects: Project[];
   appVersion: string | null;
 
+  // Wizard
+  showWizard: boolean;
+
   // Toasts
   toasts: Toast[];
 
@@ -18,6 +21,7 @@ interface AppState {
   setProjects: (p: Project[]) => void;
   setAppVersion: (v: string) => void;
   fetchProjects: () => Promise<void>;
+  setShowWizard: (v: boolean) => void;
   addToast: (msg: string, type?: ToastType) => void;
   removeToast: (id: string) => void;
 }
@@ -27,12 +31,14 @@ export const useStore = create<AppState>((set) => ({
   config: null,
   projects: [],
   appVersion: null,
+  showWizard: !localStorage.getItem('cdm-wizard-done'),
   toasts: [],
 
   setView: (view) => set({ view }),
   setConfig: (config) => set({ config }),
   setProjects: (projects) => set({ projects }),
   setAppVersion: (appVersion) => set({ appVersion }),
+  setShowWizard: (showWizard) => set({ showWizard }),
 
   fetchProjects: async () => {
     const projects = await req<Project[]>('GET', '/projects');

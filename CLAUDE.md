@@ -350,3 +350,10 @@ npm run release      # Build + publish a GitHub Releases
 2. Actualizar el campo `version` en `DEFAULT_CONFIG` de `src/main/config.js`
 3. Actualizar la línea `> Versión actual:` al inicio de este archivo
 4. Commit y tag git → `npm run release`
+
+El token de GitHub para publicar releases está en `.token` (raíz del proyecto, ignorado por git). Antes de ejecutar `npm run release`:
+
+```powershell
+$env:GH_TOKEN = (Get-Content .token)
+npm run release
+```

@@ -23,9 +23,10 @@ export function Wizard({ onDone }: WizardProps) {
   const [ghToken,    setGhToken]    = useState('');
   const [ghModel,    setGhModel]    = useState('gpt-4o-mini');
   const [apiKey,     setApiKey]     = useState('');
-  const [setupLog,   setSetupLog]   = useState<{ icon: string; color: string; msg: string }[]>([]);
-  const [setupDone,  setSetupDone]  = useState(false);
-  const [setupBusy,  setSetupBusy]  = useState(false);
+  const [setupLog,    setSetupLog]   = useState<{ icon: string; color: string; msg: string }[]>([]);
+  const [setupDone,   setSetupDone]  = useState(false);
+  const [setupBusy,   setSetupBusy]  = useState(false);
+  const [noShowAgain, setNoShowAgain] = useState(false);
 
   const TOTAL = 3;
 
@@ -104,7 +105,8 @@ export function Wizard({ onDone }: WizardProps) {
   }
 
   function close() {
-    localStorage.setItem('cdm-wizard-done', '1');
+    if (noShowAgain) localStorage.setItem('cdm-wizard-done', '1');
+    else localStorage.removeItem('cdm-wizard-done');
     onDone();
   }
 
@@ -170,16 +172,23 @@ export function Wizard({ onDone }: WizardProps) {
 
         {/* Foot */}
         <div className="wiz-foot">
-          <span
-            className="wiz-skip"
-            style={{ visibility: skipLabel ? 'visible' : 'hidden' }}
-            onClick={close}
-          >
-            {skipLabel}
-          </span>
-          <button className="btn primary" onClick={handleNext} disabled={nextDisabled}>
-            {nextLabel} <i className="ti ti-arrow-right" />
-          </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 11, color: 'var(--text2)', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={noShowAgain}
+              onChange={(e) => setNoShowAgain(e.target.checked)}
+              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+            />
+            No mostrar al inicio
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {skipLabel && (
+              <span className="wiz-skip" onClick={close}>{skipLabel}</span>
+            )}
+            <button className="btn primary" onClick={handleNext} disabled={nextDisabled}>
+              {nextLabel} <i className="ti ti-arrow-right" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
