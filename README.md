@@ -4,7 +4,7 @@
 
 *Construida con IA. Para la IA. Con manos humanas al volante.*
 
-![Version](https://img.shields.io/badge/version-1.6.0-7c6af7)
+![Version](https://img.shields.io/badge/version-1.7.0-7c6af7)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Runtime](https://img.shields.io/badge/runtime-Electron-47848F)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -21,11 +21,14 @@ Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en
 
 ## Características principales
 
+- **Dashboard** — vista de inicio con estado general, oportunidades de mejora, acciones rápidas y seguimiento de uso de IA
 - **Jerarquía de agentes en 4 niveles** — Global, Categoría, Tecnología y Proyecto
 - **Copia física + sistema de hashes SHA-256** — cada proyecto es autónomo con sus agentes copiados
+- **Conversión automática de agentes por proveedor** — al sincronizar, los agentes se adaptan al formato de Claude o GitHub Copilot (modelos, herramientas y system prompt) de forma transparente
 - **Sincronización global o por proyecto** — un botón para propagar cambios a todos, o solo a uno
 - **Badges de actualización** — a golpe de vista qué proyectos tienen cambios pendientes
 - **Tres proveedores de IA** — Claude CLI (suscripción claude.ai), API key de Anthropic, o GitHub Copilot Models API
+- **Seguimiento de uso de IA** — tokens de entrada/salida y coste estimado por sesión y acumulado, persistidos entre arranques
 - **Creación asistida por IA** — describe el agente en una frase, Claude genera el system prompt completo (ES/EN)
 - **Optimización de agentes con IA** — mejora system prompts y descripciones con un clic
 - **Sugerencias contextuales** — 2-4 agentes sugeridos por IA en cada nivel y por proyecto, cacheadas, no repetitivas
@@ -33,6 +36,7 @@ Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en
 - **Generación de contexto de proyecto** — genera `CLAUDE.md` o `copilot-instructions.md` analizando el repositorio
 - **Importar agentes externos** — introduce una URL de un `.md` con frontmatter, revisa el preview y guárdalo como agente real
 - **Gestión de proyectos** — crear nuevo (con estructura de carpetas) o importar existente
+- **Guías por editor** — VS Code, IntelliJ y Eclipse, adaptadas al proveedor configurado
 - **Abrir en VS Code** o en el Explorador de Windows con un botón
 - **System tray** — vive en la bandeja del sistema, siempre disponible
 - **Auto-update** — comprueba actualizaciones al arrancar y muestra un banner flotante cuando hay una nueva versión disponible
@@ -84,7 +88,7 @@ Al ejecutar por primera vez, el wizard te guía en tres pasos:
 
 1. **Bienvenida** — explicación rápida de la app
 2. **Conectar con Claude** — elige el proveedor de IA: Claude CLI, GitHub Copilot Models API o API key de Anthropic. Puedes saltarlo y configurarlo más tarde desde Ajustes. Sin él, el modo manual siempre está disponible.
-3. **Generación de estructura base** — crea todas las carpetas y carga los agentes por defecto
+3. **Generación de estructura base** — crea todas las carpetas e inicia la descarga de agentes desde el directorio externo
 
 ---
 
@@ -96,24 +100,12 @@ agent-hub/
 ├── config.json                 ← configuración, proyectos registrados, hashes de sync
 ├── agents/
 │   ├── global/                 ← Nivel 1: agentes para todos los proyectos
-│   │   ├── code-reviewer.md
-│   │   ├── git-helper.md
-│   │   ├── test-writer.md
-│   │   ├── doc-writer.md
-│   │   ├── refactor-agent.md
-│   │   └── debugger.md
-│   ├── section-games/          ← Nivel 2: categoría Juegos
-│   ├── section-web/            ← Nivel 2: categoría Web
-│   ├── section-mobile/         ← Nivel 2: categoría Móvil
-│   ├── section-docs/           ← Nivel 2: categoría Docs
-│   ├── tech-games-unity/       ← Nivel 3: tecnología Unity
-│   ├── tech-games-godot/       ← Nivel 3: tecnología Godot
-│   ├── tech-web-react/         ← Nivel 3: tecnología React
-│   ├── tech-web-fullstack/     ← Nivel 3: tecnología Fullstack
-│   ├── tech-web-nextjs/        ← Nivel 3: tecnología Next.js
-│   ├── tech-mobile-react-native/
-│   └── tech-mobile-pwa/
+│   │   └── .sync-meta.json     ← estado del último sync con el repositorio externo
+│   ├── section-{catId}/        ← Nivel 2: agentes por categoría (se crean al sincronizar)
+│   ├── tech-{catId}-{techId}/  ← Nivel 3: agentes por tecnología (se crean al sincronizar)
+│   └── uncategorized/          ← agentes del repo que no encajan en ninguna carpeta estándar
 └── cache/
+    ├── agents-meta.json        ← metadatos de versionado del repositorio externo
     └── suggestions.json        ← sugerencias de IA cacheadas por nivel
 ```
 
@@ -178,7 +170,7 @@ ScriptableObjects, prefabs y URP. Escribes C# limpio usando
 | `sonnet` | `claude-sonnet-4-20250514` |
 | `opus` | `claude-opus-4-20250514` |
 
-En disco los agentes se serializan siempre con el model ID completo. La UI muestra el alias corto.
+En disco los agentes se serializan siempre con el **alias corto** (`sonnet`, `haiku`, `opus`). El Claude Code CLI solo acepta aliases cortos.
 
 El campo `optimized: true` en el frontmatter indica que el agente ha pasado por el optimizador de IA. Si está presente, el editor no muestra el botón "Optimizar con IA".
 
@@ -191,52 +183,6 @@ El campo `optimized: true` en el frontmatter indica que el agente ha pasado por 
 3. Cuando editas un agente o creas uno nuevo, el hash cambia → los proyectos afectados muestran el badge **↑ Actualización disponible**
 4. Sincronizas cuando quieras: **global** (todos los proyectos) o **por proyecto** individualmente
 5. Los agentes de **nivel 4** (propios del proyecto) nunca se modifican durante el sync
-
----
-
-## Agentes incluidos por defecto
-
-### Global
-| Agente | Descripción | Modelo |
-|---|---|---|
-| `code-reviewer` | Revisa código: bugs, antipatrones y mejoras | sonnet |
-| `git-helper` | Commits, ramas y resolución de conflictos | haiku |
-| `test-writer` | Genera tests unitarios y de integración | sonnet |
-| `doc-writer` | Documentación técnica en Markdown | sonnet |
-| `refactor-agent` | Refactoriza código manteniendo funcionalidad | sonnet |
-| `debugger` | Diagnóstico y corrección de errores | sonnet |
-
-### Juegos (categoría)
-| Agente | Descripción |
-|---|---|
-| `game-designer` | Mecánicas, balance y experiencia de juego |
-| `performance-optimizer` | Optimiza framerate y rendimiento |
-
-### Unity (tecnología)
-| Agente | Descripción |
-|---|---|
-| `unity-dev` | Unity, C# y arquitectura de GameObjects |
-| `unity-shader` | Shaders HLSL y Shader Graph para URP/HDRP |
-| `unity-ui` | UI Toolkit, Canvas y sistemas de menú |
-
-### Web (categoría)
-| Agente | Descripción |
-|---|---|
-| `api-designer` | Diseño de APIs REST y GraphQL |
-| `security-audit` | Seguridad web: OWASP, auth, inyecciones |
-| `accessibility` | Accesibilidad WCAG AA |
-
-### React / Fullstack / Next.js (tecnología)
-`react-dev` · `css-designer` · `backend-dev` · `nextjs-dev`
-
-### Móvil (categoría)
-`mobile-ux`
-
-### React Native / PWA (tecnología)
-`rn-dev` · `pwa-dev`
-
-### Docs (categoría)
-`tech-writer` · `diagram-maker`
 
 ---
 
@@ -262,11 +208,23 @@ La IA analiza el directorio: detecta lenguajes por extensión, lee `package.json
 
 ---
 
-## Importar agentes externos
+## Agentes externos
 
-Desde **Ajustes → Agentes externos** puedes importar un agente publicado como `.md` con frontmatter en cualquier URL:
+### Repositorio de agentes
 
-1. Introduce la URL del archivo `.md`
+Agent Hub se sincroniza con un repositorio GitHub que actúa como catálogo compartido. La URL por defecto es `https://github.com/adanoliva/agents-directory`, configurable en **Ajustes → Directorio de agentes**.
+
+- **Primera sync** — ocurre al finalizar el wizard, descarga todos los agentes del repositorio
+- **Syncs posteriores** — al arrancar comprueba si el commit remoto ha cambiado; solo descarga lo que es nuevo o distinto
+- **Versionado por archivo** — usa git blob SHA para detectar cambios sin descargar el contenido completo
+- **Conflictos** — si modificaste un agente localmente y el remoto también cambió, la app detecta el conflicto y te da a elegir entre conservar tu versión o actualizarla desde el repositorio
+- **Sync manual** — botón "Sincronizar ahora" en **Ajustes → Directorio de agentes** para forzar una comprobación inmediata
+
+### Importar agente por URL
+
+Desde **Ajustes → Directorio de agentes** también puedes importar un agente individual publicado en cualquier URL pública:
+
+1. Introduce la URL del archivo `.md` con frontmatter
 2. Agent Hub lo descarga y muestra un preview editable con todos los campos
 3. Elige en qué nivel guardarlo (Global, Categoría o Tecnología)
 4. Confirma — el agente queda guardado como un agente real en la jerarquía
@@ -349,6 +307,7 @@ src/
     ├── store/
     │   └── index.ts        ← estado global (Zustand)
     ├── pages/
+    │   ├── Dashboard.tsx   ← vista de inicio (dashboard)
     │   ├── Projects.tsx    ← vista de proyectos
     │   ├── Agents.tsx      ← vista de agentes
     │   ├── Chat.tsx        ← vista de chat IA
@@ -421,7 +380,11 @@ npm run release          # Build + publicar en GitHub Releases (requiere GH_TOKE
 | POST | `/api/sync-all` | Sync de todos los proyectos |
 | GET / PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md |
 | POST | `/api/projects/:id/generate-context` | Generar contexto con IA |
+| GET | `/api/dashboard` | Datos del dashboard (stats, sync, notificaciones) |
 | GET | `/api/ai/status` | Estado del proveedor de IA |
+| GET | `/api/ai/usage` | Tokens y coste de sesión + acumulado |
+| POST | `/api/ai/usage/reset` | Reiniciar contadores de sesión |
+| POST | `/api/ai/usage/reset-all` | Reiniciar sesión y acumulado |
 | POST | `/api/ai/generate-prompt` | Generar prompt desde descripción |
 | POST | `/api/ai/optimize-agent` | Optimizar system prompt con IA |
 | GET | `/api/ai/suggestions` | Sugerencias por nivel |
@@ -513,7 +476,7 @@ El fichero `config.json` se genera automáticamente en la primera ejecución. Es
 
 ```json
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",

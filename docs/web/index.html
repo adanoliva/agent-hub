@@ -22,6 +22,7 @@
       <div class="nav-links">
         <a href="#features">Funcionalidades</a>
         <a href="#how">Cómo funciona</a>
+        <a href="#dashboard">Dashboard</a>
         <a href="#collab">Repositorio</a>
         <a href="#roadmap">Roadmap</a>
       </div>
@@ -32,7 +33,7 @@
   <!-- HERO -->
   <section class="hero">
     <div class="hero-badge">
-      <i class="ti ti-sparkles"></i> v1.6.1 disponible
+      <i class="ti ti-sparkles"></i> v1.7.0 disponible
     </div>
     <h1 class="hero-title">
       Gestiona tus agentes de IA<br />
@@ -169,6 +170,21 @@
           <i class="ti ti-cloud-download"></i>
           <h3>Directorio de agentes</h3>
           <p>Descarga un catálogo curado de agentes profesionales, siempre actualizados.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-chart-bar"></i>
+          <h3>Dashboard</h3>
+          <p>Vista de inicio con métricas, oportunidades de mejora y acciones rápidas.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-chart-line"></i>
+          <h3>Seguimiento de uso IA</h3>
+          <p>Tokens enviados y recibidos, coste estimado, por sesión y acumulado.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-code"></i>
+          <h3>Guías de editor</h3>
+          <p>Instrucciones de integración para VS Code, IntelliJ y Eclipse.</p>
         </div>
       </div>
     </div>
@@ -363,11 +379,151 @@
     </div>
   </section>
 
+  <!-- DASHBOARD PREVIEW -->
+  <section class="dash-section" id="dashboard">
+    <div class="container">
+      <div class="section-label">Dashboard</div>
+      <h2>Todo bajo control,<br />a golpe de vista</h2>
+      <p class="section-desc">
+        La vista de inicio centraliza el estado de tu ecosistema: métricas de agentes y proyectos,
+        oportunidades de mejora detectadas automáticamente, acciones rápidas y seguimiento del consumo de IA.
+      </p>
+
+      <div class="dash-grid">
+
+        <!-- Estado general -->
+        <div class="dash-card">
+          <div class="dash-card-head"><i class="ti ti-chart-bar"></i> Estado General</div>
+          <div class="dash-stat-row">
+            <div class="dash-stat-icon accent"><i class="ti ti-cpu"></i></div>
+            <span class="dash-num">24</span>
+            <span class="dash-lbl">Agentes</span>
+            <div class="dash-subs">
+              <span><i class="ti ti-circle-filled" style="color:var(--accent);font-size:7px"></i> Global: 8</span>
+              <span><i class="ti ti-circle-filled" style="color:var(--blue);font-size:7px"></i> Categoría: 6</span>
+              <span><i class="ti ti-circle-filled" style="color:var(--green);font-size:7px"></i> Tecnología: 10</span>
+            </div>
+          </div>
+          <div class="dash-sep"></div>
+          <div class="dash-stat-row">
+            <div class="dash-stat-icon blue"><i class="ti ti-layout-grid"></i></div>
+            <span class="dash-num">5</span>
+            <span class="dash-lbl">Proyectos</span>
+            <div class="dash-subs">
+              <span><i class="ti ti-circle-filled" style="color:var(--green);font-size:7px"></i> Activos: 4</span>
+              <span><i class="ti ti-circle-filled" style="color:var(--amber);font-size:7px"></i> Pausados: 1</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sincronización -->
+        <div class="dash-card">
+          <div class="dash-card-head"><i class="ti ti-refresh"></i> Sincronización</div>
+          <div class="dash-sync-row">
+            <div class="dash-sdot ok"><i class="ti ti-circle-check"></i></div>
+            <div class="dash-sync-info">
+              <span class="dash-sync-name">Agentes</span>
+              <span class="dash-sync-sub ok">Todo sincronizado</span>
+            </div>
+          </div>
+          <div class="dash-sync-row">
+            <div class="dash-sdot warn"><i class="ti ti-alert-triangle"></i></div>
+            <div class="dash-sync-info">
+              <span class="dash-sync-name">Proyectos</span>
+              <span class="dash-sync-sub warn">2 desactualizados</span>
+            </div>
+          </div>
+          <div class="dash-sync-row">
+            <div class="dash-sdot ok"><i class="ti ti-circle-check"></i></div>
+            <div class="dash-sync-info">
+              <span class="dash-sync-name">Directorio externo</span>
+              <span class="dash-sync-sub ok">Hace 3h</span>
+            </div>
+          </div>
+          <div class="dash-btn-mock">
+            <i class="ti ti-refresh"></i> Sincronizar todo
+          </div>
+        </div>
+
+        <!-- Oportunidades de mejora - ancho completo -->
+        <div class="dash-card dash-card-wide">
+          <div class="dash-card-head">
+            <i class="ti ti-bulb"></i> Oportunidades de Mejora
+            <span class="dash-count">3</span>
+          </div>
+          <div class="dash-notif coral">
+            <i class="ti ti-alert-circle"></i>
+            <div class="dash-notif-body">
+              <span class="dash-notif-tag coral">CRÍTICA</span>
+              <span class="dash-notif-who"><i class="ti ti-layout-grid"></i> e-commerce-api</span>
+              <span class="dash-notif-msg">No tiene CLAUDE.md generado. El contexto del proyecto mejora la precisión de Claude.</span>
+            </div>
+            <div class="dash-notif-btn">Generar</div>
+          </div>
+          <div class="dash-notif amber">
+            <i class="ti ti-bulb"></i>
+            <div class="dash-notif-body">
+              <span class="dash-notif-tag amber">MEJORA</span>
+              <span class="dash-notif-who"><i class="ti ti-cpu"></i> commit-writer</span>
+              <span class="dash-notif-msg">El system prompt es muy corto. Un prompt detallado mejora la calidad de las respuestas.</span>
+            </div>
+            <div class="dash-notif-btn">Optimizar</div>
+          </div>
+          <div class="dash-notif blue">
+            <i class="ti ti-info-circle"></i>
+            <div class="dash-notif-body">
+              <span class="dash-notif-tag blue">INFO</span>
+              <span class="dash-notif-who"><i class="ti ti-layout-grid"></i> mobile-app</span>
+              <span class="dash-notif-msg">Tiene 3 agentes pendientes de sincronizar.</span>
+            </div>
+            <div class="dash-notif-btn">Abrir</div>
+          </div>
+        </div>
+
+        <!-- Acciones rápidas -->
+        <div class="dash-card">
+          <div class="dash-card-head"><i class="ti ti-bolt"></i> Acciones Rápidas</div>
+          <div class="dash-actions">
+            <div class="dash-action-btn"><i class="ti ti-cpu"></i> Nuevo Agente</div>
+            <div class="dash-action-btn"><i class="ti ti-layout-grid"></i> Nuevo Proyecto</div>
+            <div class="dash-action-btn"><i class="ti ti-refresh"></i> Sincronizar Todo</div>
+            <div class="dash-action-btn"><i class="ti ti-message-chatbot"></i> Ir a Chat</div>
+            <div class="dash-action-btn"><i class="ti ti-settings"></i> Ajustes</div>
+          </div>
+        </div>
+
+        <!-- Uso de IA -->
+        <div class="dash-card">
+          <div class="dash-card-head"><i class="ti ti-chart-line"></i> Uso de IA</div>
+          <div class="dash-usage-block">
+            <div class="dash-usage-label">Total acumulado</div>
+            <div class="dash-usage-tokens">
+              <span><i class="ti ti-arrow-up" style="color:var(--blue);font-size:10px"></i> 124.3k</span>
+              <span><i class="ti ti-arrow-down" style="color:var(--green);font-size:10px"></i> 38.7k</span>
+              <span class="dash-usage-meta">89 llamadas</span>
+            </div>
+            <div class="dash-usage-cost">$0.4821 estimado</div>
+          </div>
+          <div class="dash-thin-sep"></div>
+          <div class="dash-usage-block">
+            <div class="dash-usage-label">Sesión actual</div>
+            <div class="dash-usage-tokens">
+              <span><i class="ti ti-arrow-up" style="color:var(--blue);font-size:10px"></i> 8.1k</span>
+              <span><i class="ti ti-arrow-down" style="color:var(--green);font-size:10px"></i> 2.4k</span>
+              <span class="dash-usage-meta">6 llamadas</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   <!-- ROADMAP -->
   <section class="roadmap" id="roadmap">
     <div class="container">
       <div class="section-label">Roadmap</div>
-      <h2>v1.6.1 — En uso activo</h2>
+      <h2>v1.7.0 — En uso activo</h2>
       <div class="roadmap-cols">
         <div class="roadmap-col">
           <div class="roadmap-col-head done">
@@ -380,6 +536,9 @@
             <li>Chat con historial por proyecto y @mention</li>
             <li>Generación y optimización de prompts con IA</li>
             <li>Generación de CLAUDE.md / copilot-instructions con IA</li>
+            <li>Dashboard con métricas y oportunidades de mejora</li>
+            <li>Seguimiento de tokens y coste por sesión y acumulado</li>
+            <li>Guías de integración para VS Code, IntelliJ y Eclipse</li>
           </ul>
         </div>
         <div class="roadmap-col">
@@ -406,7 +565,7 @@
         Portable para Windows. Sin instalación. Actualizaciones automáticas.
       </p>
       <a href="#" class="btn-primary btn-large">
-        <i class="ti ti-download"></i> Descargar Agent Hub v1.6.1
+        <i class="ti ti-download"></i> Descargar Agent Hub v1.7.0
       </a>
       <p class="download-note">Windows x64 · Portable .exe · Gratis</p>
       <p class="closing-quote">

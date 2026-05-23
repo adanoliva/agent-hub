@@ -1,6 +1,6 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **1.6.1** · Actualizar este campo en cada release.
+> Versión actual: **1.7.0** · Actualizar este campo en cada release.
 
 @docs/backend.md
 @docs/frontend.md
@@ -18,6 +18,9 @@ Permite:
 - Generar ficheros de contexto (CLAUDE.md / copilot-instructions.md) desde análisis del proyecto
 - Sugerir agentes específicos para cada proyecto usando su documentación como contexto
 - Sincronizar agentes desde un repositorio externo (directorio de agentes)
+- Dashboard con métricas, notificaciones de mejora y acciones rápidas
+- Seguimiento de uso de IA (tokens y coste) por sesión y acumulado
+- Guías de integración para VS Code, IntelliJ y Eclipse
 
 ---
 
@@ -47,7 +50,7 @@ src/renderer/                 — React 19 + TypeScript + Vite + Zustand
   ├── types.ts                — Tipos TypeScript compartidos
   ├── vite-env.d.ts
   ├── store/
-  │   └── index.ts            — Zustand store global (view, config, projects, toasts, wizard)
+  │   └── index.ts            — Zustand store global (view, config, projects, toasts, wizard, pendingAction)
   ├── hooks/
   │   ├── useCategoryHelpers.ts
   │   ├── useElectron.ts
@@ -55,10 +58,11 @@ src/renderer/                 — React 19 + TypeScript + Vite + Zustand
   ├── constants/
   │   └── tools.ts            — Lista de herramientas disponibles para agentes
   ├── pages/
+  │   ├── Dashboard.tsx       — Vista de inicio (métricas, sync, notificaciones, uso IA)
   │   ├── Projects.tsx        — Vista de proyectos
   │   ├── Agents.tsx          — Vista de agentes (árbol + editor + sync directorio)
   │   ├── Chat.tsx            — Vista de chat IA (@mention, acciones, historial)
-  │   └── Settings.tsx        — Vista de ajustes (general / categorías / directorio agentes)
+  │   └── Settings.tsx        — Vista de ajustes (general / categorías / directorio agentes / guías editor)
   └── components/
       ├── layout/
       │   ├── Sidebar.tsx     — Navegación lateral
@@ -92,6 +96,7 @@ src/renderer/                 — React 19 + TypeScript + Vite + Zustand
 2. En producción, Express sirve el renderer desde `dist/renderer/` (Vite build)
 3. En dev, Vite dev server corre en puerto 5173 y el BrowserWindow carga desde allí
 4. `App.tsx` monta, carga `GET /config` y `GET /projects`, aplica tema, muestra wizard si corresponde
+5. Vista inicial: `dashboard` (cambia a `projects` si no hay wizard completado)
 
 ---
 
@@ -101,18 +106,21 @@ Zustand store. Acceso via `useStore(s => s.campo)`.
 
 ```ts
 interface AppState {
-  view: View;              // 'projects' | 'agents' | 'chat' | 'settings'
+  view: View;              // 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings'
   config: Config | null;
   projects: Project[];
   appVersion: string | null;
   showWizard: boolean;     // true si localStorage 'cdm-wizard-done' no existe
   toasts: Toast[];
+  pendingAction: string | null;  // acción pendiente para la siguiente vista ('new-agent', 'new-project')
 
   setView, setConfig, setProjects, setAppVersion,
   fetchProjects,           // GET /projects y actualiza store
   setShowWizard,           // usado desde Settings para relanzar el wizard
   addToast,                // ok: 3.5s · err/warn: 5s
   removeToast,
+  navigateTo(view, action?),  // setView + setPendingAction en un solo paso
+  setPendingAction,
 }
 ```
 
@@ -149,6 +157,10 @@ El wizard siempre se muestra al arrancar a menos que `localStorage.getItem('cdm-
 | POST | `/api/sync-all` | Sync de todos los proyectos |
 | GET/PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md |
 | POST | `/api/projects/:id/generate-context` | Generar contexto con IA (`?type=claude\|github`) |
+| GET | `/api/dashboard` | Datos del dashboard (métricas, sync, notificaciones) |
+| GET | `/api/ai/usage` | Uso de IA acumulado y de sesión (`AIUsage`) |
+| POST | `/api/ai/usage/reset` | Reiniciar contadores de sesión |
+| POST | `/api/ai/usage/reset-all` | Reiniciar todos los contadores (sesión + acumulado) |
 | GET | `/api/ai/status` | Estado del proveedor de IA |
 | POST | `/api/ai/generate-prompt` | Generar prompt de agente desde descripción |
 | POST | `/api/ai/optimize-agent` | Optimizar system prompt existente con IA |
@@ -174,7 +186,7 @@ Estructura completa:
 
 ```json
 {
-  "version": "1.6.1",
+  "version": "1.7.0",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
@@ -234,7 +246,7 @@ optimized: true        # opcional — presente solo si fue optimizado con IA
 System prompt del agente aquí.
 ```
 
-Modelos disponibles: `haiku` → `claude-haiku-4-5-20251001`, `sonnet` → `claude-sonnet-4-20250514`, `opus` → `claude-opus-4-20250514`.
+Modelos disponibles (alias en disco → ID completo): `haiku` → `claude-haiku-4-5-20251001`, `sonnet` → `claude-sonnet-4-20250514`, `opus` → `claude-opus-4-20250514`. Los ficheros `.md` usan el alias corto (`sonnet`), no el ID completo.
 
 El campo `optimized: true` lo escribe `serializeAgent()` cuando el agente ha pasado por `POST /api/ai/optimize-agent`. Si está presente, el editor no muestra el botón "Optimizar con IA".
 

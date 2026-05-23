@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-23
+> Última actualización: 2026-05-23 · Versión: 1.7.0
 
 ---
 
@@ -20,6 +20,7 @@
 11. [Agentes por defecto (`defaults.js`)](#11-agentes-por-defecto-defaultsjs)
 12. [Plantillas de contexto (`templates.js`)](#12-plantillas-de-contexto-templatesjs)
 13. [Flujos clave end-to-end](#13-flujos-clave-end-to-end)
+14. [Dashboard y seguimiento de uso](#14-dashboard-y-seguimiento-de-uso)
 
 ---
 
@@ -286,11 +287,25 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | PUT | `/api/projects/:id/context` | Guarda el fichero de contexto |
 | POST | `/api/projects/:id/generate-context?type=` | Genera con IA analizando el directorio del proyecto |
 
+#### Dashboard
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/dashboard` | `DashboardData`: estadísticas, sync, notificaciones de mejora |
+
+`buildDashboardNotifications()` analiza el estado actual y genera `DashboardNotification[]`:
+- **Critical**: proyecto sin `CLAUDE.md` (si `needsClaude`) o sin `copilot-instructions.md` (si `needsGithub`)
+- **Optimization**: fichero de contexto existe pero tiene menos de 80 caracteres
+- **Info**: agentes pendientes de sync, proyectos desactualizados
+
 #### IA
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/ai/status` | `{ provider, ready: bool }` |
+| GET | `/api/ai/usage` | `AIUsage`: `{ cumulative, session }` con tokens y coste estimado |
+| POST | `/api/ai/usage/reset` | Reinicia contadores de sesión; devuelve `AIUsage` actualizado |
+| POST | `/api/ai/usage/reset-all` | Reinicia todo (sesión + acumulado); borra `cache/ai-usage.json` |
 | POST | `/api/ai/generate-prompt` | Genera system prompt desde descripción `{ description, level, tools, lang }` |
 | POST | `/api/ai/optimize-agent` | Mejora system prompt y description existentes |
 | GET | `/api/ai/suggestions?level=&categoryId=&techId=` | 3 sugerencias de agentes (con caché) |
@@ -570,11 +585,11 @@ syncProject(projectId)
 
 ### `callAI(prompt, systemPrompt?)`
 
-Punto de entrada único. Lee `config.aiProvider` y delega a `callCLI`, `callAPI` o `callGitHub`.
+Punto de entrada único. Lee `config.aiProvider` y delega a `callCLI`, `callAPI` o `callGitHub`. Cada rama captura el uso de tokens y llama a `trackUsage()`.
 
 ### Chat multi-turno (`callAIChat`)
 
-Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación en texto plano.
+Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación en texto plano. También registra tokens en cada llamada.
 
 ### Funciones de generación
 
@@ -582,6 +597,33 @@ Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación e
 - `generateSuggestions({ level, categoryId, techId, existingNames })` — 3 agentes sugeridos en JSON.
 - `generateProjectSuggestions({ project, contextContent, existingNames })` — sugerencias contextualizadas con el CLAUDE.md del proyecto.
 - `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Devuelve `{ description, system }`.
+
+### Seguimiento de uso de tokens
+
+```js
+// Estructuras en memoria + disco
+cumulative  // persiste en cache/ai-usage.json entre sesiones
+session     // solo en memoria, se reinicia con la app
+
+// API de uso
+trackUsage({ inputTokens, outputTokens, costUSD })  // actualiza ambas + guarda cumulative
+resetSessionUsage()    // reinicia solo session
+resetAllUsage()        // reinicia ambas + borra cache/ai-usage.json
+getSessionUsage()      // devuelve { cumulative, session } (tipo AIUsage)
+```
+
+**Extracción de tokens por proveedor:**
+- `cli` — usa `--output-format json`; extrae `parsed.usage.input_tokens / output_tokens`
+- `api` — `message.usage.input_tokens / output_tokens` del SDK de Anthropic
+- `github` — `data.usage.prompt_tokens / completion_tokens` (formato OpenAI)
+
+**Coste estimado** (solo para `api`): tabla `ANTHROPIC_PRICING` keyed por model ID completo:
+
+| Modelo | Input $/1M | Output $/1M |
+|---|---|---|
+| claude-sonnet-4-20250514 | $3 | $15 |
+| claude-haiku-4-5-20251001 | $0.25 | $1.25 |
+| claude-opus-4-20250514 | $15 | $75 |
 
 ### Caché de sugerencias
 
@@ -765,3 +807,42 @@ Frontend: POST /api/chat { messages, systemPrompt }
     └── 'github' → fetch Azure inference endpoint
   ← { reply: string }
 ```
+
+---
+
+## 14. Dashboard y seguimiento de uso
+
+### Dashboard (`GET /api/dashboard`)
+
+`buildDashboardNotifications(cfg)` recorre todos los proyectos activos y genera oportunidades de mejora:
+
+```
+para cada proyecto activo:
+  needsClaude = aiProvider ∈ { 'claude', 'both' }
+  needsGithub = aiProvider ∈ { 'github', 'both' }
+
+  si needsClaude y no existe CLAUDE.md         → notif critical
+  si needsClaude y CLAUDE.md < 80 chars        → notif optimization
+  si needsGithub y no existe copilot-instructions.md → notif critical
+  si needsGithub y copilot < 80 chars          → notif optimization
+```
+
+El endpoint también lee `pendingUpdates` de cada proyecto (via `getProjectSyncStatus`) para generar notificaciones de sync pendiente.
+
+### Seguimiento de uso (`ai.js`)
+
+Fichero de persistencia: `cache/ai-usage.json`
+
+```json
+{
+  "inputTokens": 12345,
+  "outputTokens": 6789,
+  "estimatedCostUSD": 0.1234,
+  "calls": 42,
+  "since": "2026-05-01T00:00:00Z"
+}
+```
+
+Solo `cumulative` se persiste; `session` vive en memoria y se pierde al cerrar la app.
+
+**Cambio de proveedor** (`PUT /api/config` con nuevo `aiProvider`): llama `resetAllUsage()` para que los contadores reflejen únicamente el uso del proveedor activo.

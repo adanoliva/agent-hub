@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-23
+> Última actualización: 2026-05-23 · Versión: 1.7.0
 
 ---
 
@@ -26,6 +26,7 @@ src/renderer/
 │   ├── projects/           ← ProjectCard, ProjectDrawer, modales
 │   └── agents/             ← AgentCard, AgentsTree, AgentsCenter, AgentEditor
 └── pages/
+    ├── Dashboard.tsx
     ├── Projects.tsx
     ├── Agents.tsx
     ├── Chat.tsx
@@ -44,18 +45,21 @@ src/renderer/
 
 ```ts
 interface AppState {
-  view:       'projects' | 'agents' | 'chat' | 'settings';
-  config:     Config | null;
-  projects:   Project[];
-  appVersion: string | null;
-  toasts:     Toast[];
-  showWizard: boolean;
+  view:          'dashboard' | 'projects' | 'agents' | 'chat' | 'settings';
+  config:        Config | null;
+  projects:      Project[];
+  appVersion:    string | null;
+  toasts:        Toast[];
+  showWizard:    boolean;
+  pendingAction: string | null;  // 'new-agent' | 'new-project' | null
 
   setView, setConfig, setProjects, setAppVersion,
   fetchProjects(): Promise<void>;   // GET /projects → actualiza store
   setShowWizard(v: boolean): void;
   addToast(msg: string, type?: 'ok'|'err'|'info'|'warn'): void;  // auto-dismiss 3.5s / 5s para err|warn
   removeToast(id: string): void;
+  navigateTo(view: View, action?: string): void;  // setView + setPendingAction en un solo paso
+  setPendingAction(a: string | null): void;
 }
 ```
 
@@ -105,6 +109,27 @@ interface AgentDirectoryStatus {
 interface SyncConflict { fileKey: string; localPath: string; remotePath: string; remoteSHA: string; localSHA: string; name: string; }
 type SyncStatus = Record<string, { status: 'ok'|'outdated'|'new'|'local'|'excluded'; agent: Agent }>;
 interface SelectedNode { level: 'global'|'section'|'tech'|'project'|'uncategorized'; categoryId: string|null; techId: string|null; projectId: string|null; }
+
+interface AIUsageEntry {
+  calls: number; inputTokens: number; outputTokens: number;
+  estimatedCostUSD: number;  // siempre 0 para cli y github
+  since: string | null;      // ISO timestamp del primer registro
+}
+interface AIUsage { cumulative: AIUsageEntry; session: AIUsageEntry; }
+
+interface DashboardNotification {
+  id: string; type: 'critical' | 'optimization' | 'info';
+  target: 'agent' | 'project'; targetId?: string; targetName: string;
+  message: string;
+  action: 'open-agent' | 'open-project' | 'sync-project' | 'generate-context' | 'optimize-agent';
+}
+interface DashboardData {
+  agents: { total: number; global: number; section: number; tech: number; uncategorized: number };
+  projects: { total: number; active: number; paused: number; archived: number; totalPending: number; withPending: number };
+  dirStatus: AgentDirectoryStatus;
+  notifications: DashboardNotification[];
+  lastSyncAt: string | null;
+}
 ```
 
 ---
@@ -137,7 +162,7 @@ Layout shell: `#app` (flex row) → `.sidebar` (48px) + `.main` (flex: 1, flex c
 
 - **`Sidebar`**: nav vertical 48px. Íconos: `ti-robot` (logo→proyectos), `ti-layout-grid` (proyectos), `ti-cpu` (agentes), `ti-message-chatbot` (chat), `ti-settings` (ajustes). Clase `.active` según `view`.
 - **`Topbar`**: props `title`, `sub?`, `actions?` (ReactNode en el extremo derecho — cada página inyecta sus controles aquí).
-- **`Statusbar`**: `GET /ai/status` al montar. Muestra: conexión servidor, estado proveedor IA (punto verde si `ready`), `appDir`, versión.
+- **`Statusbar`**: al montar llama `GET /health`, `GET /ai/status` y `GET /ai/usage`. Muestra: conexión servidor, estado proveedor IA (punto verde si `ready`), tokens totales acumulados (entrada/salida), tokens de sesión (entrada/salida), versión. El polling de usage se repite cada 30s.
 
 ---
 
@@ -182,6 +207,19 @@ Aparece vía IPC `app:close-requested`. Responde con `window.api.closeResponse(a
 
 ## Páginas
 
+### `Dashboard.tsx`
+
+Vista de inicio (view = `'dashboard'`). Carga en paralelo `GET /api/dashboard` y `GET /api/ai/usage`.
+
+**Tarjetas:**
+- **Estado General** — contadores de agentes (global/section/tech) y proyectos (activos/pausados/archivados). Click → navega a la vista correspondiente.
+- **Sincronización** — estado de sync de agentes y proyectos, estado del directorio externo. Botón "Sincronizar todo" → `POST /sync-all`.
+- **Oportunidades de Mejora** — lista de `DashboardNotification[]`. Las críticas se muestran en rojo, optimizaciones en ámbar, info en azul. Máx 5 visibles; botón "Ver todas" para expandir.
+- **Acciones Rápidas** — botones que llaman `navigateTo(view, action)` para abrir modales directamente desde otra página.
+- **Uso de IA** — `UsageCard` con filas de tokens (entrada/salida/coste) para acumulado y sesión. Botones "Reiniciar sesión" y "Reiniciar total".
+
+**`navigateTo`**: usado desde las acciones rápidas del dashboard para abrir modales en otras páginas. Las páginas destino consumen `pendingAction` en `useEffect` al montar.
+
 ### `Projects.tsx`
 
 Grid de proyectos agrupados por categoría. Tras cualquier mutación → `fetchProjects()`. Estado local: `drawerProjectId`, `showCreate`, `showImport`, `editProject`.
@@ -216,9 +254,11 @@ Chat multi-turno. Estado local: `messages`, `input`, `loading`, `activeAgents`, 
 
 ### `Settings.tsx`
 
-Tres tabs: **General** (proveedor IA, comportamiento cierre, versión/actualizaciones, botón "Ver wizard"), **Categorías**, **Directorio de Agentes**.
+Cuatro secciones principales: **General** (proveedor IA, comportamiento cierre, versión/actualizaciones, botón "Ver wizard"), **Categorías**, **Directorio de Agentes**, **Cómo usar los agentes**.
 
 Tab Directorio: toggle habilitado, input URL del repo, estado de última sync, botón "Sincronizar ahora" (polling 600ms hasta `syncing: false`), resolución de conflictos inline, sección importar desde URL individual.
+
+**Sección guías de editor** — tres tabs seleccionables (`editorTab: 'vscode' | 'intellij' | 'eclipse'`). El contenido de cada tab se adapta al proveedor de IA configurado (Claude vs. GitHub Copilot). En IntelliJ y Eclipse, se muestran instrucciones del plugin/extension correspondiente si está disponible, o instrucciones de terminal CLI como fallback.
 
 Toggle de tema inyectado en `Topbar` vía prop `actions`.
 
