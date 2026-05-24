@@ -161,12 +161,16 @@ function callCLI(prompt, opts = {}) {
   return new Promise((resolve, reject) => {
     const timeout   = opts.timeout || CALL_TIMEOUT_MS;
     const args      = ['--print', '--output-format', 'json'];
+    if (opts.extraArgs) args.push(...opts.extraArgs);
     const claudeExe = 'claude';
 
-    const child = spawn(claudeExe, args, {
+    const spawnOpts = {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: process.platform === 'win32',
-    });
+    };
+    if (opts.cwd) spawnOpts.cwd = opts.cwd;
+
+    const child = spawn(claudeExe, args, spawnOpts);
 
     let stdout = '';
     let stderr = '';

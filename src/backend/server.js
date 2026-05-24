@@ -630,7 +630,14 @@ app.post('/api/projects/:id/execute-task', async (req, res) => {
 
   const startTime = Date.now();
   try {
-    const reply = await callAIChat([{ role: 'user', content: task }], { systemPrompt });
+    const reply = await callAIChat(
+      [{ role: 'user', content: task }],
+      {
+        systemPrompt,
+        extraArgs: ['--dangerously-skip-permissions'],
+        cwd: project.path,
+      },
+    );
     res.json({ result: reply, task, durationMs: Date.now() - startTime });
   } catch (e) {
     res.status(500).json({ error: e.message });
