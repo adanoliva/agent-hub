@@ -71,6 +71,7 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         system:      a.system,
         tools:       a.tools ?? [],
         model:       a.model ?? 'sonnet',
+        language:    lang,
       });
       update({ description: r.description, system: r.system, optimized: true });
       toast('Agente optimizado — revisa y guarda cuando estés listo');
@@ -152,6 +153,20 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         </div>
 
         <div className="field">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <label style={{ marginBottom: 0 }}>Idioma del prompt</label>
+            <div className="lang-toggle">
+              <button className={`lang-btn${lang === 'es' ? ' active' : ''}`} onClick={() => setLang('es')}>ES</button>
+              <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.5 }}>
+            <i className="ti ti-info-circle" style={{ marginRight: 4 }} />
+            Usa <strong style={{ color: 'var(--text2)' }}>inglés</strong> si el agente trabaja con código (reviews, tests, refactor, análisis). El tokenizador procesa inglés ~15% más eficientemente. Elige español solo si el agente genera respuestas en español para el usuario final.
+          </div>
+        </div>
+
+        <div className="field">
           <label>Herramientas</label>
           <div className="tools-grid">
             {ALL_TOOLS.map((t) => (
@@ -171,18 +186,13 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         <div className="field">
           <label>Generar con IA</label>
           <div className="ai-gen-area">
-            <div className="ai-gen-row">
-              <input
-                className="ai-gen-input"
-                value={aiDesc}
-                onChange={(e) => setAiDesc(e.target.value)}
-                placeholder="Describe el agente en una frase…"
-              />
-              <div className="lang-toggle">
-                <button className={`lang-btn${lang === 'es' ? ' active' : ''}`} onClick={() => setLang('es')}>ES</button>
-                <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
-              </div>
-            </div>
+            <input
+              className="ai-gen-input"
+              value={aiDesc}
+              onChange={(e) => setAiDesc(e.target.value)}
+              placeholder="Describe el agente en una frase…"
+              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+            />
             <button className="btn sm primary" onClick={generatePrompt} disabled={genBusy} style={{ width: '100%' }}>
               {genBusy
                 ? <><div className="spin" /> Generando…</>
@@ -217,6 +227,11 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
             value={a.system ?? ''}
             onChange={(e) => update({ system: e.target.value, optimized: false })}
           />
+          {a.system && (
+            <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'right', marginTop: 3 }}>
+              {a.system.trim().split(/\s+/).length} palabras
+            </div>
+          )}
         </div>
       </div>
 

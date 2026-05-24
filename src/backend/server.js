@@ -634,9 +634,9 @@ app.post('/api/projects/:id/execute-task', async (req, res) => {
       [{ role: 'user', content: task }],
       {
         systemPrompt,
-        extraArgs: ['--dangerously-skip-permissions', '--max-turns', '10'],
+        extraArgs: ['--dangerously-skip-permissions', '--max-turns', '5'],
         cwd: project.path,
-        timeout: 300_000, // 5 min — el agente usa herramientas reales
+        timeout: 900_000, // 15 min — el agente usa herramientas reales
       },
     );
     res.json({ result: reply, task, durationMs: Date.now() - startTime });
@@ -869,42 +869,37 @@ app.post('/api/ai/generate-prompt', async (req, res) => {
 
 // POST /api/ai/optimize-agent — rewrite & improve an existing agent system prompt
 app.post('/api/ai/optimize-agent', async (req, res) => {
-  const { name, description, system, tools = [], model = 'sonnet' } = req.body;
+  const { name, description, system, tools = [], model = 'sonnet', language = 'en' } = req.body;
   if (!system) return res.status(400).json({ error: 'system prompt required' });
 
-  const toolList = tools.join(', ') || 'ninguna';
-  const modelHint = model === 'haiku' ? 'conciso y directo (modelo ligero)'
-    : model === 'opus' ? 'detallado y exhaustivo (modelo avanzado)'
-    : 'equilibrado entre concisión y detalle';
+  const toolList   = tools.join(', ') || 'ninguna';
+  const langTarget = language === 'es' ? 'Spanish' : 'English';
 
-  const prompt = `Eres un experto en diseño de system prompts para agentes Claude Code.
+  const prompt = `Rewrite this Claude Code agent's system prompt to be maximally token-efficient. Your goal is to cut tokens, not add them.
 
-Tienes este agente:
-- Nombre: ${name || 'agente'}
-- Descripción actual: ${description || '(sin descripción)'}
-- Herramientas disponibles: ${toolList}
-- Modelo: ${model} — estilo ${modelHint}
+Agent: ${name || 'agent'} (model: ${model}, tools: ${toolList})
+Current description: ${description || '(none)'}
 
-System prompt actual:
+Current system prompt:
 ---
 ${system}
 ---
 
-Optimiza el system prompt para que sea:
-1. Más claro y específico en el rol y objetivo del agente
-2. Con instrucciones precisas sobre qué hacer Y qué NO hacer
-3. Apropiado para el estilo del modelo (${model})
-4. Sin redundancias ni relleno innecesario
-5. Enfocado en un objetivo principal; usa pasos concretos solo si aportan claridad
+Rules for the rewrite:
+- Target: 50-100 words. Never exceed 120.
+- Remove ALL filler: "You are an expert", "Your goal is", "Always remember", generic encouragement.
+- Remove instructions the model already follows by default (be accurate, be helpful, etc.).
+- Keep ONLY what is specific and differentiating for THIS agent's task.
+- Use imperative verbs. No preamble.
+- Write in ${langTarget}.
+- If the current description is vague or generic, write a sharper one (one action sentence, max 80 chars, in ${langTarget}).
 
-Si la descripción actual es vaga, genérica o está vacía, propón una mejor.
-
-Responde SOLO con JSON válido, sin explicaciones, sin bloques markdown:
-{"description":"<descripción mejorada>","system":"<system prompt optimizado>"}`;
+Respond ONLY with valid JSON, no markdown:
+{"description":"<sharp one-sentence description>","system":"<rewritten prompt, 50-100 words>"}`;
 
   try {
     const { callAI } = require('./ai');
-    const raw = await callAI(prompt, { maxTokens: 800 });
+    const raw = await callAI(prompt, { maxTokens: 500 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('La IA no devolvió JSON válido');
     const { description: newDesc, system: newSystem } = JSON.parse(jsonMatch[0]);

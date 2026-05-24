@@ -74,9 +74,10 @@ function buildSystem(activeAgents: FlatAgent[]): string {
 
   if (activeAgents.length > 0) {
     sys += '\n\nAgentes activos como contexto:\n\n';
-    sys += activeAgents.map((a) =>
-      `### @${a.name}\nDescripción: ${a.description || 'Sin descripción'}\n\nSystem prompt:\n${a.system || '(vacío)'}`
-    ).join('\n\n---\n\n');
+    sys += activeAgents.map((a) => {
+      const systemSnippet = a.system ? a.system.slice(0, 500) + (a.system.length > 500 ? '…' : '') : '(vacío)';
+      return `### @${a.name}\nDescripción: ${a.description || 'Sin descripción'}\n\nSystem prompt:\n${systemSnippet}`;
+    }).join('\n\n---\n\n');
     sys += '\n\nUsa estos agentes como referencia al responder. Puedes sugerir mejoras, detectar problemas o proponer agentes complementarios.';
   }
 
@@ -276,9 +277,12 @@ export function Chat() {
     setMessages(withUser);
     setLoading(true);
 
+    // Send only the last 10 messages to limit input tokens on long conversations
+    const windowedMessages = withUser.slice(-10).map(({ role, content }) => ({ role, content }));
+
     try {
       const data = await req<{ reply: string }>('POST', '/chat', {
-        messages:     withUser,
+        messages:     windowedMessages,
         systemPrompt: buildSystem(activeAgents),
       });
       const updated = [...withUser, { role: 'assistant' as const, content: data.reply }];

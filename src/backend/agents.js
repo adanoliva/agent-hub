@@ -370,15 +370,25 @@ function syncGlobalAgentsToClaudeDir() {
   const globalDir = path.join(AGENTS_DIR, 'global');
   if (!fs.existsSync(globalDir)) return 0;
 
-  const files = fs.readdirSync(globalDir).filter(f => f.endsWith('.md'));
-  let synced  = 0;
+  const sourceFiles = new Set(fs.readdirSync(globalDir).filter(f => f.endsWith('.md')));
+  let synced = 0;
 
-  for (const f of files) {
+  // Copy / update: source → destination
+  for (const f of sourceFiles) {
     const src         = path.join(globalDir, f);
     const dest        = path.join(CLAUDE_AGENTS, f);
     const srcContent  = fs.readFileSync(src, 'utf8');
     const destContent = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : null;
     if (srcContent !== destContent) { fs.writeFileSync(dest, srcContent, 'utf8'); synced++; }
+  }
+
+  // Remove orphans: files in ~/.claude/agents/ that no longer exist in agents/global/
+  // Covers the case of agents deleted from the app UI or directly from VS Code
+  const destFiles = fs.readdirSync(CLAUDE_AGENTS).filter(f => f.endsWith('.md'));
+  for (const f of destFiles) {
+    if (!sourceFiles.has(f)) {
+      try { fs.unlinkSync(path.join(CLAUDE_AGENTS, f)); } catch { /* already gone */ }
+    }
   }
 
   return synced;

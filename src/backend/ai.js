@@ -189,7 +189,13 @@ function callCLI(prompt, opts = {}) {
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code !== 0) {
-        reject(new Error(`Claude CLI exited with code ${code}: ${stderr.trim() || 'unknown error'}`));
+        const errText = stderr.trim() || stdout.trim() || 'unknown error';
+        // Missing agent file in CLI temp cache → surface a clear message
+        if (/temp|AppData.*Local.*Temp|no such file|ENOENT|resource.*not.*found/i.test(errText)) {
+          reject(new Error('El CLI de Claude no encontró un archivo de agente. Puede que hayas eliminado un agente desde VS Code o el directorio de Claude directamente. Reinicia la app para limpiar el estado.'));
+        } else {
+          reject(new Error(`Claude CLI exited with code ${code}: ${errText}`));
+        }
         return;
       }
       const raw = stdout.trim();
@@ -354,12 +360,12 @@ Requirements for the system prompt:
 3. Define what the agent should and should NOT do
 4. Include formatting or output requirements where relevant
 5. Keep it focused — this agent does ONE thing well
-6. Length: 150-300 words, no headers needed, just the prompt text
+6. Length: 80-150 words, no headers needed, just the prompt text
 ${langInstr}
 
 Output ONLY the system prompt text. No preamble, no explanation, no markdown code blocks.`;
 
-  const result = await callAI(prompt, { maxTokens: 600 });
+  const result = await callAI(prompt, { maxTokens: 400 });
   return result.trim();
 }
 
@@ -405,7 +411,7 @@ Each item must have exactly these fields:
 - description: string (one sentence, max 80 chars)
 - tools: array of strings from: ["Bash", "Read", "Write", "Grep", "Edit", "WebFetch", "WebSearch", "TodoRead", "TodoWrite"]
 - model: string, one of: "haiku", "sonnet", "opus"
-- system: string (50-150 word system prompt, plain text)
+- system: string (40-80 word system prompt, plain text, concise and actionable)
 
 Example format:
 [
@@ -418,7 +424,7 @@ Example format:
   }
 ]`;
 
-  const raw    = await callAI(prompt, { maxTokens: 1200 });
+  const raw    = await callAI(prompt, { maxTokens: 800 });
   const parsed = parseJSONSafely(raw);
 
   if (!Array.isArray(parsed)) {
@@ -539,7 +545,7 @@ async function generateProjectSuggestions({ project, contextContent, categoryNam
     : '';
 
   const contextSection = contextContent?.trim()
-    ? `PROJECT DOCUMENTATION (CLAUDE.md / instructions):\n---\n${contextContent.slice(0, 3000)}\n---`
+    ? `PROJECT DOCUMENTATION (CLAUDE.md / instructions):\n---\n${contextContent.slice(0, 1500)}\n---`
     : 'PROJECT DOCUMENTATION: Not available — base suggestions on category and technology.';
 
   const prompt = `You are an expert at designing Claude Code sub-agents for software development projects.
@@ -567,9 +573,9 @@ Each item must have exactly these fields:
 - description: string (one sentence, max 80 chars, in Spanish)
 - tools: array of strings from: ["Bash", "Read", "Write", "Grep", "Edit", "WebFetch", "WebSearch", "TodoRead", "TodoWrite"]
 - model: string, one of: "haiku", "sonnet", "opus"
-- system: string (75-200 word system prompt, plain text, in Spanish)`;
+- system: string (40-80 word system prompt, plain text, in Spanish, concise and actionable)`;
 
-  const raw    = await callAI(prompt, { maxTokens: 1400 });
+  const raw    = await callAI(prompt, { maxTokens: 900 });
   const parsed = parseJSONSafely(raw);
   if (!Array.isArray(parsed)) throw new Error('AI returned invalid suggestions format');
 
@@ -630,7 +636,7 @@ async function callAIChat(messages, opts = {}) {
     const client  = new Anthropic.default({ apiKey: cfg.apiKey });
     const params  = {
       model:      MODEL,
-      max_tokens: opts.maxTokens || 2048,
+      max_tokens: opts.maxTokens || 1024,
       messages,
     };
     if (opts.systemPrompt) params.system = opts.systemPrompt;
@@ -649,7 +655,7 @@ async function callAIChat(messages, opts = {}) {
     const body = {
       model:      cfg.githubModel || GITHUB_MODELS_DEFAULT,
       messages:   opts.systemPrompt ? [{ role: 'system', content: opts.systemPrompt }, ...messages] : messages,
-      max_tokens: opts.maxTokens || 2048,
+      max_tokens: opts.maxTokens || 1024,
     };
     const response = await fetch(GITHUB_MODELS_URL, {
       method:  'POST',
