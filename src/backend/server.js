@@ -634,8 +634,9 @@ app.post('/api/projects/:id/execute-task', async (req, res) => {
       [{ role: 'user', content: task }],
       {
         systemPrompt,
-        extraArgs: ['--dangerously-skip-permissions'],
+        extraArgs: ['--dangerously-skip-permissions', '--max-turns', '10'],
         cwd: project.path,
+        timeout: 300_000, // 5 min — el agente usa herramientas reales
       },
     );
     res.json({ result: reply, task, durationMs: Date.now() - startTime });

@@ -183,7 +183,7 @@ function callCLI(prompt, opts = {}) {
 
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error('Claude CLI call timed out after 60s'));
+      reject(new Error(`Claude CLI call timed out after ${Math.round(timeout / 1000)}s`));
     }, timeout);
 
     child.on('close', (code) => {

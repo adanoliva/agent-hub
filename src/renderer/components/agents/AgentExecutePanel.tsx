@@ -212,7 +212,7 @@ export function AgentExecutePanel({ agent, projectId, projectName, onBack, onOpe
         <div className="exec-loading">
           <div className="spin" style={{ width: 28, height: 28 }} />
           <span style={{ fontSize: 14, fontWeight: 600 }}>Ejecutando tarea…</span>
-          <span style={{ fontSize: 12, color: 'var(--text2)' }}>Analizando proyecto con {agent.name}…</span>
+          <span style={{ fontSize: 12, color: 'var(--text2)' }}>Analizando proyecto con {agent.name}… (puede tardar hasta 5 min)</span>
         </div>
       </div>
     );
