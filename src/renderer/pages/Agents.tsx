@@ -213,6 +213,7 @@ export function Agents() {
   async function handleSaved(saved: Agent) {
     setEditorIsNew(false);
     setSelectedAgent(saved.name);
+    setSuggestions((prev) => prev.filter((s) => s.name !== saved.name));
     await loadAgents(node);
   }
 
