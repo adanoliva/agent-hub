@@ -6,15 +6,19 @@ import { useToast } from '../hooks/useToast';
 import { AgentsTree } from '../components/agents/AgentsTree';
 import { AgentsCenter } from '../components/agents/AgentsCenter';
 import { AgentEditor } from '../components/agents/AgentEditor';
+import { AgentExecutePanel } from '../components/agents/AgentExecutePanel';
 import type { Agent, AgentDirectoryStatus, SelectedNode, SyncConflict } from '../types';
 
 const DEFAULT_NODE: SelectedNode = { level: 'global', categoryId: null, techId: null, projectId: null };
 const NEW_AGENT: Agent = { name: '', description: '', tools: ['Read'], model: 'sonnet', system: '' };
 
 export function Agents() {
-  const toast            = useToast();
-  const pendingAction    = useStore((s) => s.pendingAction);
-  const setPendingAction = useStore((s) => s.setPendingAction);
+  const toast               = useToast();
+  const pendingAction       = useStore((s) => s.pendingAction);
+  const setPendingAction    = useStore((s) => s.setPendingAction);
+  const navigateTo          = useStore((s) => s.navigateTo);
+  const setPendingChatAgent = useStore((s) => s.setPendingChatAgent);
+  const projects            = useStore((s) => s.projects);
 
   const [node,               setNode]               = useState<SelectedNode>(DEFAULT_NODE);
   const [expanded,           setExpanded]           = useState<Set<string>>(new Set());
@@ -30,6 +34,8 @@ export function Agents() {
   const [showConflicts,      setShowConflicts]      = useState(false);
   const pollRef                                      = useRef<ReturnType<typeof setInterval> | null>(null);
   const wasSyncingRef                                = useRef(false);
+
+  const [executeAgent, setExecuteAgent] = useState<Agent | null>(null);
 
   const sugAbortRef = useRef<AbortController | null>(null);
 
@@ -213,14 +219,37 @@ export function Agents() {
     loadSuggestions(node, true);
   }
 
+  function handleChatWithAgent(agent: Agent) {
+    setPendingChatAgent(agent.name);
+    navigateTo('chat');
+  }
+
+  function handleExecuteAgent(agent: Agent) {
+    setEditorAgent(null);
+    setSelectedAgent(null);
+    setExecuteAgent(agent);
+  }
+
+  function handleBackFromExecute() {
+    setExecuteAgent(null);
+  }
+
   // ── First-sync overlay ─────────────────────────────────────────────────────
 
   const isFirstSync = syncStatus?.firstSync && syncStatus?.syncing;
   const progress    = syncStatus?.progress;
 
+  const topbarSub = executeAgent
+    ? `Ejecutar agente: ${executeAgent.name}`
+    : undefined;
+
+  const project = node.level === 'project' && node.projectId
+    ? projects.find((p) => p.id === node.projectId) ?? null
+    : null;
+
   return (
     <div className="view active" id="view-agents">
-      <Topbar title="Agentes" />
+      <Topbar title="Agentes" sub={topbarSub} />
 
       {/* First-run sync overlay */}
       {isFirstSync && (
@@ -301,26 +330,41 @@ export function Agents() {
           onSelect={selectNode}
           onToggle={toggleExpanded}
         />
-        <AgentsCenter
-          node={node}
-          agents={agents}
-          suggestions={suggestions}
-          suggestionsLoading={suggestionsLoading}
-          selectedAgent={selectedAgent}
-          onSelectAgent={handleSelectAgent}
-          onUseSuggestion={handleUseSuggestion}
-          onNewAgent={handleNewAgent}
-          onRefreshSuggestions={handleRefreshSuggestions}
-        />
-        {editorAgent && (
-          <AgentEditor
-            agent={editorAgent}
-            isNew={editorIsNew}
-            node={node}
-            onClose={handleCloseEditor}
-            onSaved={handleSaved}
-            onDeleted={handleDeleted}
+
+        {executeAgent && project ? (
+          <AgentExecutePanel
+            agent={executeAgent}
+            projectId={project.id}
+            projectName={project.name}
+            onBack={handleBackFromExecute}
+            onOpenChat={handleChatWithAgent}
           />
+        ) : (
+          <>
+            <AgentsCenter
+              node={node}
+              agents={agents}
+              suggestions={suggestions}
+              suggestionsLoading={suggestionsLoading}
+              selectedAgent={selectedAgent}
+              onSelectAgent={handleSelectAgent}
+              onUseSuggestion={handleUseSuggestion}
+              onNewAgent={handleNewAgent}
+              onRefreshSuggestions={handleRefreshSuggestions}
+              onChatWithAgent={handleChatWithAgent}
+              onExecuteAgent={handleExecuteAgent}
+            />
+            {editorAgent && (
+              <AgentEditor
+                agent={editorAgent}
+                isNew={editorIsNew}
+                node={node}
+                onClose={handleCloseEditor}
+                onSaved={handleSaved}
+                onDeleted={handleDeleted}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

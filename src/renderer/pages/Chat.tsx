@@ -3,7 +3,7 @@ import { Topbar } from '../components/layout/Topbar';
 import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
-import type { Agent } from '../types';
+import type { Agent, ProjectContextInfo } from '../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -90,9 +90,11 @@ Tipos válidos: "create-agent" (con data: {name,description,system,tools,model})
 // ── Chat page ──────────────────────────────────────────────────────────────────
 
 export function Chat() {
-  const toast    = useToast();
-  const projects = useStore((s) => s.projects);
-  const setView  = useStore((s) => s.setView);
+  const toast               = useToast();
+  const projects            = useStore((s) => s.projects);
+  const setView             = useStore((s) => s.setView);
+  const pendingChatAgent    = useStore((s) => s.pendingChatAgent);
+  const setPendingChatAgent = useStore((s) => s.setPendingChatAgent);
 
   const [messages,      setMessages]      = useState<Message[]>([]);
   const [loading,       setLoading]       = useState(false);
@@ -103,6 +105,8 @@ export function Chat() {
   const [mentionQuery,  setMentionQuery]  = useState<string | null>(null);
   const [mentionIndex,  setMentionIndex]  = useState(0);
   const [mentionStart,  setMentionStart]  = useState(0);
+  const [ctxInfo,       setCtxInfo]       = useState<ProjectContextInfo | null>(null);
+  const [showMismatch,  setShowMismatch]  = useState(false);
 
   const inputRef    = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -155,6 +159,27 @@ export function Chat() {
     loadHistory(null);
     loadAllAgents();
   }, []);
+
+  // Consume pendingChatAgent once allAgents loads
+  useEffect(() => {
+    if (!pendingChatAgent || !allAgents) return;
+    const found = allAgents.find((a) => a.name === pendingChatAgent);
+    if (found && !activeAgents.find((a) => a.name === found.name)) {
+      setActiveAgents((prev) => [...prev, found]);
+    }
+    setPendingChatAgent(null);
+  }, [pendingChatAgent, allAgents]);
+
+  // Load context info when project changes
+  useEffect(() => {
+    if (!projectId) { setCtxInfo(null); setShowMismatch(false); return; }
+    req<ProjectContextInfo>('GET', `/projects/${projectId}/context?type=auto`)
+      .then((info) => {
+        setCtxInfo(info);
+        setShowMismatch(info.mismatch);
+      })
+      .catch(() => { setCtxInfo(null); setShowMismatch(false); });
+  }, [projectId]);
 
   // ── Scroll to bottom when messages change ────────────────────────────────────
 
@@ -351,12 +376,41 @@ export function Chat() {
           )}
         </div>
 
+        {/* Mismatch banner */}
+        {showMismatch && ctxInfo?.mismatchDetails && (
+          <div className="chat-mismatch-banner">
+            <i className="ti ti-switch-horizontal" style={{ color: 'var(--amber)', flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12 }}>{ctxInfo.mismatchDetails.message}. El chat funcionará pero puede no ser óptimo.</span>
+            <button
+              className="btn ghost sm"
+              style={{ fontSize: 10, flexShrink: 0 }}
+              onClick={() => setShowMismatch(false)}
+            >
+              <i className="ti ti-x" />
+            </button>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="chat-foot">
           {/* Context bar */}
-          {activeAgents.length > 0 && (
+          {(activeAgents.length > 0 || ctxInfo) && (
             <div className="chat-context-bar">
               <span style={{ fontSize: 11, color: 'var(--text2)', flexShrink: 0 }}>Contexto:</span>
+
+              {/* Context file indicator */}
+              {ctxInfo && (
+                <span className={`badge ${ctxInfo.isEmpty ? 'coral' : ctxInfo.mismatch ? 'amber' : 'green'}`}>
+                  <i className={`ti ${ctxInfo.isEmpty ? 'ti-file-off' : 'ti-file-text'}`} />
+                  {ctxInfo.isEmpty
+                    ? 'Sin contexto'
+                    : ctxInfo.mismatch
+                      ? `${ctxInfo.label} (mismatch)`
+                      : ctxInfo.label
+                  }
+                </span>
+              )}
+
               {activeAgents.map((a) => (
                 <div key={a.name} className="agent-chip">
                   <i className="ti ti-robot" style={{ fontSize: 11 }} />
@@ -370,13 +424,15 @@ export function Chat() {
                   </span>
                 </div>
               ))}
-              <button
-                className="btn ghost sm"
-                onMouseDown={(e) => { e.preventDefault(); setActiveAgents([]); }}
-                style={{ fontSize: 10, padding: '1px 7px' }}
-              >
-                Limpiar
-              </button>
+              {activeAgents.length > 0 && (
+                <button
+                  className="btn ghost sm"
+                  onMouseDown={(e) => { e.preventDefault(); setActiveAgents([]); }}
+                  style={{ fontSize: 10, padding: '1px 7px' }}
+                >
+                  Limpiar
+                </button>
+              )}
             </div>
           )}
 

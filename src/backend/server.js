@@ -34,6 +34,8 @@ const {
   syncAllProjects,
   getContextFile,
   saveContextFile,
+  getContextAuto,
+  deriveAgentTask,
 } = require('./projects');
 
 const app  = express();
@@ -427,8 +429,10 @@ app.post('/api/sync-all', async (req, res) => {
 // ── Context files (CLAUDE.md / copilot-instructions.md) ──────────────────────
 
 app.get('/api/projects/:id/context', (req, res) => {
-  const project = readConfig().projects.find(p => p.id === req.params.id);
+  const cfg     = readConfig();
+  const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (req.query.type === 'auto') return res.json(getContextAuto(project, cfg.aiProvider));
   const type = req.query.type || (project.aiProvider === 'github' ? 'github' : 'claude');
   res.json(getContextFile(project, type));
 });
@@ -596,6 +600,36 @@ Formato: Markdown limpio y profesional, máximo 1000 palabras. Solo devuelve el 
     const { callAI } = require('./ai');
     const content = await callAI(analysisPrompt);
     res.json({ content });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Execute agent task ────────────────────────────────────────────────────────
+
+app.post('/api/projects/:id/execute-task', async (req, res) => {
+  const cfg     = readConfig();
+  const project = cfg.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { agent } = req.body;
+  if (!agent)       return res.status(400).json({ error: 'Agent required' });
+  if (!agent.model) return res.status(400).json({ error: 'El agente no tiene modelo especificado' });
+
+  const ctxInfo = getContextAuto(project, cfg.aiProvider);
+  const task    = deriveAgentTask(agent);
+
+  const systemPrompt = [
+    agent.system || '',
+    ctxInfo.content
+      ? `\n\n---\nContexto del proyecto (${ctxInfo.label}):\n\n${ctxInfo.content.slice(0, 8000)}`
+      : '',
+  ].join('').trim();
+
+  const startTime = Date.now();
+  try {
+    const reply = await callAIChat([{ role: 'user', content: task }], { systemPrompt });
+    res.json({ result: reply, task, durationMs: Date.now() - startTime });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

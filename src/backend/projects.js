@@ -509,6 +509,61 @@ function listProjectsWithStatus() {
   });
 }
 
+// ── Smart context detection ───────────────────────────────────────────────────
+
+function getContextAuto(project, appAiProvider) {
+  const projectProvider = project.aiProvider || appAiProvider || 'cli';
+  const appGroup     = appAiProvider === 'github' ? 'github' : 'claude';
+  const projectGroup = projectProvider === 'github' ? 'github' : 'claude';
+  const mismatch     = appGroup !== projectGroup;
+  const useType      = projectGroup;
+
+  const ctx     = getContextFile(project, useType);
+  const content = ctx.content || '';
+  const sizeBytes = Buffer.byteLength(content, 'utf8');
+  const isEmpty   = sizeBytes === 0;
+  const isDefault = !isEmpty && sizeBytes < 300;
+
+  let lastUpdated = null;
+  try { lastUpdated = fs.statSync(ctx.filePath).mtime.toISOString(); } catch {}
+
+  return {
+    content,
+    type:    useType,
+    label:   ctx.label,
+    filePath: ctx.filePath,
+    mismatch,
+    mismatchDetails: mismatch ? {
+      appProvider:     appGroup,
+      projectProvider: projectGroup,
+      message: `La app usa ${appGroup === 'github' ? 'GitHub Copilot' : 'Claude'} pero el proyecto tiene contexto para ${projectGroup === 'github' ? 'GitHub Copilot' : 'Claude'}`,
+    } : null,
+    isEmpty,
+    isDefault,
+    sizeBytes,
+    lastUpdated,
+  };
+}
+
+function deriveAgentTask(agent) {
+  const combined = `${agent.name} ${agent.description || ''}`.toLowerCase();
+  if (/review|revisor|code.?review/.test(combined))
+    return 'Revisa el código fuente de este proyecto. Identifica bugs, código frágil, malas prácticas y oportunidades de mejora. Sé específico con archivos y funciones si puedes inferirlos del contexto del proyecto.';
+  if (/test|spec|jest|vitest|pytest|testing/.test(combined))
+    return 'Analiza la cobertura de tests de este proyecto. Identifica módulos críticos sin tests y propón un plan de pruebas prioritizado.';
+  if (/doc|readme|wiki|documentation/.test(combined))
+    return 'Revisa la documentación de este proyecto. Indica qué está incompleto, desactualizado o ausente para que un desarrollador nuevo pueda empezar.';
+  if (/perf|performance|optim|speed|rendimiento/.test(combined))
+    return 'Analiza el proyecto en busca de cuellos de botella de rendimiento. Identifica patrones costosos y estrategias de optimización aplicables.';
+  if (/security|seguridad|auth|vulnerabilit/.test(combined))
+    return 'Realiza una revisión de seguridad. Identifica vulnerabilidades, malas prácticas y vectores de ataque evidentes.';
+  if (/refactor|clean|architect/.test(combined))
+    return 'Analiza la arquitectura del proyecto. Identifica los módulos que más se beneficiarían de refactorización y propón un plan concreto.';
+  if (/debug|fix|bug/.test(combined))
+    return 'Busca posibles bugs o comportamientos inesperados: código que falla en casos edge, condiciones de carrera o manejo de errores incompleto.';
+  return `Actúa como ${agent.description || agent.name}. Analiza este proyecto y proporciona un informe de situación: qué está bien, qué podría mejorar y cuál sería tu primer paso de acción.`;
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -526,4 +581,6 @@ module.exports = {
   getClaudeMd,
   saveClaudeMd,
   copyAgentsToProject,
+  getContextAuto,
+  deriveAgentTask,
 };

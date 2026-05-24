@@ -15,6 +15,9 @@ interface AppState {
   // Pending action (consumed by target page on mount)
   pendingAction: string | null;
 
+  // Agent name to preload in Chat (consumed on mount)
+  pendingChatAgent: string | null;
+
   // Toasts
   toasts: Toast[];
 
@@ -22,6 +25,7 @@ interface AppState {
   setView: (v: View) => void;
   navigateTo: (v: View, action?: string) => void;
   setPendingAction: (a: string | null) => void;
+  setPendingChatAgent: (name: string | null) => void;
   setConfig: (c: Config) => void;
   setProjects: (p: Project[]) => void;
   setAppVersion: (v: string) => void;
@@ -38,11 +42,13 @@ export const useStore = create<AppState>((set) => ({
   appVersion: null,
   showWizard: !localStorage.getItem('cdm-wizard-done'),
   pendingAction: null,
+  pendingChatAgent: null,
   toasts: [],
 
   setView: (view) => set({ view }),
-  navigateTo: (view, action = null) => set({ view, pendingAction: action }),
+  navigateTo: (view, action) => set({ view, pendingAction: action ?? null }),
   setPendingAction: (pendingAction) => set({ pendingAction }),
+  setPendingChatAgent: (pendingChatAgent) => set({ pendingChatAgent }),
   setConfig: (config) => set({ config }),
   setProjects: (projects) => set({ projects }),
   setAppVersion: (appVersion) => set({ appVersion }),

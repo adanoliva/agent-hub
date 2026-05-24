@@ -8,13 +8,16 @@ interface Props {
   suggested?: boolean;
   node: SelectedNode;
   onClick: () => void;
+  onChatWith?: (agent: Agent) => void;
+  onExecute?: (agent: Agent) => void;
 }
 
-export function AgentCard({ agent: a, selected, suggested, node, onClick }: Props) {
-  const ic       = agentIcon(a.name);
-  const model    = a.model || 'sonnet';
-  const mIcon    = MODEL_ICON[model] ?? 'ti-bolt';
+export function AgentCard({ agent: a, selected, suggested, node, onClick, onChatWith, onExecute }: Props) {
+  const ic        = agentIcon(a.name);
+  const model     = a.model || 'sonnet';
+  const mIcon     = MODEL_ICON[model] ?? 'ti-bolt';
   const iconColor = suggested ? 'var(--text2)' : (LEVEL_COLOR[node.level] ?? 'var(--accent)');
+  const isProject = node.level === 'project' && !suggested;
 
   return (
     <div
@@ -44,6 +47,30 @@ export function AgentCard({ agent: a, selected, suggested, node, onClick }: Prop
           <i className={`ti ${mIcon}`} />{model}
         </span>
       </div>
+
+      {isProject && (onChatWith || onExecute) && (
+        <div className="agent-card-actions" onClick={(e) => e.stopPropagation()}>
+          {onChatWith && (
+            <button
+              className="btn ghost sm"
+              onClick={() => onChatWith(a)}
+              title="Abrir chat con este agente"
+            >
+              <i className="ti ti-message-chatbot" /> Chat
+            </button>
+          )}
+          {onExecute && (
+            <button
+              className="btn sm"
+              onClick={() => onExecute(a)}
+              title="Ejecutar tarea rápida"
+              style={{ color: 'var(--amber)' }}
+            >
+              <i className="ti ti-zap" /> Tarea
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

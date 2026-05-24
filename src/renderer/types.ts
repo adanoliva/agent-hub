@@ -135,6 +135,19 @@ export interface AIUsage {
   session:    AIUsageEntry;
 }
 
+export interface ProjectContextInfo {
+  content:    string;
+  type:       'claude' | 'github';
+  label:      string;
+  filePath:   string;
+  mismatch:   boolean;
+  mismatchDetails: { appProvider: string; projectProvider: string; message: string } | null;
+  isEmpty:    boolean;
+  isDefault:  boolean;
+  sizeBytes:  number;
+  lastUpdated: string | null;
+}
+
 export type ToastType = 'ok' | 'err' | 'info' | 'warn';
 
 export interface Toast {
