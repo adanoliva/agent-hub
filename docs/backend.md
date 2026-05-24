@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-23 · Versión: 1.7.0
+> Última actualización: 2026-05-24 · Versión: 1.7.0
 
 ---
 
@@ -158,7 +158,7 @@ path.resolve(__dirname, '../../')
 
 ```json
 {
-  "version": "1.6.1",
+  "version": "1.7.0",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
@@ -279,13 +279,14 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | POST | `/api/projects/:id/sync` | Copia agentes aplicables al proyecto; devuelve `{ added, updated, skipped }` |
 | POST | `/api/sync-all` | Sync de todos los proyectos en batch |
 
-#### Contexto del proyecto
+#### Contexto y ejecución del proyecto
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/projects/:id/context?type=claude\|github` | Contenido de CLAUDE.md o copilot-instructions.md |
+| GET | `/api/projects/:id/context?type=claude\|github\|auto` | Contenido de CLAUDE.md o copilot-instructions.md. `type=auto` detecta el proveedor y devuelve `ProjectContextInfo` completo (mismatch, isEmpty, isDefault, sizeBytes…) |
 | PUT | `/api/projects/:id/context` | Guarda el fichero de contexto |
 | POST | `/api/projects/:id/generate-context?type=` | Genera con IA analizando el directorio del proyecto |
+| POST | `/api/projects/:id/execute-task` | Ejecuta un agente sobre el proyecto. Body: `{ agent }`. Devuelve `{ result, task, durationMs }`. Usa `--dangerously-skip-permissions --max-turns 10`, `cwd` del proyecto y timeout de 5 min |
 
 #### Dashboard
 
@@ -309,10 +310,10 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | POST | `/api/ai/generate-prompt` | Genera system prompt desde descripción `{ description, level, tools, lang }` |
 | POST | `/api/ai/optimize-agent` | Mejora system prompt y description existentes |
 | GET | `/api/ai/suggestions?level=&categoryId=&techId=` | 3 sugerencias de agentes (con caché) |
-| POST | `/api/ai/suggestions/refresh` | Invalida caché y regenera |
+| POST | `/api/ai/suggestions/refresh` | Invalida caché y regenera. Body opcional: `{ alreadySuggested: string[] }` — excluye esos nombres de las nuevas sugerencias para evitar repetición |
 | DELETE | `/api/ai/suggestions/cache` | Limpia toda la caché de sugerencias |
 | GET | `/api/ai/project-suggestions?projectId=` | Sugerencias usando CLAUDE.md como contexto |
-| POST | `/api/ai/project-suggestions/refresh` | Invalida caché de proyecto |
+| POST | `/api/ai/project-suggestions/refresh` | Invalida caché de proyecto. Body opcional: `{ alreadySuggested: string[] }` |
 
 #### Chat
 
@@ -571,6 +572,31 @@ syncProject(projectId)
 | `github` | `{path}/.github/copilot-instructions.md` | `getGitHubTemplate(catId, techId, name)` |
 | `both` | Ambos | Ambas |
 
+### Funciones adicionales exportadas
+
+**`getContextAuto(project, appAiProvider)`** — detección automática de contexto para la ejecución de agentes:
+- Determina el grupo del proyecto (`claude` ↔ `api|cli`, `github` ↔ `github`) y del proveedor global.
+- Si los grupos no coinciden, marca `mismatch: true` con `mismatchDetails.message`.
+- Lee el fichero de contexto correspondiente y devuelve `{ content, type, label, filePath, mismatch, mismatchDetails, isEmpty, isDefault, sizeBytes, lastUpdated }`.
+- `isEmpty` — el fichero no existe.
+- `isDefault` — el contenido coincide sustancialmente con la plantilla genérica (menos de 300 chars o solo cabecera).
+
+**`deriveAgentTask(agent)`** — infiere la tarea predefinida de un agente a partir de su nombre y descripción:
+
+| Keyword regex | Tarea derivada |
+|---|---|
+| `seo\|meta.?tag\|schema.?org\|…` | SEO técnico |
+| `review\|revisar\|code.?review` | Code review |
+| `test\|spec\|testing` | Plan de tests |
+| `doc\|readme\|wiki` | Documentación |
+| `\bperf\b\|performance\|rendimiento\|benchmark` | Rendimiento |
+| `security\|seguridad\|\bauth\b` | Seguridad |
+| `refactor\|clean\|architect` | Refactorización |
+| `debug\|\bfix\b\|\bbug\b` | Búsqueda de bugs |
+| (fallback) | Tarea principal del agente |
+
+Todas las tareas terminan con `' Implementa los cambios directamente sin pedir confirmación previa.'` para evitar que el agente pause la ejecución solicitando permiso.
+
 ---
 
 ## 8. Integración IA (`ai.js`)
@@ -587,6 +613,13 @@ syncProject(projectId)
 
 Punto de entrada único. Lee `config.aiProvider` y delega a `callCLI`, `callAPI` o `callGitHub`. Cada rama captura el uso de tokens y llama a `trackUsage()`.
 
+### `callCLI(prompt, opts?)`
+
+Acepta un objeto de opciones:
+- `opts.extraArgs` — array de argumentos adicionales añadidos al comando `claude --print`. Usado por `execute-task` para pasar `['--dangerously-skip-permissions', '--max-turns', '10']`.
+- `opts.cwd` — directorio de trabajo para el proceso spawneado. Usado por `execute-task` para que el agente opere en el directorio del proyecto.
+- `opts.timeout` — timeout en ms (por defecto 60 000; `execute-task` pasa 300 000). El mensaje de error incluye el tiempo: `` `timed out after ${Math.round(timeout/1000)}s` ``.
+
 ### Chat multi-turno (`callAIChat`)
 
 Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación en texto plano. También registra tokens en cada llamada.
@@ -594,8 +627,8 @@ Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación e
 ### Funciones de generación
 
 - `generateAgentPrompt({ description, level, tools, lang })` — genera un system prompt desde descripción informal.
-- `generateSuggestions({ level, categoryId, techId, existingNames })` — 3 agentes sugeridos en JSON.
-- `generateProjectSuggestions({ project, contextContent, existingNames })` — sugerencias contextualizadas con el CLAUDE.md del proyecto.
+- `generateSuggestions({ level, categoryId, techId, existingNames, alreadySuggested? })` — 3 agentes sugeridos en JSON. `alreadySuggested` se fusiona con `existingNames` para garantizar que las sugerencias nuevas no repitan ni lo guardado en disco ni lo ya visible en la UI.
+- `generateProjectSuggestions({ project, contextContent, existingNames, alreadySuggested? })` — sugerencias contextualizadas con el CLAUDE.md del proyecto. Mismo patrón de deduplicación.
 - `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Devuelve `{ description, system }`.
 
 ### Seguimiento de uso de tokens
@@ -794,6 +827,32 @@ Frontend: PUT /api/agents { level:'global', agent }
       ├── hashAgent(agente modificado) ≠ project.agentHashes['nombre']
       └── saveProjectAgent() → copia a .claude/agents/nombre.md
   ← { added: 0, updated: 1, skipped: N }
+```
+
+### Ejecución directa de un agente sobre un proyecto
+
+```
+Frontend: GET /api/projects/:id/context?type=auto
+  │
+  server.js → projects.getContextAuto(project, cfg.aiProvider)
+    ├── detecta grupo del proyecto y del proveedor global
+    ├── si grupos difieren → mismatch: true
+    ├── lee CLAUDE.md o copilot-instructions.md
+    └── devuelve ProjectContextInfo { content, type, label, mismatch, isEmpty, isDefault, sizeBytes }
+  ← ProjectContextInfo
+
+Frontend: POST /api/projects/:id/execute-task { agent }
+  │
+  server.js:
+    ├── getContextAuto() → leer contexto
+    ├── deriveAgentTask(agent) → inferir tarea predefinida
+    ├── buildSystemPrompt = agent.system + '\n\nProyecto: ...\nRuta: ...\n\n' + contextContent
+    └── callAIChat([{ role:'user', content: task }], systemPrompt, {
+          extraArgs: ['--dangerously-skip-permissions', '--max-turns', '10'],
+          cwd: project.path,
+          timeout: 300_000
+        })
+  ← { result: string, task: string, durationMs: number }
 ```
 
 ### Chat con contexto de agentes

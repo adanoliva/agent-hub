@@ -36,6 +36,8 @@ Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en
 - **Sugerencias contextuales** — 2-4 agentes sugeridos por IA en cada nivel y por proyecto, cacheadas, no repetitivas
 - **Chat IA multi-turno** — con historial por proyecto, @mention de agentes como contexto y acciones sugeridas
 - **Generación de contexto de proyecto** — genera `CLAUDE.md` o `copilot-instructions.md` analizando el repositorio
+- **Ejecución directa de agentes en proyectos** — ejecuta un agente sobre un proyecto con un clic: valida el contexto disponible, detecta mismatch de proveedor, muestra el resultado en markdown y permite discutirlo en el chat
+- **Validación de contexto antes de ejecutar** — avisa si el proyecto no tiene `CLAUDE.md` / `copilot-instructions.md`, si el archivo es genérico o si el proveedor no coincide con el del agente
 - **Importar agentes externos** — introduce una URL de un `.md` con frontmatter, revisa el preview y guárdalo como agente real
 - **Gestión de proyectos** — crear nuevo (con estructura de carpetas) o importar existente
 - **Guías por editor** — VS Code, IntelliJ y Eclipse, adaptadas al proveedor configurado
@@ -188,12 +190,26 @@ El campo `optimized: true` en el frontmatter indica que el agente ha pasado por 
 
 ---
 
+## Ejecución de agentes
+
+Desde la vista de agentes, cualquier agente de nivel proyecto tiene un botón **Ejecutar**. Al pulsarlo:
+
+1. **Validación de contexto** — comprueba si el proyecto tiene fichero de contexto (`CLAUDE.md` o `copilot-instructions.md`). Si no existe, ofrece generarlo. Si el archivo es genérico o el proveedor no coincide, muestra una advertencia con opción de continuar.
+2. **Resumen previo** — muestra agente, modelo, herramientas, contexto, proyecto y proveedor antes de lanzar.
+3. **Ejecución** — llama al agente con la tarea predefinida (derivada del nombre y descripción del agente: SEO, code review, tests, documentación, rendimiento, seguridad, refactoring, debug…) directamente sobre el directorio del proyecto. Sin confirmaciones intermedias.
+4. **Resultado** — muestra la respuesta renderizada en markdown con tiempo de ejecución. Botones: **Copiar**, **Discutir en chat** (abre el chat con ese agente preseleccionado) y **Volver**.
+
+> La ejecución usa `--dangerously-skip-permissions` para que el agente pueda leer y escribir ficheros sin bloqueos interactivos. Timeout de 5 minutos.
+
+---
+
 ## Chat IA
 
 El chat soporta conversación multi-turno con el proveedor configurado:
 
 - **Historial por proyecto** — se guarda en `cache/chat-{projectId}.json`. Al cambiar de proyecto se guarda el actual y se carga el nuevo.
 - **@mention de agentes** — escribe `@nombre` en el input para añadir un agente como contexto activo. Los agentes activos aparecen como chips y se incluyen en el system prompt de cada mensaje.
+- **Indicador de contexto** — muestra el estado del fichero de contexto del proyecto (verde: ok, ámbar: mismatch de proveedor, coral: vacío). Si hay mismatch, aparece un banner explicativo encima del input.
 - **Acciones sugeridas** — la IA puede sugerir botones de acción al final de sus respuestas (`create-agent`, `open-agents`, `open-settings`).
 - **Selector de proyecto** — en el topbar del chat, permite cambiar el proyecto activo sin salir de la vista.
 
@@ -323,7 +339,8 @@ src/
     │   │   ├── AgentsTree.tsx
     │   │   ├── AgentsCenter.tsx
     │   │   ├── AgentCard.tsx
-    │   │   └── AgentEditor.tsx
+    │   │   ├── AgentEditor.tsx
+    │   │   └── AgentExecutePanel.tsx
     │   ├── projects/
     │   │   ├── ProjectCard.tsx
     │   │   ├── ProjectDrawer.tsx
@@ -380,8 +397,9 @@ npm run release          # Build + publicar en GitHub Releases (requiere GH_TOKE
 | GET / POST | `/api/projects/:id/sync-status` | Estado de sync |
 | POST | `/api/projects/:id/sync` | Sincronizar agentes al proyecto |
 | POST | `/api/sync-all` | Sync de todos los proyectos |
-| GET / PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md |
+| GET / PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md (`?type=claude\|github\|auto`) |
 | POST | `/api/projects/:id/generate-context` | Generar contexto con IA |
+| POST | `/api/projects/:id/execute-task` | Ejecutar agente sobre el proyecto (devuelve `result`, `task`, `durationMs`) |
 | GET | `/api/dashboard` | Datos del dashboard (stats, sync, notificaciones) |
 | GET | `/api/ai/status` | Estado del proveedor de IA |
 | GET | `/api/ai/usage` | Tokens y coste de sesión + acumulado |

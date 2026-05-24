@@ -40,6 +40,6 @@
   "build": {
     "extends": "./electron-builder.yml"
   },
-  "author": "",
+  "author": "Adán Oliva",
   "license": "MIT"
 }

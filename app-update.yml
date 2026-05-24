@@ -1,5 +1,5 @@
 provider: github
 owner: adanoliva
-repo: cdm
+repo: agent-hub
 private: true
 updaterCacheDirName: agent-hub-updater

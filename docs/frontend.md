@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-23 · Versión: 1.7.0
+> Última actualización: 2026-05-24 · Versión: 1.7.0
 
 ---
 
@@ -24,7 +24,7 @@ src/renderer/
 │   ├── layout/             ← Sidebar, Topbar, Statusbar
 │   ├── ui/                 ← Toast, Modal, Wizard, CloseDialog
 │   ├── projects/           ← ProjectCard, ProjectDrawer, modales
-│   └── agents/             ← AgentCard, AgentsTree, AgentsCenter, AgentEditor
+│   └── agents/             ← AgentCard, AgentsTree, AgentsCenter, AgentEditor, AgentExecutePanel
 └── pages/
     ├── Dashboard.tsx
     ├── Projects.tsx
@@ -51,7 +51,8 @@ interface AppState {
   appVersion:    string | null;
   toasts:        Toast[];
   showWizard:    boolean;
-  pendingAction: string | null;  // 'new-agent' | 'new-project' | null
+  pendingAction:     string | null;  // 'new-agent' | 'new-project' | null
+  pendingChatAgent:  string | null;  // nombre del agente a precargar al entrar en Chat
 
   setView, setConfig, setProjects, setAppVersion,
   fetchProjects(): Promise<void>;   // GET /projects → actualiza store
@@ -60,6 +61,7 @@ interface AppState {
   removeToast(id: string): void;
   navigateTo(view: View, action?: string): void;  // setView + setPendingAction en un solo paso
   setPendingAction(a: string | null): void;
+  setPendingChatAgent(name: string | null): void;  // usado desde Agents para precargar agente en Chat
 }
 ```
 
@@ -117,6 +119,15 @@ interface AIUsageEntry {
 }
 interface AIUsage { cumulative: AIUsageEntry; session: AIUsageEntry; }
 
+interface ProjectContextInfo {
+  content: string; type: 'claude' | 'github'; label: string; filePath: string;
+  mismatch: boolean;
+  mismatchDetails?: { message: string; projectGroup: string; appGroup: string };
+  isEmpty: boolean;     // el fichero de contexto no existe
+  isDefault: boolean;   // el contenido es la plantilla genérica sin editar
+  sizeBytes: number; lastUpdated: string | null;
+}
+
 interface DashboardNotification {
   id: string; type: 'critical' | 'optimization' | 'info';
   target: 'agent' | 'project'; targetId?: string; targetName: string;
@@ -155,6 +166,23 @@ Variables principales: `--bg0..5` (fondos), `--text0..3` (textos), `--accent` (#
 **Toasts:** `.toast.{ok|err|warn|info}` en esquina inferior derecha, `z-index: 9999`.
 
 Layout shell: `#app` (flex row) → `.sidebar` (48px) + `.main` (flex: 1, flex column) → `.topbar` (44px) + contenido + `.statusbar` (22px).
+
+**Clases de agentes:**
+- `.agent-card` — `display:flex; flex-direction:column` para que el contenido interno se apile verticalmente.
+- `.agent-desc` — `flex:1` para empujar `.agent-card-actions` al fondo de la card.
+- `.agent-card-actions` — fila de botones Chat/Ejecutar, siempre al pie de la card. Solo visible en agentes de nivel proyecto no-sugeridos.
+
+**Clases del panel de ejecución (`.exec-*`):**
+- `.exec-panel` — contenedor principal del `AgentExecutePanel`.
+- `.exec-loading` — spinner centrado con texto.
+- `.exec-warning-box.coral` / `.exec-warning-box.amber` — cajas de aviso con icono y acciones.
+- `.exec-summary` / `.exec-row` / `.exec-row-label` / `.exec-row-value` — tabla de resumen previo a la ejecución.
+- `.exec-task-desc` — preview de la tarea predefinida con icono.
+- `.exec-result-header` / `.exec-result-body` / `.exec-result-foot` — cabecera, cuerpo markdown y pie del resultado.
+- `.exec-section-label` — etiqueta de sección.
+
+**Clases del chat:**
+- `.chat-mismatch-banner` — banner ámbar encima del input cuando hay mismatch de proveedor.
 
 ---
 
@@ -198,10 +226,11 @@ Aparece vía IPC `app:close-requested`. Responde con `window.api.closeResponse(a
 
 ## Componentes de agentes
 
-- **`AgentCard`**: borde izquierdo según `LEVEL_COLOR[level]`. Tool pills (máx 3 + "+N más"). Badge "sugerido" si `agent.suggested`.
-- **`AgentsTree`**: árbol colapsable. Nodos: Global → Categorías (section) → Tecnologías (tech) → Proyectos → Sin categoría (uncategorized, `ti-folder-question`, siempre al final).
-- **`AgentsCenter`**: grid de agentes reales + separador + grid de sugeridos IA (o spinner). Click en sugerido → editor en modo nuevo con campos precargados.
+- **`AgentCard`**: borde izquierdo según `LEVEL_COLOR[level]`. Tool pills (máx 3 + "+N más"). Badge "sugerido" si `agent.suggested`. Cuando `node.level === 'project'` y el agente no es sugerido, muestra `.agent-card-actions` en la parte inferior con los botones **Chat** (`ti-message-chatbot`) y **Ejecutar** (`ti-zap`). El click en estos botones detiene la propagación para no abrir el editor.
+- **`AgentsTree`**: árbol colapsable. Nodos: Global → Categorías (section) → Tecnologías (tech) → Proyectos → Sin categoría (uncategorized, `ti-folder-question`, siempre al final). Al entrar en la vista, el Set inicial de nodos expandidos incluye `'cats'`, `'projs'` y un `'cat-{id}'` por cada categoría del config.
+- **`AgentsCenter`**: grid de agentes reales + separador + grid de sugeridos IA (o spinner). Click en sugerido → editor en modo nuevo con campos precargados. Pasa `onChatWithAgent` y `onExecuteAgent` a cada `AgentCard`.
 - **`AgentEditor`**: campos nombre, descripción, modelo, herramientas. Botón "Generar" (`POST /ai/generate-prompt`). Botón "Optimizar" solo si `!agent.optimized && agent.system` (`POST /ai/optimize-agent`). Tras guardar con `optimized: true`, el botón desaparece.
+- **`AgentExecutePanel`**: panel de ejecución que sustituye al centro+editor cuando hay un agente seleccionado para ejecutar. Máquina de estados con fases: `validating → warn-no-model | warn-no-context | warn-default | warn-mismatch | ready → running → result | error`. En `ready` muestra resumen de agente, modelo, contexto, proyecto y proveedor. Botón **Ejecutar** lanza `POST /projects/:id/execute-task`. En `result` renderiza el resultado en markdown con botones Copiar, "Discutir en chat" (→ `setPendingChatAgent` + `navigateTo('chat')`) y Volver.
 
 ---
 
@@ -226,7 +255,7 @@ Grid de proyectos agrupados por categoría. Tras cualquier mutación → `fetchP
 
 ### `Agents.tsx`
 
-Tres paneles (árbol / centro / editor). Patrones no obvios:
+Tres paneles (árbol / centro / editor), o panel de ejecución en su lugar cuando hay un agente en ejecución. Patrones no obvios:
 
 **Polling de sync** — `setInterval(600ms)` sobre `GET /api/agents-directory/status`. Cuando `syncing` pasa de `true` a `false`, recarga agentes del nodo activo. Se limpia en cleanup del `useEffect`.
 
@@ -234,17 +263,34 @@ Tres paneles (árbol / centro / editor). Patrones no obvios:
 
 **Modal de conflictos** — botón badge coral en topbar cuando `pendingConflicts.length > 0`. Cada conflicto tiene "Usar remoto" (`action: 'update'`) o "Mantener local" (`action: 'keep'`). Cuando se resuelven todos, se recarga.
 
+**Categorías desplegadas al entrar** — el `useState` inicial de `expanded` lee `config.categories` y precarga `'cats'`, `'projs'` y `'cat-{id}'` por cada categoría. Todas las secciones del árbol aparecen abiertas desde el primer render.
+
 **AbortController por nodo** — al cambiar nodo se aborta la petición de sugerencias en curso. Evita condiciones de carrera. Las sugerencias se omiten en `uncategorized` (sin contexto de categoría/tech).
+
+**Sugerencias no repetitivas** — `handleRefreshSuggestions` captura `const current = suggestions` antes de limpiar el estado, y llama `loadSuggestions(node, true, current)`. El backend recibe `alreadySuggested: current.map(s => s.name)` y los excluye junto con los agentes ya guardados en disco.
+
+**Eliminar sugerencia al guardar** — `handleSaved` llama `setSuggestions(prev => prev.filter(s => s.name !== saved.name))` justo después de marcar el agente como guardado, antes de recargar la lista.
+
+**Flujo de ejecución:** `handleExecuteAgent(agent)` limpia editor y activa `executeAgent`. Cuando `executeAgent && project` se renderiza `AgentExecutePanel` en lugar del centro+editor. `handleBackFromExecute` limpia `executeAgent`. `handleChatWithAgent` llama `setPendingChatAgent(agent.name)` y `navigateTo('chat')`.
 
 **Flujo editor:** click card → `setEditorAgent(agent)`. "Nuevo agente" → `setEditorAgent(NEW_AGENT)`. `onSave` → recarga nodo. `onClose` → `setEditorAgent(null)`.
 
 ### `Chat.tsx`
 
-Chat multi-turno. Estado local: `messages`, `input`, `loading`, `activeAgents`, `mention`/`mentionList`/`mentionIdx` (dropdown @mention), `projectId`, `allAgents`.
+Chat multi-turno. Estado local: `messages`, `input`, `loading`, `activeAgents`, `mention`/`mentionList`/`mentionIdx` (dropdown @mention), `projectId`, `allAgents`, `ctxInfo`, `showMismatch`.
+
+**Precarga de agente desde ejecución** — cuando el store tiene `pendingChatAgent`, el `useEffect` que carga `allAgents` busca el agente por nombre, lo añade a `activeAgents` y llama `setPendingChatAgent(null)`. Permite que "Discutir en chat" en el panel de ejecución llegue al chat con el agente ya activo.
 
 **@mention:** detecta `@texto` en onChange → filtra `allAgents`. Teclado ↑↓ navega, Enter selecciona, Escape cierra. El agente va a `activeAgents[]` como chip removible.
 
 **System prompt:** `buildSystem(agents)` concatena system prompts de agentes activos + instrucción de sugerir acciones (`<!--ACTIONS:[{label,type}]-->`).
+
+**Indicador de contexto** — al cambiar `projectId`, el componente llama `GET /projects/:id/context?type=auto` y almacena `ctxInfo: ProjectContextInfo`. Si el proyecto tiene contexto, muestra un badge debajo del selector de proyecto:
+- Verde (`ti-check`): contexto disponible y proveedor compatible.
+- Ámbar (`ti-alert-triangle`): mismatch de proveedor.
+- Coral (`ti-file-off`): sin fichero de contexto.
+
+**Banner de mismatch** — cuando `showMismatch && ctxInfo?.mismatchDetails`, se muestra `.chat-mismatch-banner` encima del área de input con el mensaje de mismatch y un enlace a Ajustes.
 
 **Historial:** al cambiar proyecto, guarda el actual (`PUT /chat/history`) y carga el nuevo (`GET /chat/history?projectId=`). Historial global en `chat-global.json`.
 

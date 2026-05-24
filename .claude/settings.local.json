@@ -40,7 +40,12 @@
       "Bash(rtk read *)",
       "Bash(rtk grep *)",
       "Bash(rtk wc *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(rtk tsc *)",
+      "Bash(dir C:\\\\claudedevmanager\\\\cdm\\\\docs\\\\web *)",
+      "Bash(python -c \"import pptx; print\\('python-pptx ok'\\)\")",
+      "Bash(rtk pip *)",
+      "Bash(python *)"
     ]
   }
 }

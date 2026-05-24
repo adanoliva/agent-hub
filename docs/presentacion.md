@@ -13,7 +13,7 @@
 
 **Tagline:** *Construida con IA. Para la IA. Con manos humanas al volante.*
 
-**Visual sugerido:** Logo (icono de robot) sobre fondo oscuro con gradiente violeta (#7c6af7). Versión actual: v1.6.1.
+**Visual sugerido:** Logo sobre fondo oscuro con gradiente violeta (#7c6af7). Versión actual: v1.8.0.
 
 ---
 
@@ -74,11 +74,12 @@ Instrucción: Analiza el código buscando bugs, vulnerabilidades
 | 🗂️ Gestión de proyectos | Organiza por categoría y tecnología. Abre en VS Code con un clic. |
 | 🤖 Editor de agentes | Crea y edita agentes con asistencia de IA integrada. |
 | ✨ Generación con IA | Describe lo que necesitas y la IA escribe el prompt por ti. |
+| ⚡ Ejecución directa | Lanza un agente sobre tu proyecto con un clic. Aplica cambios y devuelve un informe. |
 | 🔄 Sync automático | Los agentes se sincronizan a todos los proyectos que los usan. |
-| 💬 Chat integrado | Consulta a la IA usando tus agentes como contexto activo. |
+| 💬 Chat integrado | Consulta a la IA con indicador de contexto y detección de proveedor. |
 | 📦 Directorio de agentes | Descarga un catálogo curado de agentes listos para usar. |
 
-**Visual sugerido:** Grid de 6 tarjetas con icono + título + descripción breve.
+**Visual sugerido:** Grid de 7 tarjetas con icono + título + descripción breve.
 
 ---
 
@@ -99,7 +100,9 @@ Instrucción: Analiza el código buscando bugs, vulnerabilidades
 
 5. **Usas** el agente en Claude Code o GitHub Copilot directamente desde tu editor
 
-**Visual sugerido:** Diagrama de flujo horizontal con 5 pasos numerados y flechas.
+6. **Ejecutas** el agente directamente desde la app — aplica cambios en tu proyecto y devuelve un informe
+
+**Visual sugerido:** Diagrama de flujo horizontal con 6 pasos numerados y flechas.
 
 ---
 
@@ -160,23 +163,21 @@ Repositorio central (GitHub)
 
 ## SLIDE 9 — Estado actual y roadmap
 
-**Título:** v1.6.1 — En uso activo
+**Título:** v1.8.0 — En uso activo
 
-**Hecho (v1.6.x):**
+**Hecho:**
 - ✅ Gestión completa de agentes en 4 niveles
 - ✅ Sync automático a proyectos
 - ✅ Directorio de agentes externo con versionado
 - ✅ Chat con historial por proyecto y @mention de agentes
 - ✅ Generación y optimización de prompts con IA
 - ✅ Generación de CLAUDE.md / copilot-instructions con IA
+- ✅ Dashboard con métricas y seguimiento de uso de tokens
+- ✅ Ejecución directa de agentes sobre proyectos
+- ✅ Validación de contexto antes de ejecutar (detecta mismatch de proveedor)
+- ✅ Indicador de estado de contexto en el chat
 
-**Próximos pasos (roadmap):**
-- 🔲 Soporte multi-usuario / equipos
-- 🔲 Exportar / compartir packs de agentes
-- 🔲 Integración con más herramientas (Cursor, Windsurf…)
-- 🔲 Versión macOS / Linux
-
-**Visual sugerido:** Timeline vertical con dos columnas: "Hecho" (verde) vs "Próximo" (violeta).
+**Visual sugerido:** Lista vertical con checkmarks verdes.
 
 ---
 
@@ -222,3 +223,5 @@ Los agentes son archivos `.md` en GitHub. Versionados, auditables, sin vendor lo
 - **Estilo:** minimalista, dark mode, sin exceso de texto por slide
 - **Duración estimada:** 8-12 minutos a ritmo de pitch
 - **Screenshots disponibles en:** `docs/screenshots/` (wizard, vista-proyectos, vista-agentes, chat)
+- **logo disponible en:** `docs/web/logo.png`
+
