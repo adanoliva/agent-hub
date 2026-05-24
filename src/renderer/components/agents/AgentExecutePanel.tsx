@@ -319,14 +319,15 @@ export function AgentExecutePanel({ agent, projectId, projectName, onBack, onOpe
           (() => {
             // Muestra el task derivado como preview
             const combined = `${agent.name} ${agent.description || ''}`.toLowerCase();
-            if (/review|revisor|code.?review/.test(combined)) return 'Revisar código en busca de bugs y oportunidades de mejora';
+            if (/seo|meta.?tag|schema\.?org|robots\.?txt|sitemap|open.?graph|canonical/.test(combined)) return 'Mejorar SEO técnico: meta tags, Open Graph, schema.org, canonical URL';
+            if (/review|revisar|code.?review/.test(combined)) return 'Revisar código en busca de bugs y oportunidades de mejora';
             if (/test|spec|testing/.test(combined)) return 'Analizar cobertura de tests y proponer plan de pruebas';
             if (/doc|readme|wiki/.test(combined)) return 'Revisar documentación e identificar qué falta';
-            if (/perf|performance|optim|rendimiento/.test(combined)) return 'Identificar cuellos de botella de rendimiento';
-            if (/security|seguridad|auth/.test(combined)) return 'Revisión de seguridad del proyecto';
+            if (/\bperf\b|performance|\bspeed\b|rendimiento/.test(combined)) return 'Identificar cuellos de botella de rendimiento';
+            if (/security|seguridad|\bauth\b/.test(combined)) return 'Revisión de seguridad del proyecto';
             if (/refactor|clean|architect/.test(combined)) return 'Análisis de arquitectura y propuesta de refactorización';
-            if (/debug|fix|bug/.test(combined)) return 'Búsqueda de bugs y comportamientos inesperados';
-            return 'Análisis general del proyecto';
+            if (/debug|\bfix\b|\bbug\b/.test(combined)) return 'Búsqueda de bugs y comportamientos inesperados';
+            return 'Ejecutar tarea principal del agente';
           })()
         ) : '—'}</span>
       </div>
