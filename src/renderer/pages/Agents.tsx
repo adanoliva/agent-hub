@@ -19,9 +19,14 @@ export function Agents() {
   const navigateTo          = useStore((s) => s.navigateTo);
   const setPendingChatAgent = useStore((s) => s.setPendingChatAgent);
   const projects            = useStore((s) => s.projects);
+  const config              = useStore((s) => s.config);
 
   const [node,               setNode]               = useState<SelectedNode>(DEFAULT_NODE);
-  const [expanded,           setExpanded]           = useState<Set<string>>(new Set());
+  const [expanded,           setExpanded]           = useState<Set<string>>(() => {
+    const keys = ['cats', 'projs'];
+    (config?.categories ?? []).forEach((c) => keys.push('cat-' + c.id));
+    return new Set(keys);
+  });
   const [agents,             setAgents]             = useState<Agent[]>([]);
   const [suggestions,        setSuggestions]        = useState<Agent[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
