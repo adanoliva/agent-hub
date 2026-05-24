@@ -619,8 +619,10 @@ app.post('/api/projects/:id/execute-task', async (req, res) => {
   const ctxInfo = getContextAuto(project, cfg.aiProvider);
   const task    = deriveAgentTask(agent);
 
+  const projectMeta = `Proyecto: ${project.name}\nRuta: ${project.path}`;
   const systemPrompt = [
     agent.system || '',
+    `\n\n---\n${projectMeta}`,
     ctxInfo.content
       ? `\n\n---\nContexto del proyecto (${ctxInfo.label}):\n\n${ctxInfo.content.slice(0, 8000)}`
       : '',

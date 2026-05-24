@@ -66,7 +66,7 @@ export function AgentCard({ agent: a, selected, suggested, node, onClick, onChat
               title="Ejecutar tarea rápida"
               style={{ color: 'var(--amber)' }}
             >
-              <i className="ti ti-zap" /> Tarea
+              <i className="ti ti-zap" /> Ejecutar
             </button>
           )}
         </div>
