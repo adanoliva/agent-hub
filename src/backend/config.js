@@ -51,7 +51,7 @@ const CACHE_DIR   = path.join(APP_DIR, 'cache');
 // ── Default config ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-  version: '1.7.0',
+  version: '1.8.1',
   aiProvider: 'cli',   // 'cli' | 'api' | 'github'
   apiKey: '',
   githubToken: '',
