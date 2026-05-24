@@ -66,11 +66,13 @@ export function Agents() {
     }
   }, [toast]);
 
-  const loadSuggestions = useCallback(async (n: SelectedNode, force = false) => {
+  const loadSuggestions = useCallback(async (n: SelectedNode, force = false, currentSuggestions: Agent[] = []) => {
     if (n.level === 'uncategorized') { setSuggestions([]); return; }
     sugAbortRef.current?.abort();
     const ctrl = new AbortController();
     sugAbortRef.current = ctrl;
+
+    const alreadySuggested = currentSuggestions.map((s) => s.name);
 
     setSuggestionsLoading(true);
     try {
@@ -80,13 +82,14 @@ export function Agents() {
           ? '/ai/project-suggestions/refresh'
           : `/ai/project-suggestions?projectId=${n.projectId}`;
         data = force
-          ? await req<Agent[]>('POST', url, { projectId: n.projectId })
+          ? await req<Agent[]>('POST', url, { projectId: n.projectId, alreadySuggested })
           : await req<Agent[]>('GET', url);
       } else {
         const url = force ? '/ai/suggestions/refresh' : '/ai/suggestions';
         if (force) {
           data = await req<Agent[]>('POST', url, {
             level: n.level, categoryId: n.categoryId ?? null, techId: n.techId ?? null,
+            alreadySuggested,
           });
         } else {
           const q = new URLSearchParams({ level: n.level, force: 'false' });
@@ -220,8 +223,9 @@ export function Agents() {
   }
 
   function handleRefreshSuggestions() {
+    const current = suggestions;
     setSuggestions([]);
-    loadSuggestions(node, true);
+    loadSuggestions(node, true, current);
   }
 
   function handleChatWithAgent(agent: Agent) {

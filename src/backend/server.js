@@ -938,7 +938,7 @@ app.get('/api/ai/suggestions', async (req, res) => {
 
 // POST /api/ai/suggestions/refresh — force regenerate suggestions for a level
 app.post('/api/ai/suggestions/refresh', async (req, res) => {
-  const { level, categoryId, techId } = req.body;
+  const { level, categoryId, techId, alreadySuggested = [] } = req.body;
   if (!level) return res.status(400).json({ error: 'level required' });
 
   const existing = (() => {
@@ -946,9 +946,11 @@ app.post('/api/ai/suggestions/refresh', async (req, res) => {
     catch { return []; }
   })();
 
+  const allExcluded = [...new Set([...existing, ...alreadySuggested])];
+
   try {
     const suggestions = await getSuggestions(
-      { level, categoryId, techId, existingAgents: existing },
+      { level, categoryId, techId, existingAgents: allExcluded },
       true, // force regenerate
     );
     res.json(suggestions);
@@ -963,7 +965,7 @@ function projectSuggestionsCacheKey(projectId) {
   return `project::${projectId}`;
 }
 
-async function getProjectSuggestionsImpl(projectId, force = false) {
+async function getProjectSuggestionsImpl(projectId, force = false, alreadySuggested = []) {
   const cfg     = readConfig();
   const project = cfg.projects.find(p => p.id === projectId);
   if (!project) throw new Error('Project not found');
@@ -981,14 +983,15 @@ async function getProjectSuggestionsImpl(projectId, force = false) {
   const ctx      = getContextFile(project, provider);
   const cat      = (cfg.categories || []).find(c => c.id === project.categoryId);
   const tech     = (cat?.technologies || []).find(t => t.id === project.techId);
-  const existing = listProjectAgents(project.path, [provider]).map(a => a.name);
+  const existing    = listProjectAgents(project.path, [provider]).map(a => a.name);
+  const allExcluded = [...new Set([...existing, ...alreadySuggested])];
 
   const suggestions = await generateProjectSuggestions({
     project,
     contextContent: ctx.content || '',
     categoryName:   cat?.name || project.categoryId || '',
     techName:       tech?.name || project.techId || '',
-    existingAgents: existing,
+    existingAgents: allExcluded,
   });
 
   const allCache      = readCache();
@@ -1011,10 +1014,10 @@ app.get('/api/ai/project-suggestions', async (req, res) => {
 
 // POST /api/ai/project-suggestions/refresh
 app.post('/api/ai/project-suggestions/refresh', async (req, res) => {
-  const { projectId } = req.body;
+  const { projectId, alreadySuggested = [] } = req.body;
   if (!projectId) return res.status(400).json({ error: 'projectId required' });
   try {
-    res.json(await getProjectSuggestionsImpl(projectId, true));
+    res.json(await getProjectSuggestionsImpl(projectId, true, alreadySuggested));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
