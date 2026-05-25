@@ -227,6 +227,44 @@ function countPendingUpdates(project) {
   return Object.values(status).filter(s => s.status === 'outdated' || s.status === 'new').length;
 }
 
+/**
+ * Builds a dry-run sync preview for a project.
+ * Does not write files.
+ */
+function getProjectSyncPreview(project) {
+  const status = getProjectSyncStatus(project);
+
+  const asAgentItem = ([name, entry]) => ({
+    name,
+    level: entry.agent?.level || 'unknown',
+    categoryId: entry.agent?.categoryId || null,
+    techId: entry.agent?.techId || null,
+  });
+
+  const entries = Object.entries(status);
+  const added = entries.filter(([, e]) => e.status === 'new').map(asAgentItem).sort((a, b) => a.name.localeCompare(b.name));
+  const updated = entries.filter(([, e]) => e.status === 'outdated').map(asAgentItem).sort((a, b) => a.name.localeCompare(b.name));
+  const excluded = entries.filter(([, e]) => e.status === 'excluded').map(asAgentItem).sort((a, b) => a.name.localeCompare(b.name));
+  const local = entries.filter(([, e]) => e.status === 'local').map(asAgentItem).sort((a, b) => a.name.localeCompare(b.name));
+  const upToDate = entries.filter(([, e]) => e.status === 'ok').map(asAgentItem).sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    summary: {
+      toAdd: added.length,
+      toUpdate: updated.length,
+      excluded: excluded.length,
+      local: local.length,
+      upToDate: upToDate.length,
+      total: entries.length,
+    },
+    toAdd: added,
+    toUpdate: updated,
+    excluded,
+    local,
+    upToDate,
+  };
+}
+
 // ── Sync ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -654,6 +692,7 @@ module.exports = {
   deleteProject,
   listProjectsWithStatus,
   getProjectSyncStatus,
+  getProjectSyncPreview,
   countPendingUpdates,
   syncProject,
   syncAllProjects,

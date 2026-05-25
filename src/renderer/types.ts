@@ -96,6 +96,14 @@ export interface AgentDirectoryStatus {
 
 export type View = 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings';
 
+export interface PendingAgentToEdit {
+  name: string;
+  level: 'global' | 'section' | 'tech' | 'uncategorized' | 'project';
+  categoryId?: string | null;
+  techId?: string | null;
+  projectId?: string | null;
+}
+
 export interface DashboardNotification {
   id:         string;
   type:       'critical' | 'optimization' | 'info';
@@ -115,8 +123,44 @@ export interface DashboardData {
   projects:  { total: number; active: number; paused: number; archived: number; withPending: number; totalPending: number };
   lastSyncAt: string | null;
   dirStatus: { enabled: boolean; syncing: boolean; lastSync: string | null; pendingConflicts: SyncConflict[]; lastResult: any };
+  projectHealth?: Array<{
+    projectId: string;
+    name: string;
+    status: 'healthy' | 'warning' | 'critical';
+    pathExists: boolean;
+    pendingUpdates: number;
+    staleSync: boolean;
+    contextState: 'ok' | 'thin' | 'missing';
+    lastSyncAt: string | null;
+    issues: string[];
+  }>;
   notifications: DashboardNotification[];
   hiddenNotifications?: number;
+  hiddenDismissed?: number;
+  hiddenSnoozed?: number;
+}
+
+export interface SyncPreviewAgent {
+  name: string;
+  level: string;
+  categoryId: string | null;
+  techId: string | null;
+}
+
+export interface SyncPreview {
+  summary: {
+    toAdd: number;
+    toUpdate: number;
+    excluded: number;
+    local: number;
+    upToDate: number;
+    total: number;
+  };
+  toAdd: SyncPreviewAgent[];
+  toUpdate: SyncPreviewAgent[];
+  excluded: SyncPreviewAgent[];
+  local: SyncPreviewAgent[];
+  upToDate: SyncPreviewAgent[];
 }
 
 export interface SelectedNode {

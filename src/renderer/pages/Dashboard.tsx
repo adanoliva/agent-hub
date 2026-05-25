@@ -95,9 +95,10 @@ function SyncRow({ ok, label, sub }: { ok: boolean | null; label: string; sub: s
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
-  const setView    = useStore((s) => s.setView);
-  const navigateTo = useStore((s) => s.navigateTo);
-  const config  = useStore((s) => s.config);
+  const setView               = useStore((s) => s.setView);
+  const navigateTo            = useStore((s) => s.navigateTo);
+  const setPendingAgentToEdit = useStore((s) => s.setPendingAgentToEdit);
+  const config                = useStore((s) => s.config);
 
   const [data,     setData]     = useState<DashboardData | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -135,6 +136,13 @@ export function Dashboard() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      load();
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [load]);
+
   async function syncAll() {
     setSyncing(true);
     try { await req('POST', '/sync-all'); await load(); }
@@ -145,7 +153,18 @@ export function Dashboard() {
     if (n.action === 'sync-project' && n.targetId) {
       try { await req('POST', `/projects/${n.targetId}/sync`); await load(); } catch { /**/ }
     } else if (n.target === 'agent') {
+      const resolvedLevel = (n.level as any)
+        || (n.scopeLabel === 'Sin categoría' ? 'uncategorized' : 'global');
+      const pendingTarget = {
+        name: n.targetName,
+        level: resolvedLevel,
+        categoryId: n.categoryId || null,
+        techId: n.techId || null,
+        projectId: null,
+      };
+      console.log('📢 Notification data:', { targetName: n.targetName, level: n.level, categoryId: n.categoryId, techId: n.techId });
       setView('agents');
+      setPendingAgentToEdit(pendingTarget);
     } else {
       setView('projects');
     }
@@ -178,6 +197,15 @@ export function Dashboard() {
     }
   }
 
+  async function snoozeNotification(id: string, days = 7) {
+    try {
+      await req('POST', '/dashboard/notifications/snooze', { id, days });
+      await load();
+    } catch {
+      // no-op
+    }
+  }
+
   // ── States ────────────────────────────────────────────────────────────────
 
   if (loading) return (
@@ -205,6 +233,7 @@ export function Dashboard() {
   const visibleNotifs = showAll ? notifs : notifs.slice(0, 5);
   const dir           = data.dirStatus;
   const dirOk         = !dir.enabled ? null : dir.lastResult?.error ? false : true;
+  const healthList    = data.projectHealth ?? [];
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -309,6 +338,12 @@ export function Dashboard() {
                   : timeAgo(dir.lastSync)}
             />
 
+            <div className="dash-sep" />
+            <div className="dash-foot-note">
+              <i className="ti ti-pulse" />
+              Salud en vivo: actualización cada 30s
+            </div>
+
             <button
               className="btn primary"
               style={{ marginTop: 14, width: '100%', justifyContent: 'center' }}
@@ -320,97 +355,140 @@ export function Dashboard() {
             </button>
           </div>
 
-          {/* ── Notificaciones ── */}
-          <div className="dash-card dash-wide">
-            <div className="dash-card-head">
-              <i className="ti ti-bulb" />
-              Oportunidades de Mejora
-              {notifs.length > 0 && (
-                <span className="dash-badge-count">{notifs.length}</span>
-              )}
-              {(data.hiddenNotifications ?? 0) > 0 && (
-                <button className="btn sm ghost" onClick={restoreHiddenNotifications} title="Volver a mostrar mejoras ocultas">
-                  <i className="ti ti-restore" />
-                  Restaurar ({data.hiddenNotifications})
-                </button>
+          <div className="dash-row-health">
+            {/* ── Salud de proyectos ── */}
+            <div className="dash-card">
+              <div className="dash-card-head">
+                <i className="ti ti-heartbeat" />
+                Salud de Proyectos
+              </div>
+              {healthList.length === 0 ? (
+                <div className="dash-empty" style={{ padding: 12 }}>
+                  <span style={{ fontSize: 11 }}>Sin proyectos para analizar</span>
+                </div>
+              ) : (
+                <div className="dash-health-list">
+                  {healthList.slice(0, 6).map((h) => (
+                    <div key={h.projectId} className="dash-health-item">
+                      <div className={`dash-health-dot ${h.status}`}><i className={`ti ${h.status === 'critical' ? 'ti-alert-circle' : h.status === 'warning' ? 'ti-alert-triangle' : 'ti-circle-check'}`} /></div>
+                      <div className="dash-health-body">
+                        <span className="dash-health-name">{h.name}</span>
+                        <span className={`dash-health-sub ${h.status}`}>
+                          {h.issues[0] || 'Sin incidencias'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            {notifs.length === 0 ? (
-              <div className="dash-empty">
-                <i className="ti ti-circle-check" style={{ color: 'var(--green)', fontSize: 24 }} />
-                <span>Todo está optimizado</span>
-                <span style={{ fontSize: 11, color: 'var(--text2)' }}>No hay recomendaciones por ahora</span>
-              </div>
-            ) : (
-              <>
-                {visibleNotifs.map((n) => {
-                  const meta = NOTIF_META[n.type];
-                  return (
-                    <div key={n.id} className={`dash-notif dash-notif-${meta.color}`}>
-                      <i className={`ti ${meta.icon}`} />
-                      <div className="dash-notif-body">
-                        <span className={`dash-notif-type dash-notif-type-${meta.color}`}>{meta.label}</span>
-                        <span className="dash-notif-who">
-                          <i className={`ti ${n.target === 'agent' ? 'ti-cpu' : 'ti-layout-grid'}`} />
-                          {n.targetName}
-                        </span>
-                        {n.scopeLabel && (
-                          <span className="dash-notif-scope">
-                            <i className="ti ti-map-pin" />
-                            {n.scopeLabel}
-                          </span>
-                        )}
-                        <span className="dash-notif-msg">{n.message}</span>
-                      </div>
-                      <div className="dash-notif-actions">
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => handleNotifAction(n)}
-                        >
-                          {ACTION_LABEL[n.action]}
-                        </button>
-                        {isDismissibleNotification(n) && (
-                          <>
-                            {n.target === 'agent' && (
-                              <button
-                                className="btn sm ghost"
-                                onClick={() => dismissGroup('agent', n.targetName)}
-                                title="Ocultar todas las mejoras de este agente"
-                              >
-                                <i className="ti ti-filter-off" />
-                              </button>
-                            )}
-                            {n.scopeLabel === 'Sin categoría' && (
-                              <button
-                                className="btn sm ghost"
-                                onClick={() => dismissGroup('scope', 'Sin categoría')}
-                                title="Ocultar mejoras de Sin categoría"
-                              >
-                                <i className="ti ti-eye-off" />
-                              </button>
-                            )}
-                            <button
-                              className="btn sm ghost"
-                              onClick={() => dismissNotification(n.id)}
-                              title="Ocultar esta mejora"
-                            >
-                              <i className="ti ti-x" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {notifs.length > 5 && (
-                  <button className="btn ghost" style={{ width: '100%', justifyContent: 'center', marginTop: 6 }} onClick={() => setShowAll(!showAll)}>
-                    {showAll ? 'Ver menos' : `Ver todas (${notifs.length})`}
+            {/* ── Notificaciones ── */}
+            <div className="dash-card">
+              <div className="dash-card-head">
+                <i className="ti ti-bulb" />
+                Oportunidades de Mejora
+                {notifs.length > 0 && (
+                  <span className="dash-badge-count">{notifs.length}</span>
+                )}
+                {(data.hiddenNotifications ?? 0) > 0 && (
+                  <button className="btn sm ghost" onClick={restoreHiddenNotifications} title="Volver a mostrar mejoras ocultas">
+                    <i className="ti ti-restore" />
+                    Restaurar ({data.hiddenNotifications})
                   </button>
                 )}
-              </>
-            )}
+              </div>
+
+              {(data.hiddenNotifications ?? 0) > 0 && (
+                <div className="dash-hidden-breakdown">
+                  <span><i className="ti ti-eye-off" /> Ocultas: {data.hiddenDismissed ?? 0}</span>
+                  <span><i className="ti ti-clock-pause" /> Aplazadas: {data.hiddenSnoozed ?? 0}</span>
+                </div>
+              )}
+
+              {notifs.length === 0 ? (
+                <div className="dash-empty">
+                  <i className="ti ti-circle-check" style={{ color: 'var(--green)', fontSize: 24 }} />
+                  <span>Todo está optimizado</span>
+                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>No hay recomendaciones por ahora</span>
+                </div>
+              ) : (
+                <>
+                  {visibleNotifs.map((n) => {
+                    const meta = NOTIF_META[n.type];
+                    return (
+                      <div key={n.id} className={`dash-notif dash-notif-${meta.color}`}>
+                        <i className={`ti ${meta.icon}`} />
+                        <div className="dash-notif-body">
+                          <span className={`dash-notif-type dash-notif-type-${meta.color}`}>{meta.label}</span>
+                          <span className="dash-notif-who">
+                            <i className={`ti ${n.target === 'agent' ? 'ti-cpu' : 'ti-layout-grid'}`} />
+                            {n.targetName}
+                          </span>
+                          {n.scopeLabel && (
+                            <span className="dash-notif-scope">
+                              <i className="ti ti-map-pin" />
+                              {n.scopeLabel}
+                            </span>
+                          )}
+                          <span className="dash-notif-msg">{n.message}</span>
+                        </div>
+                        <div className="dash-notif-actions">
+                          <button
+                            className="btn sm ghost"
+                            onClick={() => handleNotifAction(n)}
+                          >
+                            {ACTION_LABEL[n.action]}
+                          </button>
+                          {isDismissibleNotification(n) && (
+                            <>
+                              {n.target === 'agent' && (
+                                <button
+                                  className="btn sm ghost"
+                                  onClick={() => dismissGroup('agent', n.targetName)}
+                                  title="Ocultar todas las mejoras de este agente"
+                                >
+                                  <i className="ti ti-filter-off" />
+                                </button>
+                              )}
+                              {n.scopeLabel === 'Sin categoría' && (
+                                <button
+                                  className="btn sm ghost"
+                                  onClick={() => dismissGroup('scope', 'Sin categoría')}
+                                  title="Ocultar mejoras de Sin categoría"
+                                >
+                                  <i className="ti ti-eye-off" />
+                                </button>
+                              )}
+                              <button
+                                className="btn sm ghost"
+                                onClick={() => dismissNotification(n.id)}
+                                title="Ocultar esta mejora"
+                              >
+                                <i className="ti ti-x" />
+                              </button>
+                              <button
+                                className="btn sm ghost"
+                                onClick={() => snoozeNotification(n.id, 7)}
+                                title="Aplazar 7 días"
+                              >
+                                <i className="ti ti-clock-pause" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {notifs.length > 5 && (
+                    <button className="btn ghost" style={{ width: '100%', justifyContent: 'center', marginTop: 6 }} onClick={() => setShowAll(!showAll)}>
+                      {showAll ? 'Ver menos' : `Ver todas (${notifs.length})`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {/* ── Acciones rápidas ── */}

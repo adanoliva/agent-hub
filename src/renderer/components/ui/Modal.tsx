@@ -3,6 +3,8 @@ import React from 'react';
 interface ModalProps {
   title: string;
   sub?: string;
+  modalClassName?: string;
+  bodyClassName?: string;
   confirmLabel?: string;
   confirmClass?: string;
   onConfirm: () => void | Promise<void>;
@@ -13,6 +15,8 @@ interface ModalProps {
 export function Modal({
   title,
   sub,
+  modalClassName,
+  bodyClassName,
   confirmLabel = 'Confirmar',
   confirmClass = 'btn primary',
   onConfirm,
@@ -32,7 +36,7 @@ export function Modal({
 
   return (
     <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
+      <div className={`modal${modalClassName ? ` ${modalClassName}` : ''}`}>
         <div className="modal-head">
           <div>
             <div className="modal-title">{title}</div>
@@ -40,7 +44,7 @@ export function Modal({
           </div>
           <button className="btn ghost sm" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
-        <div className="modal-body">{children}</div>
+        <div className={`modal-body${bodyClassName ? ` ${bodyClassName}` : ''}`}>{children}</div>
         <div className="modal-foot">
           <button className="btn" onClick={onClose}>Cancelar</button>
           <button className={confirmClass} onClick={handleConfirm} disabled={loading}>

@@ -33,6 +33,7 @@ export function AgentsCenter({
     if (node.level === 'section') return catName(node.categoryId ?? '');
     if (node.level === 'tech')    return `${catName(node.categoryId ?? '')} → ${techName(node.categoryId ?? '', node.techId ?? '')}`;
     if (node.level === 'project') return projects.find((p) => p.id === node.projectId)?.name ?? 'Proyecto';
+    if (node.level === 'uncategorized') return 'Sin categoría';
     return 'Global';
   })();
 

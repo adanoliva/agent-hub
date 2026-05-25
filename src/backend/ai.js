@@ -53,6 +53,7 @@ function trackUsage({ inputTokens = 0, outputTokens = 0, costUSD = 0 } = {}) {
     u.outputTokens     += outputTokens;
     u.estimatedCostUSD += costUSD;
   }
+
   saveCumulative(cumulative);
 }
 

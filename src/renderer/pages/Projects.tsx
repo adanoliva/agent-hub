@@ -23,6 +23,7 @@ export function Projects() {
 
   const [drawerProject,   setDrawerProject]   = useState<Project | null>(null);
   const [editProjectId,   setEditProjectId]   = useState<string | null>(null);
+  const [editReturnId,    setEditReturnId]    = useState<string | null>(null);
   const [deleteProject,   setDeleteProject]   = useState<Project | null>(null);
   const [showCreate,      setShowCreate]      = useState(false);
   const [showImport,      setShowImport]      = useState(false);
@@ -110,6 +111,19 @@ export function Projects() {
 
   const editProject = editProjectId ? projects.find((p) => p.id === editProjectId) ?? null : null;
 
+  function restoreProjectDetail(projectId: string | null) {
+    if (!projectId) return;
+    const fresh = useStore.getState().projects.find((p) => p.id === projectId);
+    if (fresh) setDrawerProject(fresh);
+  }
+
+  function closeEditAndReturnToDetail() {
+    const targetId = editReturnId ?? editProjectId;
+    setEditProjectId(null);
+    setEditReturnId(null);
+    restoreProjectDetail(targetId);
+  }
+
   return (
     <div className="view active" id="view-projects">
       <Topbar title="Proyectos" actions={topbarActions} />
@@ -183,7 +197,11 @@ export function Projects() {
           project={drawerProject}
           onClose={() => setDrawerProject(null)}
           onSync={handleSync}
-          onEdit={(id) => setEditProjectId(id)}
+          onEdit={(id) => {
+            setEditReturnId(id);
+            setEditProjectId(id);
+            setDrawerProject(null);
+          }}
           onDelete={handleDelete}
           onRefresh={refresh}
         />
@@ -199,11 +217,10 @@ export function Projects() {
       {editProject && (
         <EditProjectModal
           project={editProject}
-          onClose={() => setEditProjectId(null)}
+          onClose={closeEditAndReturnToDetail}
           onUpdated={async () => {
             await fetchProjects();
-            const fresh = useStore.getState().projects.find((p) => p.id === editProject.id);
-            if (fresh) setDrawerProject(fresh);
+            restoreProjectDetail(editProject.id);
           }}
         />
       )}

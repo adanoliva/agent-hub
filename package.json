@@ -8,6 +8,7 @@
     "dev": "concurrently -k --success first -n build,electron -c cyan,yellow \"vite build --watch\" \"wait-on dist/renderer/index.html && electron .\"",
     "dev:vite": "vite",
     "build:renderer": "vite build",
+    "test:backend": "node --test tests/backend/*.test.js",
     "prebuild": "npm run build:renderer && node scripts/generate-icon.js",
     "build": "electron-builder --win portable",
     "build:dir": "electron-builder --win dir",

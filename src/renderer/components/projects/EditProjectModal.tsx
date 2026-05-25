@@ -8,7 +8,7 @@ import type { Project } from '../../types';
 interface Props {
   project: Project;
   onClose: () => void;
-  onUpdated: () => void;
+  onUpdated: () => void | Promise<void>;
 }
 
 type Provider = 'claude' | 'github' | 'both';
@@ -70,57 +70,71 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
     } else {
       toast(`Proyecto "${name.trim()}" actualizado`);
     }
-    onUpdated();
+    await onUpdated();
     onClose();
   }
 
   return (
-    <Modal title="Editar proyecto" onConfirm={handleConfirm} onClose={onClose} confirmLabel="Guardar">
-      <div className="field">
-        <label>Nombre</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div className="field">
-        <label>Descripción</label>
-        <input value={desc} onChange={(e) => setDesc(e.target.value)} />
-      </div>
-      <div className="field">
-        <label>Estado</label>
-        <select value={status} onChange={(e) => setStatus(e.target.value as Project['status'])}>
-          <option value="active">Activo</option>
-          <option value="paused">Pausado</option>
-          <option value="archived">Archivado</option>
-        </select>
-      </div>
-      <div className="field">
-        <label>Tecnología</label>
-        <select value={techId} onChange={(e) => setTechId(e.target.value)}>
-          <option value="">— Sin tecnología específica —</option>
-          {techs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
-      <div className="field">
-        <label>Agentes IA</label>
-        <div className="provider-opts">
-          {PROVIDER_OPTS.map((opt) => (
-            <label key={opt.value} className="provider-opt">
-              <input
-                type="radio"
-                name="edit-prov"
-                value={opt.value}
-                checked={provider === opt.value}
-                onChange={() => setProvider(opt.value)}
-              />
-              <span><i className={`ti ${opt.icon}`} /> {opt.label}</span>
-            </label>
-          ))}
+    <Modal
+      title="Editar proyecto"
+      sub="Actualiza configuración, tecnología y proveedor IA"
+      modalClassName="project-edit-modal"
+      bodyClassName="project-edit-body"
+      onConfirm={handleConfirm}
+      onClose={onClose}
+      confirmLabel="Guardar"
+    >
+      <div className="project-edit-grid">
+        <div className="field">
+          <label>Nombre</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        {warn && (
-          <div
-            style={{ fontSize: 11, color: 'var(--text1)', padding: '8px 10px', background: 'var(--amber-dim)', borderRadius: 6, border: '1px solid rgba(251,191,36,.2)', marginTop: 6 }}
-            dangerouslySetInnerHTML={{ __html: `<i class="ti ti-alert-triangle" style="color:var(--amber)"></i> ${warn}` }}
-          />
-        )}
+
+        <div className="field">
+          <label>Estado</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value as Project['status'])}>
+            <option value="active">Activo</option>
+            <option value="paused">Pausado</option>
+            <option value="archived">Archivado</option>
+          </select>
+        </div>
+
+        <div className="field project-edit-col-span-2">
+          <label>Descripción</label>
+          <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+        </div>
+
+        <div className="field project-edit-col-span-2">
+          <label>Tecnología</label>
+          <select value={techId} onChange={(e) => setTechId(e.target.value)}>
+            <option value="">— Sin tecnología específica —</option>
+            {techs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+
+        <div className="field project-edit-col-span-2">
+          <label>Agentes IA</label>
+          <div className="provider-opts">
+            {PROVIDER_OPTS.map((opt) => (
+              <label key={opt.value} className="provider-opt">
+                <input
+                  type="radio"
+                  name="edit-prov"
+                  value={opt.value}
+                  checked={provider === opt.value}
+                  onChange={() => setProvider(opt.value)}
+                />
+                <span><i className={`ti ${opt.icon}`} /> {opt.label}</span>
+              </label>
+            ))}
+          </div>
+          {warn && (
+            <div
+              className="project-edit-warning"
+              dangerouslySetInnerHTML={{ __html: `<i class="ti ti-alert-triangle" style="color:var(--amber)"></i> ${warn}` }}
+            />
+          )}
+        </div>
       </div>
     </Modal>
   );

@@ -21,7 +21,8 @@ const { app } = require('electron');
 // ── App root path (portable-aware) ────────────────────────────────────────────
 
 function getAppDir() {
-  if (!app.isPackaged) {
+  const isPackaged = Boolean(app && app.isPackaged);
+  if (!isPackaged) {
     // Dev: CDM_DATA_DIR overrides the default location (project root)
     return process.env.CDM_DATA_DIR
       || path.join(__dirname, '..', '..');
@@ -37,7 +38,8 @@ function getAppDir() {
  * Only used for reading — never write here.
  */
 function getAssetsDir() {
-  if (!app.isPackaged) {
+  const isPackaged = Boolean(app && app.isPackaged);
+  if (!isPackaged) {
     return path.join(__dirname, '..', '..', 'assets');
   }
   return path.join(process.resourcesPath, 'assets');
@@ -61,6 +63,7 @@ const DEFAULT_CONFIG = {
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
   agentsDirectoryEnabled: true,
   dismissedDashboardNotifications: [],
+  snoozedDashboardNotifications: {},
   categories: [
     {
       id: 'games',

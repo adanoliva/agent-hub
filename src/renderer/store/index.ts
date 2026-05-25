@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { req } from '../api';
-import type { Config, Project, Toast, ToastType, View } from '../types';
+import type { Config, Project, Toast, ToastType, View, PendingAgentToEdit } from '../types';
 
 interface AppState {
   // Core
@@ -15,6 +15,9 @@ interface AppState {
   // Pending action (consumed by target page on mount)
   pendingAction: string | null;
 
+  // Agent to open in editor (consumed by Agents page on mount)
+  pendingAgentToEdit: PendingAgentToEdit | null;
+
   // Agent name to preload in Chat (consumed on mount)
   pendingChatAgent: string | null;
 
@@ -25,6 +28,7 @@ interface AppState {
   setView: (v: View) => void;
   navigateTo: (v: View, action?: string) => void;
   setPendingAction: (a: string | null) => void;
+  setPendingAgentToEdit: (agent: PendingAgentToEdit | null) => void;
   setPendingChatAgent: (name: string | null) => void;
   setConfig: (c: Config) => void;
   setProjects: (p: Project[]) => void;
@@ -42,12 +46,14 @@ export const useStore = create<AppState>((set) => ({
   appVersion: null,
   showWizard: !localStorage.getItem('cdm-wizard-done'),
   pendingAction: null,
+  pendingAgentToEdit: null,
   pendingChatAgent: null,
   toasts: [],
 
   setView: (view) => set({ view }),
   navigateTo: (view, action) => set({ view, pendingAction: action ?? null }),
   setPendingAction: (pendingAction) => set({ pendingAction }),
+  setPendingAgentToEdit: (pendingAgentToEdit) => set({ pendingAgentToEdit }),
   setPendingChatAgent: (pendingChatAgent) => set({ pendingChatAgent }),
   setConfig: (config) => set({ config }),
   setProjects: (projects) => set({ projects }),

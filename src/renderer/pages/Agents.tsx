@@ -13,13 +13,15 @@ const DEFAULT_NODE: SelectedNode = { level: 'global', categoryId: null, techId: 
 const NEW_AGENT: Agent = { name: '', description: '', tools: ['Read'], model: 'sonnet', system: '' };
 
 export function Agents() {
-  const toast               = useToast();
-  const pendingAction       = useStore((s) => s.pendingAction);
-  const setPendingAction    = useStore((s) => s.setPendingAction);
-  const navigateTo          = useStore((s) => s.navigateTo);
-  const setPendingChatAgent = useStore((s) => s.setPendingChatAgent);
-  const projects            = useStore((s) => s.projects);
-  const config              = useStore((s) => s.config);
+  const toast                = useToast();
+  const pendingAction        = useStore((s) => s.pendingAction);
+  const pendingAgentToEdit   = useStore((s) => s.pendingAgentToEdit);
+  const setPendingAction     = useStore((s) => s.setPendingAction);
+  const setPendingAgentToEdit = useStore((s) => s.setPendingAgentToEdit);
+  const navigateTo           = useStore((s) => s.navigateTo);
+  const setPendingChatAgent  = useStore((s) => s.setPendingChatAgent);
+  const projects             = useStore((s) => s.projects);
+  const config               = useStore((s) => s.config);
 
   const [node,               setNode]               = useState<SelectedNode>(DEFAULT_NODE);
   const [expanded,           setExpanded]           = useState<Set<string>>(() => {
@@ -39,6 +41,9 @@ export function Agents() {
   const [showConflicts,      setShowConflicts]      = useState(false);
   const pollRef                                      = useRef<ReturnType<typeof setInterval> | null>(null);
   const wasSyncingRef                                = useRef(false);
+  const pendingAgentNameRef                          = useRef<string | null>(null);
+  const pendingNodeRef                               = useRef<SelectedNode | null>(null);
+  const didInitialLoadRef                            = useRef(false);
 
   const [executeAgent, setExecuteAgent] = useState<Agent | null>(null);
 
@@ -48,11 +53,14 @@ export function Agents() {
 
   const loadAgents = useCallback(async (n: SelectedNode) => {
     try {
+      console.log('📡 loadAgents called with level:', n.level);
       let data: Agent[];
       if (n.level === 'project') {
         data = n.projectId ? await req<Agent[]>('GET', `/projects/${n.projectId}/agents`) : [];
       } else if (n.level === 'uncategorized') {
+        console.log('🔄 Loading uncategorized agents...');
         data = await req<Agent[]>('GET', '/agents?level=uncategorized');
+        console.log('📦 Uncategorized agents loaded:', data.map(a => a.name));
       } else {
         const q = new URLSearchParams({ level: n.level });
         if (n.categoryId) q.set('categoryId', n.categoryId);
@@ -109,14 +117,13 @@ export function Agents() {
     }
   }, [toast]);
 
-  const selectNode = useCallback(async (n: SelectedNode) => {
+  const selectNode = useCallback((n: SelectedNode) => {
+    console.log('✅ selectNode called with:', n);
     setNode(n);
     setSuggestions([]);
     setSelectedAgent(null);
     setEditorAgent(null);
-    await loadAgents(n);
-    loadSuggestions(n);
-  }, [loadAgents, loadSuggestions]);
+  }, []);
 
   useEffect(() => {
     if (pendingAction === 'new-agent') {
@@ -127,10 +134,62 @@ export function Agents() {
   }, []);
 
   useEffect(() => {
-    loadAgents(DEFAULT_NODE);
-    loadSuggestions(DEFAULT_NODE);
+    if (pendingAgentToEdit) {
+      console.log('🔵 pendingAgentToEdit triggered:', pendingAgentToEdit);
+      pendingAgentNameRef.current = pendingAgentToEdit.name;
+      didInitialLoadRef.current = true;
+      const targetNode: SelectedNode = {
+        level: pendingAgentToEdit.level as any,
+        categoryId: pendingAgentToEdit.categoryId || null,
+        techId: pendingAgentToEdit.techId || null,
+        projectId: pendingAgentToEdit.projectId || null,
+      };
+      pendingNodeRef.current = targetNode;
+      console.log('🎯 targetNode created:', targetNode);
+
+      // Expand tree nodes to show the agent's location
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        // Always expand categories and projects
+        next.add('cats');
+        next.add('projs');
+        // If agent is in a tech or section, expand its category
+        if (pendingAgentToEdit.categoryId) {
+          next.add('cat-' + pendingAgentToEdit.categoryId);
+        }
+        console.log('📦 setExpanded called with:', Array.from(next));
+        return next;
+      });
+
+      console.log('🔄 calling selectNode...');
+      selectNode(targetNode);
+    }
+  }, [pendingAgentToEdit, setPendingAgentToEdit, selectNode]);
+
+  // When agents are loaded and we have a pending agent, open it
+  useEffect(() => {
+    if (pendingAgentNameRef.current && agents.length > 0) {
+      const agentName = pendingAgentNameRef.current;
+      const agentToOpen = agents.find((a) => a.name === agentName);
+      if (agentToOpen) {
+        const targetNode = pendingNodeRef.current;
+        if (targetNode) {
+          setNode(targetNode);
+          loadAgents(targetNode);
+        }
+        openEditor(agentToOpen, false);
+        pendingAgentNameRef.current = null;
+        pendingNodeRef.current = null;
+        setPendingAgentToEdit(null);
+      }
+    }
+  }, [agents, loadAgents, setPendingAgentToEdit]);
+
+  useEffect(() => {
+    loadAgents(node);
+    loadSuggestions(node);
     return () => { sugAbortRef.current?.abort(); };
-  }, []);
+  }, [node, loadAgents, loadSuggestions]);
 
   // ── Directory sync polling ─────────────────────────────────────────────────
 
@@ -364,19 +423,24 @@ export function Agents() {
               onChatWithAgent={handleChatWithAgent}
               onExecuteAgent={handleExecuteAgent}
             />
-            {editorAgent && (
-              <AgentEditor
-                agent={editorAgent}
-                isNew={editorIsNew}
-                node={node}
-                onClose={handleCloseEditor}
-                onSaved={handleSaved}
-                onDeleted={handleDeleted}
-              />
-            )}
           </>
         )}
       </div>
+
+      {editorAgent && (
+        <div className="overlay" onClick={(e) => e.target === e.currentTarget && handleCloseEditor()}>
+          <div className="modal agent-editor-modal" onClick={(e) => e.stopPropagation()}>
+            <AgentEditor
+              agent={editorAgent}
+              isNew={editorIsNew}
+              node={node}
+              onClose={handleCloseEditor}
+              onSaved={handleSaved}
+              onDeleted={handleDeleted}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

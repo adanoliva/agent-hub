@@ -12,6 +12,8 @@ const { readConfig, writeConfig, bootstrapDirectories, APP_DIR, getAgentDir } = 
 const {
   listAgentsByLevel,
   getApplicableAgents,
+  getAgentsDirForProvider,
+  parseAgentFile,
   createAgent,
   updateAgent,
   deleteAgent,
@@ -30,6 +32,7 @@ const {
   deleteProject,
   listProjectsWithStatus,
   getProjectSyncStatus,
+  getProjectSyncPreview,
   syncProject,
   syncAllProjects,
   getContextFile,
@@ -407,6 +410,16 @@ app.get('/api/projects/:id/sync-status', (req, res) => {
   }
 });
 
+app.get('/api/projects/:id/sync-preview', (req, res) => {
+  const project = readConfig().projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  try {
+    res.json(getProjectSyncPreview(project));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/projects/:id/sync', async (req, res) => {
   const cfg     = readConfig();
   const project = cfg.projects.find(p => p.id === req.params.id);
@@ -648,6 +661,9 @@ app.post('/api/projects/:id/execute-task', async (req, res) => {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 function buildDashboardNotifications(allAgents, projects, categories = []) {
+    console.log(`🔨 buildDashboardNotifications called with ${allAgents.length} agents`);
+    const readmeAgent = allAgents.find(a => a.name === 'readme');
+    if (readmeAgent) console.log(`  readme agent:`, { level: readmeAgent.level, tools: readmeAgent.tools?.length || 0});
   const notifications = [];
 
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || id || 'N/A';
@@ -672,7 +688,7 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
 
   for (const agent of allAgents) {
     if (!agent.tools || agent.tools.length === 0) {
-      notifications.push({
+      const notif = {
         id:         `agent-no-tools-${agent.name}-${agentScopeKey(agent)}`,
         type:       'optimization',
         target:     'agent',
@@ -683,7 +699,11 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
         level:      agent.level,
         categoryId: agent.categoryId || null,
         techId:     agent.techId     || null,
-      });
+      };
+      if (agent.name === 'readme') {
+        console.log(`📬 Created notification for 'readme':`, {level: notif.level, categoryId: notif.categoryId, techId: notif.techId});
+      }
+      notifications.push(notif);
     }
     if (!agent.optimized && agent.system && agent.system.length > 30) {
       notifications.push({
@@ -798,6 +818,8 @@ function getDashboardNotificationsData() {
   );
   const allAgents = [...globalAgents, ...sectionAgents, ...techAgents, ...uncatAgents];
 
+  console.log(`🔍 [Dashboard] Loaded ${uncatAgents.length} uncategorized agents:`, uncatAgents.map(a => ({ name: a.name, level: a.level })));
+
   return {
     cfg,
     projects,
@@ -809,6 +831,152 @@ function getDashboardNotificationsData() {
 function normalizeDismissedDashboardIds(raw) {
   if (!Array.isArray(raw)) return [];
   return [...new Set(raw.filter((v) => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim()))];
+}
+
+function normalizeSnoozedDashboardMap(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const [id, until] of Object.entries(raw)) {
+    if (typeof id !== 'string' || typeof until !== 'string') continue;
+    const ts = Date.parse(until);
+    if (!Number.isFinite(ts)) continue;
+    out[id.trim()] = new Date(ts).toISOString();
+  }
+  return out;
+}
+
+function buildProjectHealth(projects) {
+  const now = Date.now();
+  const staleThresholdMs = 3 * 24 * 60 * 60 * 1000;
+
+  function collectProjectAgentHealthIssues(project, providers) {
+    const issues = [];
+    const seen = new Set();
+
+    const addIssue = (msg) => {
+      if (seen.has(msg)) return;
+      seen.add(msg);
+      issues.push(msg);
+    };
+
+    for (const provider of providers) {
+      const dir = getAgentsDirForProvider(project.path, provider);
+      if (!fs.existsSync(dir)) {
+        addIssue(`Directorio de agentes ${provider} ausente`);
+        continue;
+      }
+
+      let files = [];
+      try {
+        files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
+      } catch {
+        addIssue(`No se pudo leer agentes ${provider}`);
+        continue;
+      }
+
+      for (const file of files) {
+        const filePath = path.join(dir, file);
+        let raw = '';
+        try {
+          raw = fs.readFileSync(filePath, 'utf8');
+        } catch {
+          addIssue(`No se pudo leer agente ${file}`);
+          continue;
+        }
+
+        const hasFrontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/m.test(raw);
+        let agent;
+        try {
+          agent = parseAgentFile(filePath);
+        } catch {
+          addIssue(`Archivo de agente invalido: ${file}`);
+          continue;
+        }
+
+        const label = agent?.name || path.basename(file, '.md');
+        if (!hasFrontmatter) {
+          addIssue(`Agente "${label}" sin frontmatter valido`);
+        }
+        if (!Array.isArray(agent.tools) || agent.tools.length === 0) {
+          addIssue(`Agente "${label}" sin herramientas`);
+        }
+        if (!agent.system || agent.system.trim().length < 30) {
+          addIssue(`Agente "${label}" con prompt vacio o muy corto`);
+        }
+      }
+    }
+
+    return issues;
+  }
+
+  const health = projects.map((project) => {
+    const issues = [];
+    const providers = project.aiProvider === 'both'
+      ? ['claude', 'github']
+      : [project.aiProvider || 'claude'];
+
+    if (!project.pathExists) {
+      issues.push('Ruta del proyecto no encontrada');
+    }
+
+    if ((project.pendingUpdates || 0) > 0) {
+      issues.push(`${project.pendingUpdates} agente${project.pendingUpdates === 1 ? '' : 's'} pendiente${project.pendingUpdates === 1 ? '' : 's'} de sync`);
+    }
+
+    let contextState = 'ok';
+    if (project.pathExists) {
+      for (const p of providers) {
+        const filePath = p === 'github'
+          ? path.join(project.path, '.github', 'copilot-instructions.md')
+          : path.join(project.path, 'CLAUDE.md');
+        if (!fs.existsSync(filePath)) {
+          contextState = 'missing';
+          issues.push(`${p === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md'} ausente`);
+          continue;
+        }
+        const content = fs.readFileSync(filePath, 'utf8').trim();
+        if (content.length < 80 && contextState !== 'missing') {
+          contextState = 'thin';
+          issues.push(`${p === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md'} con poco contexto`);
+        }
+      }
+    }
+
+    const lastSyncMs = project.lastSyncAt ? Date.parse(project.lastSyncAt) : NaN;
+    const staleSync = Number.isFinite(lastSyncMs) ? (now - lastSyncMs > staleThresholdMs) : true;
+    if (staleSync) {
+      issues.push(project.lastSyncAt ? 'Sync sin actualizar hace mas de 3 dias' : 'Sync nunca ejecutado');
+    }
+
+    if (project.pathExists) {
+      const agentIssues = collectProjectAgentHealthIssues(project, providers);
+      if (agentIssues.length > 0) {
+        issues.push(...agentIssues.slice(0, 3));
+        if (agentIssues.length > 3) {
+          issues.push(`Y ${agentIssues.length - 3} incidencia${agentIssues.length - 3 === 1 ? '' : 's'} mas en agentes del proyecto`);
+        }
+      }
+    }
+
+    let status = 'healthy';
+    if (!project.pathExists || contextState === 'missing') status = 'critical';
+    else if ((project.pendingUpdates || 0) > 0 || staleSync || contextState === 'thin' || issues.length > 0) status = 'warning';
+
+    return {
+      projectId: project.id,
+      name: project.name,
+      status,
+      pathExists: project.pathExists !== false,
+      pendingUpdates: project.pendingUpdates || 0,
+      staleSync,
+      contextState,
+      lastSyncAt: project.lastSyncAt || null,
+      issues,
+    };
+  });
+
+  const priority = { critical: 0, warning: 1, healthy: 2 };
+  return health.sort((a, b) => priority[a.status] - priority[b.status] || a.name.localeCompare(b.name));
 }
 
 app.get('/api/dashboard', (req, res) => {
@@ -825,22 +993,38 @@ app.get('/api/dashboard', (req, res) => {
       .pop() || null;
 
     const validIds = new Set(allNotifications.map((n) => n.id));
-    const normalizedDismissed = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications)
+    const rawDismissed = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications);
+    const normalizedDismissed = rawDismissed
       .filter((id) => validIds.has(id));
-    if (normalizedDismissed.length !== normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications).length) {
+    const now = Date.now();
+    const rawSnoozed = normalizeSnoozedDashboardMap(cfg.snoozedDashboardNotifications);
+    const normalizedSnoozed = Object.fromEntries(
+      Object.entries(rawSnoozed).filter(([id, until]) => validIds.has(id) && Date.parse(until) > now),
+    );
+
+    if (
+      normalizedDismissed.length !== rawDismissed.length
+      || Object.keys(normalizedSnoozed).length !== Object.keys(rawSnoozed).length
+    ) {
       cfg.dismissedDashboardNotifications = normalizedDismissed;
+      cfg.snoozedDashboardNotifications = normalizedSnoozed;
       writeConfig(cfg);
     }
 
     const dismissedIds = new Set(normalizedDismissed);
+    const snoozedIds = new Set(Object.keys(normalizedSnoozed));
     const notifications = allNotifications
-      .filter((n) => !dismissedIds.has(n.id));
+      .filter((n) => !dismissedIds.has(n.id) && !snoozedIds.has(n.id));
+
+    const hiddenIds = new Set([...dismissedIds, ...snoozedIds]);
 
     const byLevel = allAgents.reduce((acc, a) => {
       const level = a.level || 'unknown';
       acc[level] = (acc[level] || 0) + 1;
       return acc;
     }, {});
+
+    const projectHealth = buildProjectHealth(projects);
 
     res.json({
       agents: {
@@ -866,8 +1050,11 @@ app.get('/api/dashboard', (req, res) => {
         pendingConflicts: dirState.pendingConflicts || [],
         lastResult:       dirState.lastResult || null,
       },
+      projectHealth,
       notifications,
-      hiddenNotifications: dismissedIds.size,
+      hiddenNotifications: hiddenIds.size,
+      hiddenDismissed: dismissedIds.size,
+      hiddenSnoozed: snoozedIds.size,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -889,6 +1076,9 @@ app.post('/api/dashboard/notifications/dismiss', (req, res) => {
 
   const current = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications);
   cfg.dismissedDashboardNotifications = [...new Set([...current, id])];
+  const snoozed = normalizeSnoozedDashboardMap(cfg.snoozedDashboardNotifications);
+  if (snoozed[id]) delete snoozed[id];
+  cfg.snoozedDashboardNotifications = snoozed;
   writeConfig(cfg);
   res.json({ ok: true, hiddenNotifications: cfg.dismissedDashboardNotifications.length });
 });
@@ -923,13 +1113,46 @@ app.post('/api/dashboard/notifications/dismiss-group', (req, res) => {
 
   const current = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications);
   cfg.dismissedDashboardNotifications = [...new Set([...current, ...idsToDismiss])];
+  const snoozed = normalizeSnoozedDashboardMap(cfg.snoozedDashboardNotifications);
+  for (const id of idsToDismiss) delete snoozed[id];
+  cfg.snoozedDashboardNotifications = snoozed;
   writeConfig(cfg);
   res.json({ ok: true, dismissed: idsToDismiss.length, hiddenNotifications: cfg.dismissedDashboardNotifications.length });
+});
+
+app.post('/api/dashboard/notifications/snooze', (req, res) => {
+  const { id, days } = req.body || {};
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({ error: 'id required' });
+  }
+
+  const nDays = Number.isFinite(Number(days)) ? Number(days) : 7;
+  const clampedDays = Math.max(1, Math.min(30, nDays));
+
+  const { cfg, notifications } = getDashboardNotificationsData();
+  const notification = notifications.find((n) => n.id === id);
+  if (!notification) return res.status(404).json({ error: 'notification not found' });
+  if (!isDismissibleNotification(notification)) {
+    return res.status(400).json({ error: 'notification type cannot be snoozed' });
+  }
+
+  const snoozed = normalizeSnoozedDashboardMap(cfg.snoozedDashboardNotifications);
+  const untilDate = new Date(Date.now() + clampedDays * 24 * 60 * 60 * 1000);
+  snoozed[id] = untilDate.toISOString();
+  cfg.snoozedDashboardNotifications = snoozed;
+
+  // If snoozed, keep it out of permanent-dismiss list to preserve semantics.
+  cfg.dismissedDashboardNotifications = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications)
+    .filter((x) => x !== id);
+
+  writeConfig(cfg);
+  res.json({ ok: true, id, until: snoozed[id], days: clampedDays });
 });
 
 app.post('/api/dashboard/notifications/restore', (req, res) => {
   const cfg = readConfig();
   cfg.dismissedDashboardNotifications = [];
+  cfg.snoozedDashboardNotifications = {};
   writeConfig(cfg);
   res.json({ ok: true, hiddenNotifications: 0 });
 });
@@ -1235,14 +1458,15 @@ app.get('*', (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-function startServer() {
+function startServer(port = PORT, host = '127.0.0.1') {
   return new Promise((resolve, reject) => {
-    const server = app.listen(PORT, '127.0.0.1', () => {
-      console.log(`[server] Running on http://localhost:${PORT}`);
+    const server = app.listen(port, host, () => {
+      const runningPort = server.address()?.port || port;
+      console.log(`[server] Running on http://localhost:${runningPort}`);
       resolve(server);
     });
     server.on('error', reject);
   });
 }
 
-module.exports = { startServer, PORT };
+module.exports = { app, startServer, PORT };
