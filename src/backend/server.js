@@ -782,6 +782,30 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
   return notifications.sort((a, b) => priority[a.type] - priority[b.type]);
 }
 
+function isDismissibleNotification(notification) {
+  return notification?.type === 'optimization' || notification?.type === 'info';
+}
+
+function getDashboardNotificationsData() {
+  const cfg      = readConfig();
+  const projects = listProjectsWithStatus();
+
+  const globalAgents  = listAgentsByLevel('global');
+  const uncatAgents   = listAgentsByLevel('uncategorized');
+  const sectionAgents = cfg.categories.flatMap(cat => listAgentsByLevel('section', cat.id));
+  const techAgents    = cfg.categories.flatMap(cat =>
+    cat.technologies.flatMap(tech => listAgentsByLevel('tech', cat.id, tech.id)),
+  );
+  const allAgents = [...globalAgents, ...sectionAgents, ...techAgents, ...uncatAgents];
+
+  return {
+    cfg,
+    projects,
+    allAgents,
+    notifications: buildDashboardNotifications(allAgents, projects, cfg.categories || []),
+  };
+}
+
 function normalizeDismissedDashboardIds(raw) {
   if (!Array.isArray(raw)) return [];
   return [...new Set(raw.filter((v) => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim()))];
@@ -789,16 +813,7 @@ function normalizeDismissedDashboardIds(raw) {
 
 app.get('/api/dashboard', (req, res) => {
   try {
-    const cfg      = readConfig();
-    const projects = listProjectsWithStatus();
-
-    const globalAgents  = listAgentsByLevel('global');
-    const uncatAgents   = listAgentsByLevel('uncategorized');
-    const sectionAgents = cfg.categories.flatMap(cat => listAgentsByLevel('section', cat.id));
-    const techAgents    = cfg.categories.flatMap(cat =>
-      cat.technologies.flatMap(tech => listAgentsByLevel('tech', cat.id, tech.id)),
-    );
-    const allAgents = [...globalAgents, ...sectionAgents, ...techAgents, ...uncatAgents];
+    const { cfg, projects, allAgents, notifications: allNotifications } = getDashboardNotificationsData();
 
     const dirState = agentsSync.getSyncState();
     const dirMeta  = agentsSync.readMeta ? agentsSync.readMeta() : null;
@@ -809,17 +824,31 @@ app.get('/api/dashboard', (req, res) => {
       .sort()
       .pop() || null;
 
-    const dismissedIds = new Set(normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications));
-    const notifications = buildDashboardNotifications(allAgents, projects, cfg.categories || [])
+    const validIds = new Set(allNotifications.map((n) => n.id));
+    const normalizedDismissed = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications)
+      .filter((id) => validIds.has(id));
+    if (normalizedDismissed.length !== normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications).length) {
+      cfg.dismissedDashboardNotifications = normalizedDismissed;
+      writeConfig(cfg);
+    }
+
+    const dismissedIds = new Set(normalizedDismissed);
+    const notifications = allNotifications
       .filter((n) => !dismissedIds.has(n.id));
+
+    const byLevel = allAgents.reduce((acc, a) => {
+      const level = a.level || 'unknown';
+      acc[level] = (acc[level] || 0) + 1;
+      return acc;
+    }, {});
 
     res.json({
       agents: {
         total:         allAgents.length,
-        global:        globalAgents.length,
-        section:       sectionAgents.length,
-        tech:          techAgents.length,
-        uncategorized: uncatAgents.length,
+        global:        byLevel.global || 0,
+        section:       byLevel.section || 0,
+        tech:          byLevel.tech || 0,
+        uncategorized: byLevel.uncategorized || 0,
       },
       projects: {
         total:       projects.length,
@@ -851,11 +880,51 @@ app.post('/api/dashboard/notifications/dismiss', (req, res) => {
     return res.status(400).json({ error: 'id required' });
   }
 
-  const cfg = readConfig();
+  const { cfg, notifications } = getDashboardNotificationsData();
+  const notification = notifications.find((n) => n.id === id);
+  if (!notification) return res.status(404).json({ error: 'notification not found' });
+  if (!isDismissibleNotification(notification)) {
+    return res.status(400).json({ error: 'notification type cannot be dismissed' });
+  }
+
   const current = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications);
   cfg.dismissedDashboardNotifications = [...new Set([...current, id])];
   writeConfig(cfg);
   res.json({ ok: true, hiddenNotifications: cfg.dismissedDashboardNotifications.length });
+});
+
+app.post('/api/dashboard/notifications/dismiss-group', (req, res) => {
+  const { group, target } = req.body || {};
+  if (!group || typeof group !== 'string') {
+    return res.status(400).json({ error: 'group required' });
+  }
+
+  const { cfg, notifications } = getDashboardNotificationsData();
+  const dismissible = notifications.filter(isDismissibleNotification);
+
+  let idsToDismiss = [];
+  if (group === 'agent') {
+    if (!target || typeof target !== 'string') {
+      return res.status(400).json({ error: 'target required for group=agent' });
+    }
+    idsToDismiss = dismissible
+      .filter((n) => n.target === 'agent' && n.targetName === target)
+      .map((n) => n.id);
+  } else if (group === 'scope') {
+    if (!target || typeof target !== 'string') {
+      return res.status(400).json({ error: 'target required for group=scope' });
+    }
+    idsToDismiss = dismissible
+      .filter((n) => n.scopeLabel === target)
+      .map((n) => n.id);
+  } else {
+    return res.status(400).json({ error: 'unsupported group' });
+  }
+
+  const current = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications);
+  cfg.dismissedDashboardNotifications = [...new Set([...current, ...idsToDismiss])];
+  writeConfig(cfg);
+  res.json({ ok: true, dismissed: idsToDismiss.length, hiddenNotifications: cfg.dismissedDashboardNotifications.length });
 });
 
 app.post('/api/dashboard/notifications/restore', (req, res) => {

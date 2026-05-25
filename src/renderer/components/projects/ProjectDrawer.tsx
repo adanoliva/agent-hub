@@ -124,6 +124,15 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
       : [...prev, agentName]);
   }
 
+  function selectFilteredCandidates() {
+    const filteredNames = filteredCrossAgents.map((a) => a.name);
+    setSelectedToAdd((prev) => [...new Set([...prev, ...filteredNames])]);
+  }
+
+  function clearSelectedCandidates() {
+    setSelectedToAdd([]);
+  }
+
   async function handleRemoveCrossCategoryAgent(agentName: string) {
     const included = (p.includedAgents ?? []).filter((a) => a !== agentName);
     try {
@@ -251,9 +260,26 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
                     )}
                   </div>
 
+                  <div className="drawer-agent-bulk-actions">
+                    <button
+                      className="btn sm ghost"
+                      onClick={selectFilteredCandidates}
+                      disabled={filteredCrossAgents.length === 0}
+                    >
+                      <i className="ti ti-checks" /> Seleccionar filtrados
+                    </button>
+                    <button
+                      className="btn sm ghost"
+                      onClick={clearSelectedCandidates}
+                      disabled={selectedToAdd.length === 0}
+                    >
+                      <i className="ti ti-clear-all" /> Limpiar selección
+                    </button>
+                  </div>
+
                   <div className="drawer-agent-add-row">
                     <span className="drawer-agent-selected-count">
-                      {selectedToAdd.length} seleccionado{selectedToAdd.length !== 1 ? 's' : ''}
+                      {selectedToAdd.length} seleccionado{selectedToAdd.length !== 1 ? 's' : ''} · {filteredCrossAgents.length} filtrado{filteredCrossAgents.length !== 1 ? 's' : ''}
                     </span>
                     <button className="btn sm" onClick={handleAddCrossCategoryAgents} disabled={selectedToAdd.length === 0}>
                       <i className="ti ti-plus" /> Añadir seleccionados

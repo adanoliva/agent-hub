@@ -30,6 +30,10 @@ const ACTION_LABEL: Record<DashboardNotification['action'], string> = {
   'optimize-agent':   'Optimizar',
 };
 
+function isDismissibleNotification(n: DashboardNotification): boolean {
+  return n.type === 'optimization' || n.type === 'info';
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function UsageRow({ entry, label }: { entry: AIUsageEntry; label: string }) {
@@ -150,6 +154,15 @@ export function Dashboard() {
   async function dismissNotification(id: string) {
     try {
       await req('POST', '/dashboard/notifications/dismiss', { id });
+      await load();
+    } catch {
+      // no-op: dashboard will stay as-is
+    }
+  }
+
+  async function dismissGroup(group: 'agent' | 'scope', target: string) {
+    try {
+      await req('POST', '/dashboard/notifications/dismiss-group', { group, target });
       await load();
     } catch {
       // no-op: dashboard will stay as-is
@@ -357,13 +370,35 @@ export function Dashboard() {
                         >
                           {ACTION_LABEL[n.action]}
                         </button>
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => dismissNotification(n.id)}
-                          title="Ocultar esta mejora"
-                        >
-                          <i className="ti ti-x" />
-                        </button>
+                        {isDismissibleNotification(n) && (
+                          <>
+                            {n.target === 'agent' && (
+                              <button
+                                className="btn sm ghost"
+                                onClick={() => dismissGroup('agent', n.targetName)}
+                                title="Ocultar todas las mejoras de este agente"
+                              >
+                                <i className="ti ti-filter-off" />
+                              </button>
+                            )}
+                            {n.scopeLabel === 'Sin categoría' && (
+                              <button
+                                className="btn sm ghost"
+                                onClick={() => dismissGroup('scope', 'Sin categoría')}
+                                title="Ocultar mejoras de Sin categoría"
+                              >
+                                <i className="ti ti-eye-off" />
+                              </button>
+                            )}
+                            <button
+                              className="btn sm ghost"
+                              onClick={() => dismissNotification(n.id)}
+                              title="Ocultar esta mejora"
+                            >
+                              <i className="ti ti-x" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
