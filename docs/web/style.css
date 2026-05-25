@@ -940,8 +940,9 @@ section h2 {
   flex-shrink: 0;
   font-size: 12px;
 }
-.dash-sdot.ok   { background: rgba(62,207,142,.12); color: var(--green); }
+.dash-sdot.ok   { background: rgba(62,207,142,.12);  color: var(--green); }
 .dash-sdot.warn { background: rgba(245,158,11,.12);  color: var(--amber); }
+.dash-sdot.crit { background: rgba(251,113,133,.12); color: var(--coral); }
 
 .dash-sync-info {
   display: flex;
@@ -959,6 +960,7 @@ section h2 {
 }
 .dash-sync-sub.ok   { color: var(--green); }
 .dash-sync-sub.warn { color: var(--amber); }
+.dash-sync-sub.crit { color: var(--coral); }
 
 .dash-btn-mock {
   display: flex;

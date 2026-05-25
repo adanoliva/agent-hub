@@ -30,7 +30,7 @@
   <!-- HERO -->
   <section class="hero">
     <div class="hero-badge">
-      <i class="ti ti-sparkles"></i> v1.8.1 disponible
+      <i class="ti ti-sparkles"></i> v1.8.2 disponible
     </div>
     <h1 class="hero-title">
       Gestiona tus agentes de IA<br />
@@ -176,7 +176,7 @@
         <div class="feature-card">
           <i class="ti ti-chart-bar"></i>
           <h3>Dashboard</h3>
-          <p>Vista de inicio con métricas, oportunidades de mejora y acciones rápidas.</p>
+          <p>Vista de inicio con métricas, salud de proyectos en tiempo real, oportunidades de mejora con opción de aplazar y acciones rápidas.</p>
         </div>
         <div class="feature-card">
           <i class="ti ti-chart-line"></i>
@@ -396,7 +396,9 @@
       <h2>Todo bajo control,<br />a golpe de vista</h2>
       <p class="section-desc">
         La vista de inicio centraliza el estado de tu ecosistema: métricas de agentes y proyectos,
-        oportunidades de mejora detectadas automáticamente, acciones rápidas y seguimiento del consumo de IA.
+        salud de cada proyecto en tiempo real, oportunidades de mejora detectadas automáticamente
+        (con posibilidad de aplazarlas), acciones rápidas y seguimiento del consumo de IA.
+        Se refresca cada 30 segundos de forma automática.
       </p>
 
       <div class="dash-grid">
@@ -455,8 +457,34 @@
           </div>
         </div>
 
-        <!-- Oportunidades de mejora - ancho completo -->
-        <div class="dash-card dash-card-wide">
+        <!-- Salud de proyectos -->
+        <div class="dash-card">
+          <div class="dash-card-head"><i class="ti ti-heartbeat"></i> Salud de Proyectos</div>
+          <div class="dash-sync-row">
+            <div class="dash-sdot ok"><i class="ti ti-circle-check"></i></div>
+            <div class="dash-sync-info">
+              <span class="dash-sync-name">frontend-app</span>
+              <span class="dash-sync-sub ok">Sin incidencias</span>
+            </div>
+          </div>
+          <div class="dash-sync-row">
+            <div class="dash-sdot warn"><i class="ti ti-alert-triangle"></i></div>
+            <div class="dash-sync-info">
+              <span class="dash-sync-name">backend-api</span>
+              <span class="dash-sync-sub warn">3 agentes pendientes</span>
+            </div>
+          </div>
+          <div class="dash-sync-row">
+            <div class="dash-sdot crit"><i class="ti ti-alert-circle"></i></div>
+            <div class="dash-sync-info">
+              <span class="dash-sync-name">e-commerce-api</span>
+              <span class="dash-sync-sub crit">CLAUDE.md ausente</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Oportunidades de mejora -->
+        <div class="dash-card">
           <div class="dash-card-head">
             <i class="ti ti-bulb"></i> Oportunidades de Mejora
             <span class="dash-count">3</span>
@@ -466,27 +494,36 @@
             <div class="dash-notif-body">
               <span class="dash-notif-tag coral">CRÍTICA</span>
               <span class="dash-notif-who"><i class="ti ti-layout-grid"></i> e-commerce-api</span>
-              <span class="dash-notif-msg">No tiene CLAUDE.md generado. El contexto del proyecto mejora la precisión de Claude.</span>
+              <span class="dash-notif-msg">No tiene CLAUDE.md generado.</span>
             </div>
-            <div class="dash-notif-btn">Generar</div>
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <div class="dash-notif-btn">Generar</div>
+              <div class="dash-notif-btn" title="Aplazar 7 días" style="padding:0 6px"><i class="ti ti-clock-pause"></i></div>
+            </div>
           </div>
           <div class="dash-notif amber">
             <i class="ti ti-bulb"></i>
             <div class="dash-notif-body">
               <span class="dash-notif-tag amber">MEJORA</span>
               <span class="dash-notif-who"><i class="ti ti-cpu"></i> commit-writer</span>
-              <span class="dash-notif-msg">El system prompt es muy corto. Un prompt detallado mejora la calidad de las respuestas.</span>
+              <span class="dash-notif-msg">System prompt muy corto.</span>
             </div>
-            <div class="dash-notif-btn">Optimizar</div>
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <div class="dash-notif-btn">Optimizar</div>
+              <div class="dash-notif-btn" title="Aplazar 7 días" style="padding:0 6px"><i class="ti ti-clock-pause"></i></div>
+            </div>
           </div>
           <div class="dash-notif blue">
             <i class="ti ti-info-circle"></i>
             <div class="dash-notif-body">
               <span class="dash-notif-tag blue">INFO</span>
               <span class="dash-notif-who"><i class="ti ti-layout-grid"></i> mobile-app</span>
-              <span class="dash-notif-msg">Tiene 3 agentes pendientes de sincronizar.</span>
+              <span class="dash-notif-msg">3 agentes pendientes de sync.</span>
             </div>
-            <div class="dash-notif-btn">Abrir</div>
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <div class="dash-notif-btn">Abrir</div>
+              <div class="dash-notif-btn" title="Aplazar 7 días" style="padding:0 6px"><i class="ti ti-clock-pause"></i></div>
+            </div>
           </div>
         </div>
 
@@ -549,7 +586,7 @@
       <div class="nav-logo">
         <img src="logo.png" alt="Agent Hub" style="height:22px;display:block;">
       </div>
-      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante. · v1.8.1</p>
+      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante. · v1.8.2</p>
     </div>
   </footer>
 

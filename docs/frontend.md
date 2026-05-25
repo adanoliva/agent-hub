@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-24 · Versión: 1.7.0
+> Última actualización: 2026-05-25 · Versión: 1.8.2
 
 ---
 
@@ -51,8 +51,9 @@ interface AppState {
   appVersion:    string | null;
   toasts:        Toast[];
   showWizard:    boolean;
-  pendingAction:     string | null;  // 'new-agent' | 'new-project' | null
-  pendingChatAgent:  string | null;  // nombre del agente a precargar al entrar en Chat
+  pendingAction:       string | null;          // 'new-agent' | 'new-project' | null
+  pendingAgentToEdit:  PendingAgentToEdit | null; // agente a abrir en editor (consumido por Agents al montar)
+  pendingChatAgent:    string | null;          // nombre del agente a precargar al entrar en Chat
 
   setView, setConfig, setProjects, setAppVersion,
   fetchProjects(): Promise<void>;   // GET /projects → actualiza store
@@ -61,6 +62,7 @@ interface AppState {
   removeToast(id: string): void;
   navigateTo(view: View, action?: string): void;  // setView + setPendingAction en un solo paso
   setPendingAction(a: string | null): void;
+  setPendingAgentToEdit(p: PendingAgentToEdit | null): void;  // usado desde Dashboard para navegar a agente concreto
   setPendingChatAgent(name: string | null): void;  // usado desde Agents para precargar agente en Chat
 }
 ```
@@ -112,6 +114,21 @@ interface SyncConflict { fileKey: string; localPath: string; remotePath: string;
 type SyncStatus = Record<string, { status: 'ok'|'outdated'|'new'|'local'|'excluded'; agent: Agent }>;
 interface SelectedNode { level: 'global'|'section'|'tech'|'project'|'uncategorized'; categoryId: string|null; techId: string|null; projectId: string|null; }
 
+interface PendingAgentToEdit {
+  name: string;
+  level: 'global' | 'section' | 'tech' | 'uncategorized' | 'project';
+  categoryId?: string | null;
+  techId?: string | null;
+  projectId?: string | null;
+}
+
+interface SyncPreviewAgent { name: string; level: string; categoryId: string | null; techId: string | null; }
+interface SyncPreview {
+  summary: { toAdd: number; toUpdate: number; excluded: number; local: number; upToDate: number; total: number };
+  toAdd: SyncPreviewAgent[]; toUpdate: SyncPreviewAgent[]; excluded: SyncPreviewAgent[];
+  local: SyncPreviewAgent[]; upToDate: SyncPreviewAgent[];
+}
+
 interface AIUsageEntry {
   calls: number; inputTokens: number; outputTokens: number;
   estimatedCostUSD: number;  // siempre 0 para cli y github
@@ -138,7 +155,11 @@ interface DashboardData {
   agents: { total: number; global: number; section: number; tech: number; uncategorized: number };
   projects: { total: number; active: number; paused: number; archived: number; totalPending: number; withPending: number };
   dirStatus: AgentDirectoryStatus;
+  projectHealth?: Array<{ projectId: string; name: string; status: 'healthy'|'warning'|'critical'; pathExists: boolean; pendingUpdates: number; staleSync: boolean; contextState: 'ok'|'thin'|'missing'; lastSyncAt: string|null; issues: string[] }>;
   notifications: DashboardNotification[];
+  hiddenNotifications?: number;
+  hiddenDismissed?: number;
+  hiddenSnoozed?: number;
   lastSyncAt: string | null;
 }
 ```
@@ -198,7 +219,7 @@ Layout shell: `#app` (flex row) → `.sidebar` (48px) + `.main` (flex: 1, flex c
 
 ### `Modal.tsx`
 
-Props: `title`, `sub?`, `onClose`, `onConfirm: () => Promise<void>`, `confirmLabel?`, `confirmClass?`, `children`.
+Props: `title`, `sub?`, `onClose`, `onConfirm: () => Promise<void>`, `confirmLabel?`, `confirmClass?`, `modalClassName?`, `bodyClassName?`, `children`. Las props `modalClassName` y `bodyClassName` añaden clases CSS extra al `.modal` y `.modal-body` respectivamente (usadas p.ej. por `EditProjectModal`).
 
 **Patrón crítico:** `onConfirm` debe lanzar `throw new Error()` (no `return`) para mantener el modal abierto cuando la validación falla. Si resuelve sin error, el modal se cierra solo.
 
@@ -216,9 +237,9 @@ Aparece vía IPC `app:close-requested`. Responde con `window.api.closeResponse(a
 
 - **`StatusBadge`**: tres sub-componentes. `ProjectStatusBadge` (active/paused/archived). `SyncStatusBadge` (ok/outdated/new/local/excluded). `ProviderBadge` (claude/github/both).
 - **`ProjectCard`**: tarjeta clickable que abre `ProjectDrawer`. Badge coral si `!pathExists`. Badge con count si `pendingUpdates > 0`.
-- **`ProjectDrawer`**: panel 560px. Tab contexto (CLAUDE.md / copilot-instructions.md, editable + generación IA). Tab sync/agentes (lista con badges, excluir/incluir, sync todos). Footer: VS Code, carpeta, editar, eliminar.
+- **`ProjectDrawer`**: panel 560px. Tab contexto (CLAUDE.md / copilot-instructions.md, editable + generación IA). Tab sync/agentes: carga en paralelo `sync-status` y `sync-preview` (`SyncPreview`) al montar; muestra preview dry-run con contadores antes de sincronizar; botón de agregar agentes cruzados (`showCrossAdd`). Footer: VS Code, carpeta, editar, eliminar.
 - **`CreateProjectModal`**: ruta final = `basePath + '/' + slugify(name)`, mostrada como preview. `POST /projects`.
-- **`EditProjectModal`**: si cambia `aiProvider`, avisa que los agentes se migrarán. `PUT /projects/:id`.
+- **`EditProjectModal`**: rediseño en grid 2 columnas (nombre + estado en primera fila, descripción + tecnología + proveedor a pantalla completa). Usa `modalClassName="project-edit-modal"` y `bodyClassName="project-edit-body"`. Si cambia `aiProvider`, avisa que los agentes se migrarán. `PUT /projects/:id`.
 - **`ImportProjectModal`**: para proyectos ya existentes en disco. `POST /projects/import`.
 - **`ExcludeAgentModal`**: radio entre "excluir + eliminar archivo" (`DELETE /projects/:id/agents/:name`) o "solo excluir" (persiste en `excludedAgents`).
 
@@ -238,16 +259,19 @@ Aparece vía IPC `app:close-requested`. Responde con `window.api.closeResponse(a
 
 ### `Dashboard.tsx`
 
-Vista de inicio (view = `'dashboard'`). Carga en paralelo `GET /api/dashboard` y `GET /api/ai/usage`.
+Vista de inicio (view = `'dashboard'`). Carga en paralelo `GET /api/dashboard` y `GET /api/ai/usage`. Se refresca automáticamente cada 30 s con `setInterval`.
 
 **Tarjetas:**
 - **Estado General** — contadores de agentes (global/section/tech) y proyectos (activos/pausados/archivados). Click → navega a la vista correspondiente.
-- **Sincronización** — estado de sync de agentes y proyectos, estado del directorio externo. Botón "Sincronizar todo" → `POST /sync-all`.
-- **Oportunidades de Mejora** — lista de `DashboardNotification[]`. Las críticas se muestran en rojo, optimizaciones en ámbar, info en azul. Máx 5 visibles; botón "Ver todas" para expandir.
+- **Sincronización** — estado de sync de agentes y proyectos, estado del directorio externo. Botón "Sincronizar todo" → `POST /sync-all`. Nota "Salud en vivo: actualización cada 30s".
+- **Salud de Proyectos** — lista `projectHealth[]` con dot indicators (`healthy`=verde, `warning`=ámbar, `critical`=coral). Muestra hasta 6 proyectos con su primer issue.
+- **Oportunidades de Mejora** — lista de `DashboardNotification[]`. Las críticas se muestran en rojo, optimizaciones en ámbar, info en azul. Máx 5 visibles; botón "Ver todas" para expandir. Cada notificación tiene botones **Descartar** (permanente) y **Aplazar** (7 días por defecto) vía `POST /dashboard/notifications/snooze`. Cuando hay ocultas, se muestra desglose "Ocultas / Aplazadas".
 - **Acciones Rápidas** — botones que llaman `navigateTo(view, action)` para abrir modales directamente desde otra página.
 - **Uso de IA** — `UsageCard` con filas de tokens (entrada/salida/coste) para acumulado y sesión. Botones "Reiniciar sesión" y "Reiniciar total".
 
 **`navigateTo`**: usado desde las acciones rápidas del dashboard para abrir modales en otras páginas. Las páginas destino consumen `pendingAction` en `useEffect` al montar.
+
+**Navegación directa a agente** — al hacer click en una notificación de tipo agente, llama `setPendingAgentToEdit({ name, level, categoryId, techId })` antes de `setView('agents')`. La página `Agents` detecta este valor al montar, expande los nodos del árbol necesarios y abre el editor del agente directamente.
 
 ### `Projects.tsx`
 
@@ -273,7 +297,9 @@ Tres paneles (árbol / centro / editor), o panel de ejecución en su lugar cuand
 
 **Flujo de ejecución:** `handleExecuteAgent(agent)` limpia editor y activa `executeAgent`. Cuando `executeAgent && project` se renderiza `AgentExecutePanel` en lugar del centro+editor. `handleBackFromExecute` limpia `executeAgent`. `handleChatWithAgent` llama `setPendingChatAgent(agent.name)` y `navigateTo('chat')`.
 
-**Flujo editor:** click card → `setEditorAgent(agent)`. "Nuevo agente" → `setEditorAgent(NEW_AGENT)`. `onSave` → recarga nodo. `onClose` → `setEditorAgent(null)`.
+**Flujo editor:** click card → `setEditorAgent(agent)`. "Nuevo agente" → `setEditorAgent(NEW_AGENT)`. `onSave` → recarga nodo. `onClose` → `setEditorAgent(null)`. El editor se muestra en un overlay modal (`.overlay` + `.agent-editor-modal`) en lugar de un panel lateral fijo — click fuera cierra.
+
+**Navegación desde Dashboard** — cuando el store tiene `pendingAgentToEdit` al montar, la página: (1) construye el `targetNode` con level/categoryId/techId, (2) expande los nodos del árbol necesarios con `setExpanded`, (3) llama `selectNode(targetNode)`. Cuando los agentes se cargan, un segundo `useEffect` busca el agente por nombre y llama `openEditor(agentToOpen)`, luego limpia `pendingAgentToEdit`. Usa refs (`pendingAgentNameRef`, `pendingNodeRef`) para evitar cierre sobre estado stale.
 
 ### `Chat.tsx`
 

@@ -1,6 +1,6 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **1.8.1** · Actualizar este campo en cada release.
+> Versión actual: **1.8.2** · Actualizar este campo en cada release.
 
 @docs/backend.md
 @docs/frontend.md
@@ -153,6 +153,7 @@ El wizard siempre se muestra al arrancar a menos que `localStorage.getItem('cdm-
 | POST | `/api/projects/import` | Importar proyecto existente |
 | PUT/DELETE | `/api/projects/:id` | Editar/borrar proyecto |
 | GET | `/api/projects/:id/sync-status` | Estado de sync de agentes del proyecto |
+| GET | `/api/projects/:id/sync-preview` | Preview dry-run del sync (sin escribir archivos) |
 | POST | `/api/projects/:id/sync` | Sincronizar agentes al proyecto |
 | POST | `/api/sync-all` | Sync de todos los proyectos |
 | GET/PUT | `/api/projects/:id/context` | CLAUDE.md / copilot-instructions.md |
@@ -186,7 +187,7 @@ Estructura completa:
 
 ```json
 {
-  "version": "1.7.0",
+  "version": "1.8.2",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
@@ -195,6 +196,8 @@ Estructura completa:
   "closeAction": "ask",
   "agentsDirectoryUrl": "https://github.com/adanoliva/agents-directory",
   "agentsDirectoryEnabled": true,
+  "dismissedDashboardNotifications": [],
+  "snoozedDashboardNotifications": {},
   "categories": [
     {
       "id": "games",

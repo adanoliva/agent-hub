@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-24 · Versión: 1.7.0
+> Última actualización: 2026-05-25 · Versión: 1.8.2
 
 ---
 
@@ -158,7 +158,7 @@ path.resolve(__dirname, '../../')
 
 ```json
 {
-  "version": "1.7.0",
+  "version": "1.8.2",
   "aiProvider": "cli",
   "apiKey": "",
   "githubToken": "",
@@ -276,6 +276,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/projects/:id/sync-status` | Estado por agente: `ok`/`outdated`/`new`/`local`/`excluded` |
+| GET | `/api/projects/:id/sync-preview` | Preview dry-run del sync; devuelve `SyncPreview` sin modificar archivos |
 | POST | `/api/projects/:id/sync` | Copia agentes aplicables al proyecto; devuelve `{ added, updated, skipped }` |
 | POST | `/api/sync-all` | Sync de todos los proyectos en batch |
 
@@ -292,12 +293,18 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/dashboard` | `DashboardData`: estadísticas, sync, notificaciones de mejora |
+| GET | `/api/dashboard` | `DashboardData`: estadísticas, sync, notificaciones, salud de proyectos |
+| POST | `/api/dashboard/notifications/dismiss` | Descarta permanentemente una notificación `{ id }` |
+| POST | `/api/dashboard/notifications/dismiss-group` | Descarta un grupo de notificaciones |
+| POST | `/api/dashboard/notifications/snooze` | Aplaza una notificación N días `{ id, days }` (1-30, por defecto 7) |
+| POST | `/api/dashboard/notifications/restore` | Restaura todas las notificaciones ocultas y aplazadas |
 
 `buildDashboardNotifications()` analiza el estado actual y genera `DashboardNotification[]`:
 - **Critical**: proyecto sin `CLAUDE.md` (si `needsClaude`) o sin `copilot-instructions.md` (si `needsGithub`)
 - **Optimization**: fichero de contexto existe pero tiene menos de 80 caracteres
 - **Info**: agentes pendientes de sync, proyectos desactualizados
+
+`buildProjectHealth()` genera para cada proyecto activo un objeto `{ projectId, name, status, pathExists, pendingUpdates, staleSync, contextState, lastSyncAt, issues[] }` donde `status` es `healthy | warning | critical`. Se incluye en la respuesta de `GET /api/dashboard` como `projectHealth[]`.
 
 #### IA
 
@@ -887,6 +894,25 @@ para cada proyecto activo:
 ```
 
 El endpoint también lee `pendingUpdates` de cada proyecto (via `getProjectSyncStatus`) para generar notificaciones de sync pendiente.
+
+### Notificaciones — dismiss vs. snooze
+
+- `dismissedDashboardNotifications: string[]` en `config.json` — lista permanente de ids descartados.
+- `snoozedDashboardNotifications: Record<string, string>` en `config.json` — mapa `{ id: isoDate }` con fecha de expiración. Se limpia automáticamente al expirar.
+- El endpoint de dashboard filtra las notificaciones aplicando ambas listas. La respuesta incluye `hiddenDismissed` y `hiddenSnoozed` por separado.
+- `POST /restore` borra ambos campos (dismissed + snoozed).
+
+### Salud de proyectos (`buildProjectHealth`)
+
+Analiza cada proyecto activo y devuelve un estado resumen:
+
+| Estado | Condición |
+|---|---|
+| `healthy` | Sin incidencias detectadas |
+| `warning` | Sync desactualizado, contexto delgado, o agentes sin herramientas |
+| `critical` | Ruta no encontrada, contexto ausente, o agentes corruptos |
+
+Detecta: ruta inexistente, agentes pendientes de sync, sync estancado (> 3 días), estado del fichero de contexto (`ok / thin / missing`), y problemas en los ficheros `.md` del proyecto (frontmatter inválido, herramientas vacías, prompt muy corto).
 
 ### Seguimiento de uso (`ai.js`)
 
