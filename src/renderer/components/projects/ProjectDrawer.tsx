@@ -25,6 +25,9 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
   const defaultTab: DrawerTab = provider === 'github' ? 'ctx-github' : 'ctx-claude';
   const [tab,        setTab]        = useState<DrawerTab>(defaultTab);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({});
+  const [allAgents, setAllAgents]   = useState<{ name: string; level?: string }[]>([]);
+  const [agentQuery, setAgentQuery] = useState('');
+  const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
   const [ctxContent, setCtxContent] = useState('');
   const [ctxPath,    setCtxPath]    = useState('');
   const [genLoading, setGenLoading] = useState(false);
@@ -39,6 +42,10 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
     req<SyncStatus>('GET', `/projects/${p.id}/sync-status`)
       .then(setSyncStatus)
       .catch(() => {});
+
+    req<{ name: string; level?: string }[]>('GET', '/agents/flat')
+      .then(setAllAgents)
+      .catch(() => setAllAgents([]));
   }, [p.id]);
 
   // Load context file when tab changes to ctx
@@ -87,10 +94,67 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
     } catch (e: any) { toast(e.message, 'err'); }
   }
 
+  async function handleAddCrossCategoryAgents() {
+    if (selectedToAdd.length === 0) return;
+
+    const toAdd = selectedToAdd.filter((name) => !syncStatus[name]);
+    if (toAdd.length === 0) {
+      toast('Los agentes seleccionados ya están en este proyecto', 'warn');
+      return;
+    }
+
+    const included = [...new Set([...(p.includedAgents ?? []), ...toAdd])];
+    try {
+      await req('PUT', `/projects/${p.id}`, { includedAgents: included });
+      await req('POST', `/projects/${p.id}/sync`);
+      onRefresh();
+      setAgentQuery('');
+      setSelectedToAdd([]);
+      toast(`${toAdd.length} agente${toAdd.length !== 1 ? 's' : ''} añadido${toAdd.length !== 1 ? 's' : ''} al proyecto`);
+      const status = await req<SyncStatus>('GET', `/projects/${p.id}/sync-status`);
+      setSyncStatus(status);
+    } catch (e: any) {
+      toast(e.message, 'err');
+    }
+  }
+
+  function toggleCandidate(agentName: string) {
+    setSelectedToAdd((prev) => prev.includes(agentName)
+      ? prev.filter((n) => n !== agentName)
+      : [...prev, agentName]);
+  }
+
+  async function handleRemoveCrossCategoryAgent(agentName: string) {
+    const included = (p.includedAgents ?? []).filter((a) => a !== agentName);
+    try {
+      await req('PUT', `/projects/${p.id}`, { includedAgents: included });
+      await req('DELETE', `/projects/${p.id}/agents/${encodeURIComponent(agentName)}`);
+      onRefresh();
+      toast(`"${agentName}" eliminado del proyecto`);
+      const status = await req<SyncStatus>('GET', `/projects/${p.id}/sync-status`);
+      setSyncStatus(status);
+    } catch (e: any) {
+      toast(e.message, 'err');
+    }
+  }
+
   const syncValues  = Object.values(syncStatus);
   const okCount     = syncValues.filter((s) => s.status === 'ok').length;
   const pendCount   = syncValues.filter((s) => s.status === 'outdated' || s.status === 'new').length;
   const exclCount   = syncValues.filter((s) => s.status === 'excluded').length;
+  const uniqueByName = new Map<string, { name: string; level?: string }>();
+  for (const a of allAgents) {
+    if (!uniqueByName.has(a.name)) uniqueByName.set(a.name, a);
+  }
+
+  const availableCrossAgents = [...uniqueByName.values()]
+    .filter((a) => !syncStatus[a.name])
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const normalizedQuery = agentQuery.trim().toLowerCase();
+  const filteredCrossAgents = normalizedQuery
+    ? availableCrossAgents.filter((a) => (`${a.name} ${a.level || ''}`).toLowerCase().includes(normalizedQuery))
+    : availableCrossAgents;
 
   const ctxTabs = () => {
     if (provider === 'both') return (
@@ -149,6 +213,54 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
               </>
             ) : (
               <>
+                <div className="drawer-agent-add">
+                  <div className="drawer-agent-add-head">
+                    <i className="ti ti-link" />
+                    <span>Añadir agente de otra categoría</span>
+                  </div>
+                  <div className="drawer-agent-search-wrap">
+                    <i className="ti ti-search" />
+                    <input
+                      className="drawer-agent-search"
+                      value={agentQuery}
+                      onChange={(e) => setAgentQuery(e.target.value)}
+                      placeholder="Buscar por nombre o nivel..."
+                    />
+                    {agentQuery && (
+                      <button className="btn ghost sm" onClick={() => setAgentQuery('')}>
+                        <i className="ti ti-x" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="drawer-agent-candidates">
+                    {filteredCrossAgents.length === 0 ? (
+                      <div className="drawer-agent-empty">Sin resultados</div>
+                    ) : (
+                      filteredCrossAgents.map((a) => (
+                        <label key={`${a.name}-${a.level || 'x'}`} className="drawer-agent-option">
+                          <input
+                            type="checkbox"
+                            checked={selectedToAdd.includes(a.name)}
+                            onChange={() => toggleCandidate(a.name)}
+                          />
+                          <span className="drawer-agent-option-name">{a.name}</span>
+                          <span className="drawer-agent-option-level">{a.level || 'global'}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="drawer-agent-add-row">
+                    <span className="drawer-agent-selected-count">
+                      {selectedToAdd.length} seleccionado{selectedToAdd.length !== 1 ? 's' : ''}
+                    </span>
+                    <button className="btn sm" onClick={handleAddCrossCategoryAgents} disabled={selectedToAdd.length === 0}>
+                      <i className="ti ti-plus" /> Añadir seleccionados
+                    </button>
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 12, color: 'var(--text1)' }}>
                     {okCount} al día, {pendCount} pendientes{exclCount ? `, ${exclCount} excluido${exclCount !== 1 ? 's' : ''}` : ''}
@@ -159,6 +271,7 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
                   : Object.entries(syncStatus).map(([name, entry]) => {
                     const isExcluded = entry.status === 'excluded';
                     const isLocal    = entry.status === 'local';
+                    const isIncluded = (p.includedAgents ?? []).includes(name);
                     return (
                       <div key={name} className="sync-agent-row">
                         <span className="sync-agent-name">{name}</span>
@@ -168,10 +281,14 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
                           <button
                             className="btn ghost sm"
                             style={{ padding: '2px 6px', fontSize: 10, flexShrink: 0 }}
-                            onClick={() => isExcluded ? handleIncludeAgent(name) : setExcludeAgent(name)}
-                            title={isExcluded ? 'Incluir en el proyecto' : 'Excluir del proyecto'}
+                            onClick={() => {
+                              if (isIncluded) handleRemoveCrossCategoryAgent(name);
+                              else if (isExcluded) handleIncludeAgent(name);
+                              else setExcludeAgent(name);
+                            }}
+                            title={isIncluded ? 'Quitar agente añadido manualmente' : isExcluded ? 'Incluir en el proyecto' : 'Excluir del proyecto'}
                           >
-                            <i className={`ti ${isExcluded ? 'ti-eye' : 'ti-eye-off'}`} />
+                            <i className={`ti ${isIncluded ? 'ti-x' : isExcluded ? 'ti-eye' : 'ti-eye-off'}`} />
                           </button>
                         )}
                       </div>

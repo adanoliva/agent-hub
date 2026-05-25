@@ -147,6 +147,24 @@ export function Dashboard() {
     }
   }
 
+  async function dismissNotification(id: string) {
+    try {
+      await req('POST', '/dashboard/notifications/dismiss', { id });
+      await load();
+    } catch {
+      // no-op: dashboard will stay as-is
+    }
+  }
+
+  async function restoreHiddenNotifications() {
+    try {
+      await req('POST', '/dashboard/notifications/restore');
+      await load();
+    } catch {
+      // no-op: dashboard will stay as-is
+    }
+  }
+
   // ── States ────────────────────────────────────────────────────────────────
 
   if (loading) return (
@@ -297,6 +315,12 @@ export function Dashboard() {
               {notifs.length > 0 && (
                 <span className="dash-badge-count">{notifs.length}</span>
               )}
+              {(data.hiddenNotifications ?? 0) > 0 && (
+                <button className="btn sm ghost" onClick={restoreHiddenNotifications} title="Volver a mostrar mejoras ocultas">
+                  <i className="ti ti-restore" />
+                  Restaurar ({data.hiddenNotifications})
+                </button>
+              )}
             </div>
 
             {notifs.length === 0 ? (
@@ -318,14 +342,29 @@ export function Dashboard() {
                           <i className={`ti ${n.target === 'agent' ? 'ti-cpu' : 'ti-layout-grid'}`} />
                           {n.targetName}
                         </span>
+                        {n.scopeLabel && (
+                          <span className="dash-notif-scope">
+                            <i className="ti ti-map-pin" />
+                            {n.scopeLabel}
+                          </span>
+                        )}
                         <span className="dash-notif-msg">{n.message}</span>
                       </div>
-                      <button
-                        className="btn sm ghost"
-                        onClick={() => handleNotifAction(n)}
-                      >
-                        {ACTION_LABEL[n.action]}
-                      </button>
+                      <div className="dash-notif-actions">
+                        <button
+                          className="btn sm ghost"
+                          onClick={() => handleNotifAction(n)}
+                        >
+                          {ACTION_LABEL[n.action]}
+                        </button>
+                        <button
+                          className="btn sm ghost"
+                          onClick={() => dismissNotification(n.id)}
+                          title="Ocultar esta mejora"
+                        >
+                          <i className="ti ti-x" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

@@ -169,10 +169,24 @@ function hashFile(filePath) {
 
 function listAgentsInDir(dir) {
   if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
-    .filter(f => f.endsWith('.md'))
-    .map(f => parseAgentFile(path.join(dir, f)));
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
+  } catch (err) {
+    console.warn(`[agents] Could not list directory "${dir}": ${err.message}`);
+    return [];
+  }
+
+  const parsed = [];
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    try {
+      parsed.push(parseAgentFile(filePath));
+    } catch (err) {
+      console.warn(`[agents] Skipping invalid agent file "${filePath}": ${err.message}`);
+    }
+  }
+  return parsed;
 }
 
 function listAgentsByLevel(level, categoryId, techId) {
@@ -311,16 +325,36 @@ function migrateAgentFiles() {
 
   const walk = (dir) => {
     if (!fs.existsSync(dir)) return;
-    fs.readdirSync(dir).forEach(f => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch (err) {
+      console.warn(`[agents] Could not read directory "${dir}": ${err.message}`);
+      return;
+    }
+
+    entries.forEach(f => {
       const p = path.join(dir, f);
-      if (fs.statSync(p).isDirectory()) { walk(p); return; }
+
+      let stat;
+      try {
+        stat = fs.statSync(p);
+      } catch {
+        // File may have been moved/deleted while scanning.
+        return;
+      }
+
+      if (stat.isDirectory()) { walk(p); return; }
       if (!f.endsWith('.md')) return;
+
       try {
         const agent      = parseAgentFile(p);
         const serialized = serializeAgent(agent);
         const current    = fs.readFileSync(p, 'utf8');
         if (current !== serialized) { fs.writeFileSync(p, serialized, 'utf8'); updated++; }
-      } catch { /* skip unparseable */ }
+      } catch (err) {
+        console.warn(`[agents] Skipping agent during migration "${p}": ${err.message}`);
+      }
     });
   };
 
@@ -370,21 +404,40 @@ function syncGlobalAgentsToClaudeDir() {
   const globalDir = path.join(AGENTS_DIR, 'global');
   if (!fs.existsSync(globalDir)) return 0;
 
-  const sourceFiles = new Set(fs.readdirSync(globalDir).filter(f => f.endsWith('.md')));
+  let sourceList = [];
+  try {
+    sourceList = fs.readdirSync(globalDir).filter(f => f.endsWith('.md'));
+  } catch (err) {
+    console.warn(`[agents] Could not read global agents directory "${globalDir}": ${err.message}`);
+    return 0;
+  }
+
+  const sourceFiles = new Set(sourceList);
   let synced = 0;
 
   // Copy / update: source → destination
   for (const f of sourceFiles) {
-    const src         = path.join(globalDir, f);
-    const dest        = path.join(CLAUDE_AGENTS, f);
-    const srcContent  = fs.readFileSync(src, 'utf8');
-    const destContent = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : null;
-    if (srcContent !== destContent) { fs.writeFileSync(dest, srcContent, 'utf8'); synced++; }
+    try {
+      const src         = path.join(globalDir, f);
+      const dest        = path.join(CLAUDE_AGENTS, f);
+      const srcContent  = fs.readFileSync(src, 'utf8');
+      const destContent = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : null;
+      if (srcContent !== destContent) { fs.writeFileSync(dest, srcContent, 'utf8'); synced++; }
+    } catch (err) {
+      console.warn(`[agents] Could not mirror global agent "${f}": ${err.message}`);
+    }
   }
 
   // Remove orphans: files in ~/.claude/agents/ that no longer exist in agents/global/
   // Covers the case of agents deleted from the app UI or directly from VS Code
-  const destFiles = fs.readdirSync(CLAUDE_AGENTS).filter(f => f.endsWith('.md'));
+  let destFiles = [];
+  try {
+    destFiles = fs.readdirSync(CLAUDE_AGENTS).filter(f => f.endsWith('.md'));
+  } catch (err) {
+    console.warn(`[agents] Could not list Claude agents directory "${CLAUDE_AGENTS}": ${err.message}`);
+    return synced;
+  }
+
   for (const f of destFiles) {
     if (!sourceFiles.has(f)) {
       try { fs.unlinkSync(path.join(CLAUDE_AGENTS, f)); } catch { /* already gone */ }

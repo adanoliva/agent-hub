@@ -647,16 +647,37 @@ app.post('/api/projects/:id/execute-task', async (req, res) => {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function buildDashboardNotifications(allAgents, projects) {
+function buildDashboardNotifications(allAgents, projects, categories = []) {
   const notifications = [];
+
+  const categoryName = (id) => categories.find((c) => c.id === id)?.name || id || 'N/A';
+  const techName = (catId, techId) => {
+    const cat = categories.find((c) => c.id === catId);
+    return cat?.technologies?.find((t) => t.id === techId)?.name || techId || 'N/A';
+  };
+  const agentScopeLabel = (agent) => {
+    if (agent.level === 'global') return 'Global';
+    if (agent.level === 'section') return `Categoría: ${categoryName(agent.categoryId)}`;
+    if (agent.level === 'tech') {
+      return `Tecnología: ${categoryName(agent.categoryId)} / ${techName(agent.categoryId, agent.techId)}`;
+    }
+    if (agent.level === 'uncategorized') return 'Sin categoría';
+    return agent.level || 'Desconocido';
+  };
+  const agentScopeKey = (agent) => [
+    agent.level || 'unknown',
+    agent.categoryId || 'none',
+    agent.techId || 'none',
+  ].join('-');
 
   for (const agent of allAgents) {
     if (!agent.tools || agent.tools.length === 0) {
       notifications.push({
-        id:         `agent-no-tools-${agent.name}`,
+        id:         `agent-no-tools-${agent.name}-${agentScopeKey(agent)}`,
         type:       'optimization',
         target:     'agent',
         targetName: agent.name,
+        scopeLabel: agentScopeLabel(agent),
         message:    'Sin herramientas configuradas',
         action:     'open-agent',
         level:      agent.level,
@@ -666,10 +687,11 @@ function buildDashboardNotifications(allAgents, projects) {
     }
     if (!agent.optimized && agent.system && agent.system.length > 30) {
       notifications.push({
-        id:         `agent-not-optimized-${agent.name}`,
+        id:         `agent-not-optimized-${agent.name}-${agentScopeKey(agent)}`,
         type:       'optimization',
         target:     'agent',
         targetName: agent.name,
+        scopeLabel: agentScopeLabel(agent),
         message:    'Prompt no optimizado con IA',
         action:     'optimize-agent',
         level:      agent.level,
@@ -760,6 +782,11 @@ function buildDashboardNotifications(allAgents, projects) {
   return notifications.sort((a, b) => priority[a.type] - priority[b.type]);
 }
 
+function normalizeDismissedDashboardIds(raw) {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((v) => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim()))];
+}
+
 app.get('/api/dashboard', (req, res) => {
   try {
     const cfg      = readConfig();
@@ -781,6 +808,10 @@ app.get('/api/dashboard', (req, res) => {
       .filter(Boolean)
       .sort()
       .pop() || null;
+
+    const dismissedIds = new Set(normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications));
+    const notifications = buildDashboardNotifications(allAgents, projects, cfg.categories || [])
+      .filter((n) => !dismissedIds.has(n.id));
 
     res.json({
       agents: {
@@ -806,11 +837,32 @@ app.get('/api/dashboard', (req, res) => {
         pendingConflicts: dirState.pendingConflicts || [],
         lastResult:       dirState.lastResult || null,
       },
-      notifications: buildDashboardNotifications(allAgents, projects),
+      notifications,
+      hiddenNotifications: dismissedIds.size,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+app.post('/api/dashboard/notifications/dismiss', (req, res) => {
+  const { id } = req.body || {};
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({ error: 'id required' });
+  }
+
+  const cfg = readConfig();
+  const current = normalizeDismissedDashboardIds(cfg.dismissedDashboardNotifications);
+  cfg.dismissedDashboardNotifications = [...new Set([...current, id])];
+  writeConfig(cfg);
+  res.json({ ok: true, hiddenNotifications: cfg.dismissedDashboardNotifications.length });
+});
+
+app.post('/api/dashboard/notifications/restore', (req, res) => {
+  const cfg = readConfig();
+  cfg.dismissedDashboardNotifications = [];
+  writeConfig(cfg);
+  res.json({ ok: true, hiddenNotifications: 0 });
 });
 
 // ── AI ────────────────────────────────────────────────────────────────────────

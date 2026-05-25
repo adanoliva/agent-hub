@@ -22,6 +22,7 @@ export interface Project {
   aiProvider?: string;
   selectedAgents?: string[];
   excludedAgents?: string[];
+  includedAgents?: string[];
   agentHashes?: Record<string, string>;
   createdAt: string;
   // enriched by listProjectsWithStatus
@@ -60,6 +61,7 @@ export interface Config {
   closeAction?: 'ask' | 'tray' | 'quit';
   agentsDirectoryUrl?: string;
   agentsDirectoryEnabled?: boolean;
+  dismissedDashboardNotifications?: string[];
   categories: Category[];
   projects: Project[];
 }
@@ -99,6 +101,7 @@ export interface DashboardNotification {
   type:       'critical' | 'optimization' | 'info';
   target:     'agent' | 'project';
   targetName: string;
+  scopeLabel?: string;
   targetId?:  string;
   message:    string;
   action:     'open-agent' | 'open-project' | 'sync-project' | 'generate-context' | 'optimize-agent';
@@ -113,6 +116,7 @@ export interface DashboardData {
   lastSyncAt: string | null;
   dirStatus: { enabled: boolean; syncing: boolean; lastSync: string | null; pendingConflicts: SyncConflict[]; lastResult: any };
   notifications: DashboardNotification[];
+  hiddenNotifications?: number;
 }
 
 export interface SelectedNode {

@@ -11,6 +11,7 @@ const path = require('path');
 const { readConfig, writeConfig, ensureDir } = require('./config');
 const {
   getApplicableAgents,
+  listAgentsByLevel,
   listProjectAgents,
   hashAgent,
   hashFile,
@@ -45,6 +46,80 @@ function getProviders(project) {
   return [p];
 }
 
+function getAllCatalogAgents() {
+  const cfg = readConfig();
+  const all = [];
+
+  const collect = (level, categoryId, techId) => {
+    try { all.push(...listAgentsByLevel(level, categoryId, techId)); }
+    catch { /* ignore broken folders */ }
+  };
+
+  collect('global');
+  collect('uncategorized');
+
+  for (const cat of (cfg.categories || [])) {
+    collect('section', cat.id);
+    for (const tech of (cat.technologies || [])) {
+      collect('tech', cat.id, tech.id);
+    }
+  }
+
+  return all;
+}
+
+function buildAgentIndex() {
+  const index = new Map();
+  for (const agent of getAllCatalogAgents()) {
+    if (!index.has(agent.name)) index.set(agent.name, agent);
+  }
+  return index;
+}
+
+function resolveProjectSourceAgents(categoryId, techId, includedAgents = []) {
+  const applicable = getApplicableAgents(categoryId, techId);
+  const byName     = new Map(applicable.map(a => [a.name, a]));
+  const index      = buildAgentIndex();
+
+  for (const name of (includedAgents || [])) {
+    const extra = index.get(name);
+    if (extra) byName.set(name, extra);
+  }
+
+  return [...byName.values()];
+}
+
+function resolveInitialAgentSelection(categoryId, techId, selectedAgents) {
+  const applicable = getApplicableAgents(categoryId, techId);
+
+  if (!Array.isArray(selectedAgents) || selectedAgents.length === 0) {
+    return {
+      agentsToCopy:   applicable,
+      excludedAgents: [],
+      includedAgents: [],
+    };
+  }
+
+  const selectedSet     = new Set(selectedAgents);
+  const applicableNames = new Set(applicable.map(a => a.name));
+  const index           = buildAgentIndex();
+
+  const agentsToCopy = [];
+  for (const name of selectedSet) {
+    const agent = index.get(name);
+    if (agent) agentsToCopy.push(agent);
+  }
+
+  const excludedAgents = applicable
+    .filter(a => !selectedSet.has(a.name))
+    .map(a => a.name);
+
+  const includedAgents = [...selectedSet]
+    .filter(name => !applicableNames.has(name) && index.has(name));
+
+  return { agentsToCopy, excludedAgents, includedAgents };
+}
+
 // ── Agent copy ────────────────────────────────────────────────────────────────
 
 /**
@@ -53,10 +128,8 @@ function getProviders(project) {
  * Writes to every provider directory. Returns a hash map.
  */
 async function copyAgentsToProject(projectPath, categoryId, techId, providers = ['claude'], selectedAgents = null) {
-  const allApplicable = getApplicableAgents(categoryId, techId);
-  const applicable    = selectedAgents
-    ? allApplicable.filter(a => selectedAgents.includes(a.name))
-    : allApplicable;
+  const selection = resolveInitialAgentSelection(categoryId, techId, selectedAgents);
+  const applicable = selection.agentsToCopy;
   const hashes        = {};
 
   for (const provider of providers) {
@@ -97,12 +170,17 @@ async function copyAgentsToProject(projectPath, categoryId, techId, providers = 
 function getProjectSyncStatus(project) {
   const providers    = getProviders(project);
   const applicable   = getApplicableAgents(project.categoryId, project.techId);
+  const sourceAgents = resolveProjectSourceAgents(project.categoryId, project.techId, project.includedAgents || []);
   const savedHashes  = project.agentHashes || {};
   const excludedSet  = new Set(project.excludedAgents || []);
   const statusMap    = {};
 
-  for (const agent of applicable) {
-    if (excludedSet.has(agent.name)) {
+  const applicableNames = new Set(applicable.map(a => a.name));
+  const sourceNames     = new Set(sourceAgents.map(a => a.name));
+
+  for (const agent of sourceAgents) {
+    const isApplicable = applicableNames.has(agent.name);
+    if (isApplicable && excludedSet.has(agent.name)) {
       statusMap[agent.name] = { status: 'excluded', agent };
       continue;
     }
@@ -130,10 +208,9 @@ function getProjectSyncStatus(project) {
   }
 
   // Level-4 local agents: read from all provider dirs, de-duplicate
-  const applicableNames = new Set(applicable.map(a => a.name));
   const seenLocal       = new Set();
   for (const pa of listProjectAgents(project.path, providers)) {
-    if (!applicableNames.has(pa.name) && !seenLocal.has(pa.name)) {
+    if (!sourceNames.has(pa.name) && !seenLocal.has(pa.name)) {
       seenLocal.add(pa.name);
       statusMap[pa.name] = { status: 'local', agent: pa };
     }
@@ -278,10 +355,9 @@ async function createProject({ name, categoryId, techId, projectPath, descriptio
     fs.writeFileSync(path.join(cleanPath, '.github', 'copilot-instructions.md'), getGitHubTemplate(categoryId, techId, name), 'utf8');
   }
 
-  const allApplicable  = getApplicableAgents(categoryId, techId || null);
-  const excludedAgents = selectedAgents
-    ? allApplicable.filter(a => !selectedAgents.includes(a.name)).map(a => a.name)
-    : [];
+  const initialSelection = resolveInitialAgentSelection(categoryId, techId || null, selectedAgents || null);
+  const excludedAgents = initialSelection.excludedAgents;
+  const includedAgents = initialSelection.includedAgents;
   const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
 
   const project = {
@@ -296,6 +372,7 @@ async function createProject({ name, categoryId, techId, projectPath, descriptio
     path:           cleanPath,
     agentHashes,
     excludedAgents,
+    includedAgents,
     createdAt:      new Date().toISOString(),
     lastSyncAt:     new Date().toISOString(),
   };
@@ -345,10 +422,9 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
     }
   }
 
-  const allApplicable  = getApplicableAgents(categoryId, techId || null);
-  const excludedAgents = selectedAgents
-    ? allApplicable.filter(a => !selectedAgents.includes(a.name)).map(a => a.name)
-    : [];
+  const initialSelection = resolveInitialAgentSelection(categoryId, techId || null, selectedAgents || null);
+  const excludedAgents = initialSelection.excludedAgents;
+  const includedAgents = initialSelection.includedAgents;
   const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
 
   const project = {
@@ -363,6 +439,7 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
     path:           cleanPath,
     agentHashes,
     excludedAgents,
+    includedAgents,
     createdAt:      new Date().toISOString(),
     lastSyncAt:     new Date().toISOString(),
     imported:       true,
@@ -467,7 +544,7 @@ function updateProject(id, updates) {
     migration = migrateProjectProvider(cfg.projects[idx], updates.aiProvider);
   }
 
-  const allowed = ['name', 'description', 'status', 'techId', 'categoryId', 'aiProvider', 'excludedAgents'];
+  const allowed = ['name', 'description', 'status', 'techId', 'categoryId', 'aiProvider', 'excludedAgents', 'includedAgents'];
   for (const key of allowed) {
     if (updates[key] !== undefined) cfg.projects[idx][key] = updates[key];
   }

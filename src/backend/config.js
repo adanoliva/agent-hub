@@ -60,6 +60,7 @@ const DEFAULT_CONFIG = {
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
   agentsDirectoryEnabled: true,
+  dismissedDashboardNotifications: [],
   categories: [
     {
       id: 'games',
