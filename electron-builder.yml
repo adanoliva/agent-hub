@@ -21,6 +21,8 @@ win:
   icon: assets/icon.ico
   # Request admin rights only if needed (not required for portable)
   requestedExecutionLevel: asInvoker
+  # Disable executable editing/signing so Windows builds do not require winCodeSign extraction.
+  signAndEditExecutable: false
 
 portable:
   artifactName: agent-hub.exe
