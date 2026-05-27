@@ -8,6 +8,8 @@ interface Props {
   expanded: Set<string>;
   onSelect: (node: SelectedNode) => void;
   onToggle: (key: string) => void;
+  search: string;
+  onSearchChange: (v: string) => void;
 }
 
 function isActive(selected: SelectedNode, level: string, catId: string | null, techId: string | null, projId: string | null) {
@@ -17,7 +19,7 @@ function isActive(selected: SelectedNode, level: string, catId: string | null, t
     && selected.projectId === projId;
 }
 
-export function AgentsTree({ selected, expanded, onSelect, onToggle }: Props) {
+export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onSearchChange }: Props) {
   const config   = useStore((s) => s.config);
   const projects = useStore((s) => s.projects);
   const { catColor } = useCategoryHelpers();
@@ -32,6 +34,23 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle }: Props) {
 
   return (
     <div className="agents-tree" id="agents-tree">
+      {/* Search */}
+      <div className="tree-search">
+        <i className="ti ti-search tree-search-icon" />
+        <input
+          className="tree-search-input"
+          type="text"
+          placeholder="Buscar agente…"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+        />
+        {search && (
+          <button className="tree-search-clear" onClick={() => onSearchChange('')}>
+            <i className="ti ti-x" />
+          </button>
+        )}
+      </div>
+
       {/* Global */}
       <div
         className={`tree-node${isActive(selected, 'global', null, null, null) ? ' active' : ''}`}

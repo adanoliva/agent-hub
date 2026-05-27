@@ -53,6 +53,8 @@ export function Agents() {
   const [agents,             setAgents]             = useState<Agent[]>([]);
   const [suggestions,        setSuggestions]        = useState<Agent[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [search,             setSearch]             = useState('');
+  const [allAgents,          setAllAgents]          = useState<Agent[]>([]);
   const [selectedAgent,      setSelectedAgent]      = useState<string | null>(null);
   const [editorAgent,        setEditorAgent]        = useState<Agent | null>(null);
   const [editorIsNew,        setEditorIsNew]        = useState(false);
@@ -218,6 +220,11 @@ export function Agents() {
     loadAgents(node);
     return () => { sugAbortRef.current?.abort(); };
   }, [node, loadAgents]);
+
+  useEffect(() => {
+    if (!search.trim()) { setAllAgents([]); return; }
+    req<Agent[]>('GET', '/agents/flat').then(setAllAgents).catch(() => setAllAgents([]));
+  }, [search]);
 
   // ── Directory sync polling ─────────────────────────────────────────────────
 
@@ -414,19 +421,22 @@ export function Agents() {
           expanded={expanded}
           onSelect={selectNode}
           onToggle={toggleExpanded}
+          search={search}
+          onSearchChange={setSearch}
         />
 
         <AgentsCenter
           node={node}
-          agents={agents}
-          suggestions={suggestions}
-          suggestionsLoading={suggestionsLoading}
+          agents={search.trim() ? allAgents.filter((a) => a.name.toLowerCase().includes(search.toLowerCase().trim())) : agents}
+          suggestions={search.trim() ? [] : suggestions}
+          suggestionsLoading={search.trim() ? false : suggestionsLoading}
           selectedAgent={selectedAgent}
           onSelectAgent={handleSelectAgent}
           onUseSuggestion={handleUseSuggestion}
           onNewAgent={handleNewAgent}
           onRefreshSuggestions={handleRefreshSuggestions}
           onChatWithAgent={handleChatWithAgent}
+          searchActive={!!search.trim()}
         />
       </div>
 

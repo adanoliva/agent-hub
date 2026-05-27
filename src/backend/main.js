@@ -70,6 +70,9 @@ function createWindow() {
     minWidth:        900,
     minHeight:       600,
     title:           'Agent Hub',
+    icon:            isDev
+                       ? path.join(__dirname, '../../assets/icon.ico')
+                       : path.join(process.resourcesPath, 'assets/icon.ico'),
     backgroundColor: '#0d0d0f',
     show:            false,
     frame:           true,

@@ -15,12 +15,13 @@ interface Props {
   onNewAgent: () => void;
   onRefreshSuggestions: () => void;
   onChatWithAgent?: (agent: Agent) => void;
+  searchActive?: boolean;
 }
 
 export function AgentsCenter({
   node, agents, suggestions, suggestionsLoading,
   selectedAgent, onSelectAgent, onUseSuggestion, onNewAgent, onRefreshSuggestions,
-  onChatWithAgent,
+  onChatWithAgent, searchActive,
 }: Props) {
   const config   = useStore((s) => s.config);
   const projects = useStore((s) => s.projects);
@@ -41,27 +42,31 @@ export function AgentsCenter({
   return (
     <div className="agents-center" id="agents-center">
       <div className="agents-panel-head">
-        <span className="agents-panel-title">{title}</span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn sm primary" onClick={onNewAgent}>
-            <i className="ti ti-plus" /> Nuevo agente
-          </button>
-          <button className="btn sm" onClick={onRefreshSuggestions} disabled={suggestionsLoading}>
-            {suggestionsLoading
-              ? <div className="spin" />
-              : <i className="ti ti-sparkles" />
-            }
-            {' '}{isProject ? 'Sugerir para este proyecto' : 'Sugerir más'}
-          </button>
-        </div>
+        <span className="agents-panel-title">
+          {searchActive ? <><i className="ti ti-search" style={{ marginRight: 6, color: 'var(--text2)' }} />Resultados de búsqueda</> : title}
+        </span>
+        {!searchActive && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn sm primary" onClick={onNewAgent}>
+              <i className="ti ti-plus" /> Nuevo agente
+            </button>
+            <button className="btn sm" onClick={onRefreshSuggestions} disabled={suggestionsLoading}>
+              {suggestionsLoading
+                ? <div className="spin" />
+                : <i className="ti ti-sparkles" />
+              }
+              {' '}{isProject ? 'Sugerir para este proyecto' : 'Sugerir más'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="agents-content" id="agents-content">
         {isEmpty ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 60, gap: 10, color: 'var(--text2)' }}>
-            <i className="ti ti-cpu" style={{ fontSize: 40, opacity: 0.2 }} />
-            <div style={{ fontSize: 13, color: 'var(--text1)' }}>Sin agentes en este nivel</div>
-            <div style={{ fontSize: 12 }}>Crea el primero o espera las sugerencias de IA</div>
+            <i className={`ti ${searchActive ? 'ti-search-off' : 'ti-cpu'}`} style={{ fontSize: 40, opacity: 0.2 }} />
+            <div style={{ fontSize: 13, color: 'var(--text1)' }}>{searchActive ? 'Sin resultados' : 'Sin agentes en este nivel'}</div>
+            <div style={{ fontSize: 12 }}>{searchActive ? 'Prueba con otro término' : 'Crea el primero o espera las sugerencias de IA'}</div>
           </div>
         ) : (
           <div className="agents-grid">
