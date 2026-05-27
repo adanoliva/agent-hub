@@ -1,6 +1,6 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **1.8.2** · Actualizar este campo en cada release.
+> Versión actual: **1.8.3** · Actualizar este campo en cada release.
 
 @docs/backend.md
 @docs/frontend.md
