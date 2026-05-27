@@ -6,11 +6,32 @@ import { useToast } from '../hooks/useToast';
 import { AgentsTree } from '../components/agents/AgentsTree';
 import { AgentsCenter } from '../components/agents/AgentsCenter';
 import { AgentEditor } from '../components/agents/AgentEditor';
-import { AgentExecutePanel } from '../components/agents/AgentExecutePanel';
 import type { Agent, AgentDirectoryStatus, SelectedNode, SyncConflict } from '../types';
 
 const DEFAULT_NODE: SelectedNode = { level: 'global', categoryId: null, techId: null, projectId: null };
 const NEW_AGENT: Agent = { name: '', description: '', tools: ['Read'], model: 'sonnet', system: '' };
+const SUGGESTIONS_CACHE_KEY = 'cdm-agent-suggestions-cache';
+
+function suggestionsNodeKey(node: SelectedNode) {
+  return [node.level, node.categoryId ?? '', node.techId ?? '', node.projectId ?? ''].join('::');
+}
+
+function readStoredSuggestionsCache(): Record<string, Agent[]> {
+  try {
+    const raw = localStorage.getItem(SUGGESTIONS_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredSuggestionsCache(cache: Record<string, Agent[]>) {
+  try {
+    localStorage.setItem(SUGGESTIONS_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+}
 
 export function Agents() {
   const toast                = useToast();
@@ -44,8 +65,7 @@ export function Agents() {
   const pendingAgentNameRef                          = useRef<string | null>(null);
   const pendingNodeRef                               = useRef<SelectedNode | null>(null);
   const didInitialLoadRef                            = useRef(false);
-
-  const [executeAgent, setExecuteAgent] = useState<Agent | null>(null);
+  const suggestionsCacheRef                          = useRef<Record<string, Agent[]>>(readStoredSuggestionsCache());
 
   const sugAbortRef = useRef<AbortController | null>(null);
 
@@ -106,24 +126,33 @@ export function Agents() {
           data = await req<Agent[]>('GET', `${url}?${q}`);
         }
       }
-      if (!ctrl.signal.aborted) setSuggestions(data);
+      if (!ctrl.signal.aborted) {
+        const nextCache = { ...suggestionsCacheRef.current, [suggestionsNodeKey(n)]: data };
+        suggestionsCacheRef.current = nextCache;
+        writeStoredSuggestionsCache(nextCache);
+        setSuggestions(data);
+      }
     } catch (e: any) {
       if (!ctrl.signal.aborted) {
         setSuggestions([]);
         if (force) toast('No se pudieron generar sugerencias: ' + e.message, 'err');
       }
     } finally {
-      if (!ctrl.signal.aborted) setSuggestionsLoading(false);
+      if (sugAbortRef.current === ctrl) setSuggestionsLoading(false);
     }
   }, [toast]);
 
   const selectNode = useCallback((n: SelectedNode) => {
     console.log('✅ selectNode called with:', n);
+    const currentKey = suggestionsNodeKey(node);
+    const nextCurrentCache = { ...suggestionsCacheRef.current, [currentKey]: suggestions };
+    suggestionsCacheRef.current = nextCurrentCache;
+    writeStoredSuggestionsCache(nextCurrentCache);
     setNode(n);
-    setSuggestions([]);
+    setSuggestions(nextCurrentCache[suggestionsNodeKey(n)] ?? []);
     setSelectedAgent(null);
     setEditorAgent(null);
-  }, []);
+  }, [node, suggestions]);
 
   useEffect(() => {
     if (pendingAction === 'new-agent') {
@@ -187,9 +216,8 @@ export function Agents() {
 
   useEffect(() => {
     loadAgents(node);
-    loadSuggestions(node);
     return () => { sugAbortRef.current?.abort(); };
-  }, [node, loadAgents, loadSuggestions]);
+  }, [node, loadAgents]);
 
   // ── Directory sync polling ─────────────────────────────────────────────────
 
@@ -272,7 +300,13 @@ export function Agents() {
   async function handleSaved(saved: Agent) {
     setEditorIsNew(false);
     setSelectedAgent(saved.name);
-    setSuggestions((prev) => prev.filter((s) => s.name !== saved.name));
+    setSuggestions((prev) => {
+      const next = prev.filter((s) => s.name !== saved.name);
+      const nextCache = { ...suggestionsCacheRef.current, [suggestionsNodeKey(node)]: next };
+      suggestionsCacheRef.current = nextCache;
+      writeStoredSuggestionsCache(nextCache);
+      return next;
+    });
     await loadAgents(node);
   }
 
@@ -293,32 +327,14 @@ export function Agents() {
     navigateTo('chat');
   }
 
-  function handleExecuteAgent(agent: Agent) {
-    setEditorAgent(null);
-    setSelectedAgent(null);
-    setExecuteAgent(agent);
-  }
-
-  function handleBackFromExecute() {
-    setExecuteAgent(null);
-  }
-
   // ── First-sync overlay ─────────────────────────────────────────────────────
 
   const isFirstSync = syncStatus?.firstSync && syncStatus?.syncing;
   const progress    = syncStatus?.progress;
 
-  const topbarSub = executeAgent
-    ? `Ejecutar agente: ${executeAgent.name}`
-    : undefined;
-
-  const project = node.level === 'project' && node.projectId
-    ? projects.find((p) => p.id === node.projectId) ?? null
-    : null;
-
   return (
     <div className="view active" id="view-agents">
-      <Topbar title="Agentes" sub={topbarSub} />
+      <Topbar title="Agentes" />
 
       {/* First-run sync overlay */}
       {isFirstSync && (
@@ -400,31 +416,18 @@ export function Agents() {
           onToggle={toggleExpanded}
         />
 
-        {executeAgent && project ? (
-          <AgentExecutePanel
-            agent={executeAgent}
-            projectId={project.id}
-            projectName={project.name}
-            onBack={handleBackFromExecute}
-            onOpenChat={handleChatWithAgent}
-          />
-        ) : (
-          <>
-            <AgentsCenter
-              node={node}
-              agents={agents}
-              suggestions={suggestions}
-              suggestionsLoading={suggestionsLoading}
-              selectedAgent={selectedAgent}
-              onSelectAgent={handleSelectAgent}
-              onUseSuggestion={handleUseSuggestion}
-              onNewAgent={handleNewAgent}
-              onRefreshSuggestions={handleRefreshSuggestions}
-              onChatWithAgent={handleChatWithAgent}
-              onExecuteAgent={handleExecuteAgent}
-            />
-          </>
-        )}
+        <AgentsCenter
+          node={node}
+          agents={agents}
+          suggestions={suggestions}
+          suggestionsLoading={suggestionsLoading}
+          selectedAgent={selectedAgent}
+          onSelectAgent={handleSelectAgent}
+          onUseSuggestion={handleUseSuggestion}
+          onNewAgent={handleNewAgent}
+          onRefreshSuggestions={handleRefreshSuggestions}
+          onChatWithAgent={handleChatWithAgent}
+        />
       </div>
 
       {editorAgent && (

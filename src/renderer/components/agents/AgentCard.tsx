@@ -9,10 +9,9 @@ interface Props {
   node: SelectedNode;
   onClick: () => void;
   onChatWith?: (agent: Agent) => void;
-  onExecute?: (agent: Agent) => void;
 }
 
-export function AgentCard({ agent: a, selected, suggested, node, onClick, onChatWith, onExecute }: Props) {
+export function AgentCard({ agent: a, selected, suggested, node, onClick, onChatWith }: Props) {
   const ic        = agentIcon(a.name);
   const model     = a.model || 'sonnet';
   const mIcon     = MODEL_ICON[model] ?? 'ti-bolt';
@@ -48,27 +47,15 @@ export function AgentCard({ agent: a, selected, suggested, node, onClick, onChat
         </span>
       </div>
 
-      {isProject && (onChatWith || onExecute) && (
+      {isProject && onChatWith && (
         <div className="agent-card-actions" onClick={(e) => e.stopPropagation()}>
-          {onChatWith && (
-            <button
-              className="btn ghost sm"
-              onClick={() => onChatWith(a)}
-              title="Abrir chat con este agente"
-            >
-              <i className="ti ti-message-chatbot" /> Chat
-            </button>
-          )}
-          {onExecute && (
-            <button
-              className="btn sm"
-              onClick={() => onExecute(a)}
-              title="Ejecutar tarea rápida"
-              style={{ color: 'var(--amber)' }}
-            >
-              <i className="ti ti-zap" /> Ejecutar
-            </button>
-          )}
+          <button
+            className="btn ghost sm"
+            onClick={() => onChatWith(a)}
+            title="Abrir chat con este agente"
+          >
+            <i className="ti ti-message-chatbot" /> Chat
+          </button>
         </div>
       )}
     </div>

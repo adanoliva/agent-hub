@@ -660,29 +660,6 @@ function getContextAuto(project, appAiProvider) {
   };
 }
 
-function deriveAgentTask(agent) {
-  const combined = `${agent.name} ${agent.description || ''}`.toLowerCase();
-  const DO_IT = ' Implementa los cambios directamente sin pedir confirmación previa.';
-
-  if (/seo|meta.?tag|schema\.?org|robots\.?txt|sitemap|open.?graph|canonical/.test(combined))
-    return 'Analiza y mejora el SEO técnico del proyecto: meta tags, title, description, Open Graph, schema.org JSON-LD, canonical URL y cualquier otro aspecto SEO que necesite mejora.' + DO_IT;
-  if (/review|revisar|code.?review/.test(combined))
-    return 'Revisa el código fuente de este proyecto. Identifica bugs, código frágil, malas prácticas y oportunidades de mejora. Sé específico con archivos y funciones si puedes inferirlos del contexto del proyecto.' + DO_IT;
-  if (/test|spec|jest|vitest|pytest|testing/.test(combined))
-    return 'Analiza la cobertura de tests de este proyecto. Identifica módulos críticos sin tests y propón un plan de pruebas prioritizado.' + DO_IT;
-  if (/doc|readme|wiki|documentation/.test(combined))
-    return 'Revisa la documentación de este proyecto. Indica qué está incompleto, desactualizado o ausente para que un desarrollador nuevo pueda empezar.' + DO_IT;
-  if (/\bperf\b|performance|\bspeed\b|rendimiento|benchmark/.test(combined))
-    return 'Analiza el proyecto en busca de cuellos de botella de rendimiento. Identifica patrones costosos y estrategias de optimización aplicables.' + DO_IT;
-  if (/security|seguridad|\bauth\b|vulnerabilit/.test(combined))
-    return 'Realiza una revisión de seguridad. Identifica vulnerabilidades, malas prácticas y vectores de ataque evidentes.' + DO_IT;
-  if (/refactor|clean|architect/.test(combined))
-    return 'Analiza la arquitectura del proyecto. Identifica los módulos que más se beneficiarían de refactorización y propón un plan concreto.' + DO_IT;
-  if (/debug|\bfix\b|\bbug\b/.test(combined))
-    return 'Busca posibles bugs o comportamientos inesperados: código que falla en casos edge, condiciones de carrera o manejo de errores incompleto.' + DO_IT;
-  return `Actúa como ${agent.description || agent.name}. Ejecuta tu tarea principal sobre este proyecto de principio a fin.` + DO_IT;
-}
-
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -702,5 +679,4 @@ module.exports = {
   saveClaudeMd,
   copyAgentsToProject,
   getContextAuto,
-  deriveAgentTask,
 };

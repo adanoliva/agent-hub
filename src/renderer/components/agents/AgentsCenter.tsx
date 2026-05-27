@@ -15,13 +15,12 @@ interface Props {
   onNewAgent: () => void;
   onRefreshSuggestions: () => void;
   onChatWithAgent?: (agent: Agent) => void;
-  onExecuteAgent?: (agent: Agent) => void;
 }
 
 export function AgentsCenter({
   node, agents, suggestions, suggestionsLoading,
   selectedAgent, onSelectAgent, onUseSuggestion, onNewAgent, onRefreshSuggestions,
-  onChatWithAgent, onExecuteAgent,
+  onChatWithAgent,
 }: Props) {
   const config   = useStore((s) => s.config);
   const projects = useStore((s) => s.projects);
@@ -74,7 +73,6 @@ export function AgentsCenter({
                 selected={selectedAgent === a.name}
                 onClick={() => onSelectAgent(a)}
                 onChatWith={onChatWithAgent}
-                onExecute={onExecuteAgent}
               />
             ))}
 
