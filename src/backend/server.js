@@ -38,7 +38,6 @@ const {
   getContextFile,
   saveContextFile,
   getContextAuto,
-  deriveAgentTask,
 } = require('./projects');
 
 const app  = express();
@@ -613,46 +612,6 @@ Formato: Markdown limpio y profesional, máximo 1000 palabras. Solo devuelve el 
     const { callAI } = require('./ai');
     const content = await callAI(analysisPrompt);
     res.json({ content });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── Execute agent task ────────────────────────────────────────────────────────
-
-app.post('/api/projects/:id/execute-task', async (req, res) => {
-  const cfg     = readConfig();
-  const project = cfg.projects.find(p => p.id === req.params.id);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-
-  const { agent } = req.body;
-  if (!agent)       return res.status(400).json({ error: 'Agent required' });
-  if (!agent.model) return res.status(400).json({ error: 'El agente no tiene modelo especificado' });
-
-  const ctxInfo = getContextAuto(project, cfg.aiProvider);
-  const task    = deriveAgentTask(agent);
-
-  const projectMeta = `Proyecto: ${project.name}\nRuta: ${project.path}`;
-  const systemPrompt = [
-    agent.system || '',
-    `\n\n---\n${projectMeta}`,
-    ctxInfo.content
-      ? `\n\n---\nContexto del proyecto (${ctxInfo.label}):\n\n${ctxInfo.content.slice(0, 8000)}`
-      : '',
-  ].join('').trim();
-
-  const startTime = Date.now();
-  try {
-    const reply = await callAIChat(
-      [{ role: 'user', content: task }],
-      {
-        systemPrompt,
-        extraArgs: ['--dangerously-skip-permissions', '--max-turns', '5'],
-        cwd: project.path,
-        timeout: 900_000, // 15 min — el agente usa herramientas reales
-      },
-    );
-    res.json({ result: reply, task, durationMs: Date.now() - startTime });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1365,6 +1324,7 @@ app.post('/api/ai/project-suggestions/refresh', async (req, res) => {
 // DELETE /api/ai/suggestions/cache — clear all cached suggestions
 app.delete('/api/ai/suggestions/cache', (req, res) => {
   clearSuggestionsCache();
+
   res.json({ ok: true });
 });
 

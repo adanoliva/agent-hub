@@ -219,7 +219,6 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <a class="nav-item" href="#optimizar-agente"><i class="ti ti-sparkles" aria-hidden="true"></i> Optimizar agente con IA</a>
   <a class="nav-item" href="#sync"><i class="ti ti-refresh" aria-hidden="true"></i> Sincronizar cambios</a>
   <a class="nav-item" href="#sugerencias"><i class="ti ti-bulb" aria-hidden="true"></i> Sugerencias de IA</a>
-  <a class="nav-item" href="#ejecutar-agente"><i class="ti ti-zap" aria-hidden="true"></i> Ejecutar agente</a>
   <a class="nav-item" href="#generar-contexto"><i class="ti ti-file-description" aria-hidden="true"></i> Generar contexto</a>
   <a class="nav-item" href="#importar-externo"><i class="ti ti-cloud-download" aria-hidden="true"></i> Importar agente puntual</a>
   <a class="nav-item" href="#autoupdate"><i class="ti ti-refresh-alert" aria-hidden="true"></i> Actualizaciones</a>
@@ -742,16 +741,12 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
     <h4>Botones de acción en agentes de proyecto</h4>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Cuando seleccionas el nodo de un <strong>Proyecto</strong> en el árbol, cada tarjeta de agente muestra dos botones en la parte inferior:
+      Cuando seleccionas el nodo de un <strong>Proyecto</strong> en el árbol, cada tarjeta de agente muestra el botón <strong>Chat</strong> en la parte inferior.
     </p>
     <div class="grid2">
       <div class="card accent-l">
         <div class="card-title"><i class="ti ti-message-chatbot" style="margin-right:6px;color:var(--accent)"></i>Chat</div>
         <div class="card-body">Abre la vista Chat con ese agente preseleccionado como contexto activo. El agente aparece ya como chip en el input.</div>
-      </div>
-      <div class="card amber-l">
-        <div class="card-title"><i class="ti ti-zap" style="margin-right:6px;color:var(--amber)"></i>Ejecutar</div>
-        <div class="card-body">Lanza el panel de ejecución directa del agente sobre el proyecto. El agente analiza el código del proyecto y devuelve resultados accionables.</div>
       </div>
     </div>
   </div>
@@ -1263,100 +1258,6 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     </div>
   </div>
 
-  <div class="sep"></div>
-
-  <!-- ══════════════════════ -->
-  <!-- Ejecutar agente        -->
-  <!-- ══════════════════════ -->
-  <div class="section" id="ejecutar-agente">
-    <div class="section-badge">Tareas frecuentes</div>
-    <h2 class="section-title">Ejecutar <span>agente</span></h2>
-    <p class="section-intro">Desde la vista Agentes, al seleccionar un proyecto en el árbol, cada tarjeta de agente muestra el botón <strong>Ejecutar</strong>. Permite lanzar el agente directamente sobre el código del proyecto y obtener resultados sin abrir una sesión de chat.</p>
-
-    <div class="steps">
-      <div class="step">
-        <div class="step-num accent">1</div>
-        <div class="step-body">
-          <div class="step-title">Pulsa "Ejecutar" en la tarjeta del agente</div>
-          <div class="step-desc">Solo disponible cuando el nodo activo es un Proyecto. Agent Hub abre el panel de ejecución y valida el contexto del proyecto.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">2</div>
-        <div class="step-body">
-          <div class="step-title">Validación de contexto</div>
-          <div class="step-desc">Antes de ejecutar, Agent Hub comprueba si el proyecto tiene fichero de contexto y si el proveedor coincide. Puede mostrar uno de estos avisos:</div>
-          <div class="grid2" style="margin-top:10px">
-            <div class="card coral-l">
-              <div class="card-title" style="color:var(--coral)">Sin contexto</div>
-              <div class="card-body">El proyecto no tiene <code>CLAUDE.md</code> ni <code>copilot-instructions.md</code>. Puedes generarlo desde ahí mismo o cancelar.</div>
-            </div>
-            <div class="card amber-l">
-              <div class="card-title" style="color:var(--amber)">Contexto insuficiente</div>
-              <div class="card-body">El fichero existe pero parece ser la plantilla por defecto sin editar. Puedes ejecutar de todas formas o cancelar para editarlo primero.</div>
-            </div>
-            <div class="card amber-l">
-              <div class="card-title" style="color:var(--amber)">Mismatch de proveedor</div>
-              <div class="card-body">El proveedor del proyecto no coincide con el global. La ejecución funciona pero puede no ser óptima. Puedes continuar o cancelar.</div>
-            </div>
-            <div class="card green-l">
-              <div class="card-title" style="color:var(--green)">Listo</div>
-              <div class="card-body">Contexto disponible y proveedor compatible. Se muestra el resumen previo a la ejecución.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">3</div>
-        <div class="step-body">
-          <div class="step-title">Revisa el resumen y pulsa "Ejecutar"</div>
-          <div class="step-desc">El panel muestra el agente, modelo, herramientas, contexto del proyecto y proveedor. La <strong>tarea predefinida</strong> se deriva automáticamente del nombre y descripción del agente:</div>
-          <div class="code-block" style="margin-top:8px">
-<span class="dim">Agente</span>   <span class="hi">seo-optimizer</span>    → <span class="grn">Mejorar SEO técnico: meta tags, Open Graph…</span>
-<span class="dim">Agente</span>   <span class="hi">code-reviewer</span>    → <span class="grn">Revisar código en busca de bugs</span>
-<span class="dim">Agente</span>   <span class="hi">test-writer</span>      → <span class="grn">Analizar cobertura de tests y proponer plan</span>
-<span class="dim">Agente</span>   <span class="hi">security-scan</span>    → <span class="grn">Revisión de seguridad del proyecto</span></div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num accent">4</div>
-        <div class="step-body">
-          <div class="step-title">Resultado</div>
-          <div class="step-desc">El agente trabaja sobre el directorio del proyecto (puede leer y escribir ficheros según sus herramientas) y devuelve un informe. El resultado aparece renderizado en Markdown con el tiempo de ejecución.</div>
-          <div class="grid3" style="margin-top:10px">
-            <div class="card">
-              <div class="card-title"><i class="ti ti-clipboard" style="margin-right:5px"></i>Copiar</div>
-              <div class="card-body">Copia el resultado completo al portapapeles.</div>
-            </div>
-            <div class="card accent-l">
-              <div class="card-title"><i class="ti ti-message-chatbot" style="margin-right:5px;color:var(--accent)"></i>Discutir en chat</div>
-              <div class="card-body">Abre la vista Chat con el agente preseleccionado para continuar la conversación sobre el resultado.</div>
-            </div>
-            <div class="card">
-              <div class="card-title"><i class="ti ti-arrow-left" style="margin-right:5px"></i>Volver</div>
-              <div class="card-body">Regresa a la vista de agentes del proyecto.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="callout warn">
-      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">El agente actúa directamente sobre el código</div>
-        <div class="callout-text">La ejecución usa <code>--dangerously-skip-permissions</code> para que el agente pueda leer y escribir ficheros sin preguntar. Si el agente tiene herramientas como <code>Write</code> o <code>Edit</code>, puede modificar archivos de tu proyecto. Revisa las herramientas del agente antes de ejecutar.</div>
-      </div>
-    </div>
-
-    <div class="callout info">
-      <i class="ti ti-info-circle" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">Tiempo de ejecución</div>
-        <div class="callout-text">Las ejecuciones tienen un timeout de 5 minutos. Para proyectos grandes o tareas complejas, el agente puede tardar varios minutos. El spinner indica que está trabajando.</div>
-      </div>
-    </div>
-  </div>
 
   <div class="sep"></div>
 
@@ -1594,14 +1495,6 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Funciona en macOS o Linux?</div>
         <div class="faq-a">La app está desarrollada y probada en Windows 10/11. Electron es multiplataforma, pero el build actual genera solo .exe. Con ajustes en <code>electron-builder.yml</code> podría compilarse para macOS (.dmg) o Linux (.AppImage).</div>
-      </div>
-      <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué diferencia hay entre "Ejecutar" y "Chat" en las cards de agente?</div>
-        <div class="faq-a"><strong>Ejecutar</strong> lanza el agente directamente sobre el código del proyecto con una tarea predefinida, sin intervención del usuario. El resultado es un informe concreto. <strong>Chat</strong> abre una conversación multi-turno donde tú guías al agente paso a paso. Ejecutar es ideal para auditorías o análisis automáticos; Chat es mejor para tareas interactivas o exploratorias.</div>
-      </div>
-      <div class="faq-item">
-        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> El botón "Ejecutar" aparece en gris / no se ve. ¿Por qué?</div>
-        <div class="faq-a">El botón Ejecutar (y el de Chat) solo aparece cuando seleccionas el nodo de un <strong>Proyecto</strong> en el árbol de la vista Agentes. Si estás en Global, Categoría o Tecnología, las cards no muestran esos botones. Navega al nodo del proyecto concreto en el árbol.</div>
       </div>
     </div>
   </div>
