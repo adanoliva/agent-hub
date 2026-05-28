@@ -4,7 +4,7 @@
 
 *Construida con IA. Para la IA. Con manos humanas al volante.*
 
-![Version](https://img.shields.io/badge/version-1.9.0-7c6af7)
+![Version](https://img.shields.io/badge/version-1.9.1-7c6af7)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Runtime](https://img.shields.io/badge/runtime-Electron-47848F)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -421,7 +421,7 @@ npm run release          # Build + publicar en GitHub Releases (requiere GH_TOKE
 
 ---
 
-## Orquestaciones multiagente *(v1.9.0)*
+## Orquestaciones multiagente *(v1.9.1)*
 
 Las orquestaciones permiten encadenar varios agentes en un workflow secuencial donde el output de cada paso alimenta al siguiente.
 
@@ -464,7 +464,7 @@ Cada paso hace un backup de los archivos afectados antes de ejecutarse. Puedes r
 
 ---
 
-## Subsistema CLI *(v1.9.0)*
+## Subsistema CLI *(v1.9.1)*
 
 El Subsistema CLI es una capa de abstracción que permite a los proveedores API y GitHub Copilot operar sobre el filesystem del proyecto con las mismas capacidades que el CLI nativo de Claude Code.
 

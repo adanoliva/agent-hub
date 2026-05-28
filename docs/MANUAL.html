@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Hub — Manual de uso v1.9.0</title>
+<title>Agent Hub — Manual de uso v1.9.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -53,7 +53,7 @@ body{background:var(--bg0);color:var(--text0);font-family:var(--display);font-si
 .hero-tagline{font-size:13px;color:var(--text2);font-style:italic;margin-top:12px;font-family:var(--mono)}
 
 /* ── Section ── */
-.section{margin-bottom:64px;scroll-margin-top:24px}
+.section{margin-bottom:64px;scroll-margin-top:40px}
 .section-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-family:var(--mono);color:var(--text2);margin-bottom:14px}
 .section-badge::before{content:'';width:24px;height:1px;background:var(--border3)}
 .section-title{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px;color:var(--text0)}
@@ -61,12 +61,12 @@ body{background:var(--bg0);color:var(--text0);font-family:var(--display);font-si
 .section-intro{font-size:13px;color:var(--text1);line-height:1.7;margin-bottom:28px;max-width:600px}
 
 /* ── Screenshot placeholder ── */
-.screenshot{background:var(--bg2);border:1px dashed var(--border3);border-radius:12px;padding:32px 24px;margin-bottom:24px;text-align:center}
+.screenshot{background:var(--bg2);border:1px dashed var(--border3);border-radius:12px;padding:32px 24px;margin-bottom:24px;text-align:center;min-height:120px}
 .screenshot img{max-width:100%;border-radius:8px;display:block;margin:0 auto}
-.screenshot-placeholder{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text2)}
-.screenshot-placeholder i{font-size:32px;color:var(--text3)}
-.screenshot-placeholder span{font-size:12px;font-family:var(--mono)}
-.screenshot-placeholder em{font-size:11px;color:var(--text3);font-style:normal}
+.screenshot-placeholder{display:flex;flex-direction:column;align-items:center;gap:12px}
+.screenshot-placeholder i{font-size:40px;color:var(--accent)}
+.screenshot-placeholder span{font-size:12px;font-family:var(--mono);color:var(--accent);background:var(--purple-dim);border:1px solid rgba(124,106,247,0.3);padding:4px 12px;border-radius:6px;display:block}
+.screenshot-placeholder em{font-size:12px;color:var(--text1);font-style:normal}
 
 /* ── Step ── */
 .steps{display:flex;flex-direction:column;gap:0}
@@ -195,7 +195,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 <nav class="nav">
   <div class="nav-logo">
     <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Agent Hub</div>
-    <div class="nav-logo-sub">Manual de uso · v1.9.0</div>
+    <div class="nav-logo-sub">Manual de uso · v1.9.1</div>
   </div>
 
   <div class="nav-section">Primeros pasos</div>
@@ -240,7 +240,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- Hero                   -->
   <!-- ══════════════════════ -->
   <div class="hero" id="inicio">
-    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v1.9.0</div>
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v1.9.1</div>
     <h1 class="hero-title">Agent <span>Hub</span></h1>
     <p class="hero-sub">Guía completa para gestionar tus agentes de Claude Code, organizar proyectos y mantener contexto por proyecto — todo desde una interfaz visual.</p>
     <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
@@ -846,173 +846,407 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- ══════════════════════ -->
   <!-- Vista Orquestaciones   -->
   <!-- ══════════════════════ -->
-  <div class="section" id="orquestaciones">
-    <div class="section-badge">La aplicación</div>
-    <h2 class="section-title">Vista <span>Orquestaciones</span> <span style="font-size:11px;font-family:var(--mono);color:var(--accent);background:var(--purple-dim);border:1px solid rgba(124,106,247,0.25);padding:2px 8px;border-radius:20px;vertical-align:middle">v1.9.0</span></h2>
-    <p class="section-intro">Crea y ejecuta workflows de múltiples agentes en secuencia. El output de cada agente se inyecta automáticamente como contexto al siguiente, con rollback granular y auditoría completa.</p>
+  <div class=”section” id=”orquestaciones”>
+    <div class=”section-badge”>La aplicación</div>
+    <h2 class=”section-title”>Vista <span>Orquestaciones</span></h2>
+    <p class=”section-intro”>Crea y ejecuta workflows de múltiples agentes en secuencia sobre tu proyecto. El output de cada agente se inyecta como contexto al siguiente, con control granular del flujo de datos, contexto estático y dinámico, rollback paso a paso y auditoría completa de ejecución.</p>
 
-    <div class="callout note">
-      <i class="ti ti-info-circle" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">Qué resuelve</div>
-        <div class="callout-text">Sin el orquestador, cada agente trabaja de forma independiente y el contexto de lo que hizo el anterior se pierde. Las orquestaciones encadenan agentes en un workflow coherente donde cada uno recibe el resultado del anterior como punto de partida.</div>
+    <div class=”callout note”>
+      <i class=”ti ti-topology-ring-2” aria-hidden=”true”></i>
+      <div class=”callout-body”>
+        <div class=”callout-title”>Por qué es la función más potente de Agent Hub</div>
+        <div class=”callout-text”>Un agente solo puede hacer una cosa a la vez, y cuando termina su contexto desaparece. Las orquestaciones encadenan agentes en un pipeline inteligente: el reviewer analiza, el refactorizador actúa sobre ese análisis, el test-writer genera tests para los cambios resultantes — todo de forma automática, sin intervención manual entre pasos, con los ficheros reales del proyecto como base de trabajo.</div>
       </div>
     </div>
 
-    <div class="mockup">
-      <div class="mockup-bar">
-        <div class="mockup-dot" style="background:#ff5f57"></div>
-        <div class="mockup-dot" style="background:#febc2e"></div>
-        <div class="mockup-dot" style="background:#28c840"></div>
-        <div class="mockup-title">Agent Hub · Orquestaciones — Mi Proyecto</div>
-      </div>
-      <div class="mockup-body">
-
-        <!-- Lista de orquestaciones -->
-        <div style="display:grid;grid-template-columns:200px 1fr;gap:12px">
-          <div>
-            <div style="font-size:10px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)">Orquestaciones</div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <div style="background:var(--purple-dim);border:1px solid rgba(124,106,247,0.3);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--accent);font-family:var(--mono)">review-refactor-test</div>
-              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--text1);font-family:var(--mono)">security-audit-fix</div>
-              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--text1);font-family:var(--mono)">doc-generation</div>
-            </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text2);padding:5px 8px;border:1px dashed var(--border2);border-radius:5px;text-align:center"><i class="ti ti-plus" style="font-size:10px"></i> Nueva</div>
-          </div>
-          <div>
-            <!-- Canvas de agentes -->
-            <div style="font-size:10px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)">review-refactor-test</div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap">
-              <!-- Paso 1 -->
-              <div style="background:var(--bg3);border:1px solid rgba(52,211,153,0.4);border-radius:8px;padding:8px 12px;font-size:11px">
-                <div style="font-size:9px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Paso 1</div>
-                <div style="color:var(--text0);font-family:var(--mono);font-weight:600">code-reviewer</div>
-                <div style="font-size:10px;color:var(--text2);margin-top:2px">Analiza el código</div>
-              </div>
-              <!-- Flecha -->
-              <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-                <i class="ti ti-arrow-right" style="font-size:14px;color:var(--accent)"></i>
-                <span style="font-size:9px;color:var(--text3);font-family:var(--mono)">output</span>
-              </div>
-              <!-- Paso 2 -->
-              <div style="background:var(--bg3);border:1px solid rgba(96,165,250,0.4);border-radius:8px;padding:8px 12px;font-size:11px">
-                <div style="font-size:9px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Paso 2</div>
-                <div style="color:var(--text0);font-family:var(--mono);font-weight:600">refactor-expert</div>
-                <div style="font-size:10px;color:var(--text2);margin-top:2px">Refactoriza el código</div>
-              </div>
-              <!-- Flecha -->
-              <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-                <i class="ti ti-arrow-right" style="font-size:14px;color:var(--accent)"></i>
-                <span style="font-size:9px;color:var(--text3);font-family:var(--mono)">output + archivos</span>
-              </div>
-              <!-- Paso 3 -->
-              <div style="background:var(--bg3);border:1px solid rgba(124,106,247,0.4);border-radius:8px;padding:8px 12px;font-size:11px">
-                <div style="font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Paso 3</div>
-                <div style="color:var(--text0);font-family:var(--mono);font-weight:600">test-writer</div>
-                <div style="font-size:10px;color:var(--text2);margin-top:2px">Genera los tests</div>
-              </div>
-            </div>
-            <!-- Panel de ejecución -->
-            <div style="background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                <div style="font-size:11px;font-weight:700;color:var(--text0)">Ejecución en curso</div>
-                <span style="font-size:9px;background:var(--green-dim);border:1px solid rgba(52,211,153,0.25);color:var(--green);padding:2px 7px;border-radius:20px;font-family:var(--mono)"><i class="ti ti-circle-filled" style="font-size:7px"></i> paso 2 / 3</span>
-              </div>
-              <div style="font-family:var(--mono);font-size:10px;line-height:1.9;color:var(--text1)">
-                <div><span style="color:var(--green)">&#10003;</span> <span style="color:var(--text2)">[paso 1]</span> code-reviewer completado &mdash; 3 ficheros analizados</div>
-                <div><span style="color:var(--accent)">&#9654;</span> <span style="color:var(--text2)">[paso 2]</span> <span style="color:var(--text0)">refactor-expert ejecutando...</span></div>
-                <div style="color:var(--text3)"><span style="color:var(--text3)">&#9679;</span> <span style="color:var(--text3)">[paso 3]</span> test-writer pendiente</div>
-              </div>
-              <div style="margin-top:8px;display:flex;gap:6px">
-                <div style="font-size:10px;padding:4px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--border2);color:var(--coral)"><i class="ti ti-player-stop" style="font-size:10px"></i> Detener</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+    <div class=”screenshot”>
+      <div class=”screenshot-placeholder”>
+        <i class=”ti ti-photo” aria-hidden=”true”></i>
+        <span>screenshots/orquestaciones-lista.png</span>
+        <em>Vista principal de orquestaciones — listado de cards por proyecto</em>
       </div>
     </div>
 
-    <h4>Crear una orquestación</h4>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-body">
-          <div class="step-title">Ve a Vista Orquestaciones y pulsa “Nueva”</div>
-          <div class="step-desc">Elige el proyecto sobre el que trabajará la orquestación. La vista muestra el listado de orquestaciones del proyecto activo.</div>
+    <h4>Conceptos clave</h4>
+    <div class=”grid2” style=”margin-bottom:16px”>
+      <div class=”card accent-l”>
+        <div class=”card-icon”><i class=”ti ti-topology-ring-2” style=”color:var(--accent)”></i></div>
+        <div class=”card-title”>Orquestación</div>
+        <div class=”card-body”>Definición persistente de un workflow: lista ordenada de agentes + configuración de cada conexión entre ellos + configuración de ejecución. Se guarda como JSON en <code>.agent-hub/orchestrations/</code> dentro del proyecto.</div>
+      </div>
+      <div class=”card blue-l”>
+        <div class=”card-icon”><i class=”ti ti-arrows-transfer-down” style=”color:var(--blue)”></i></div>
+        <div class=”card-title”>Conexión (nodo)</div>
+        <div class=”card-body”>El enlace entre dos agentes consecutivos. En cada conexión defines qué información fluye del agente anterior al siguiente: su respuesta, los ficheros que modificó, el CLAUDE.md del proyecto, y contexto extra.</div>
+      </div>
+      <div class=”card green-l”>
+        <div class=”card-icon”><i class=”ti ti-database” style=”color:var(--green)”></i></div>
+        <div class=”card-title”>Contexto fijo</div>
+        <div class=”card-body”>Texto libre o ficheros del proyecto que se incluyen siempre en una conexión concreta, independientemente de lo que haya ocurrido antes. Se configura una sola vez al editar la orquestación.</div>
+      </div>
+      <div class=”card amber-l”>
+        <div class=”card-icon”><i class=”ti ti-forms” style=”color:var(--amber)”></i></div>
+        <div class=”card-title”>Contexto temporal</div>
+        <div class=”card-body”>Campos dinámicos (texto o fichero) que Agent Hub solicita al usuario justo antes de cada ejecución. Útil para pasar un ticket, un mensaje de commit o una rama como contexto fresco en cada run.</div>
+      </div>
+    </div>
+
+    <!-- ── Lista de orquestaciones ── -->
+    <h4>Lista de orquestaciones</h4>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Al entrar en la vista Orquestaciones, ves las tarjetas de todas las orquestaciones del proyecto seleccionado en el topbar. Cada tarjeta muestra: nombre, descripción, estado de la última ejecución, número total de ejecuciones y fecha de la última.
+    </p>
+
+    <div class=”screenshot”>
+      <div class=”screenshot-placeholder”>
+        <i class=”ti ti-photo” aria-hidden=”true”></i>
+        <span>screenshots/orquestaciones-cards.png</span>
+        <em>Tarjetas de orquestación con estado de última ejecución y contadores</em>
+      </div>
+    </div>
+
+    <div class=”grid3” style=”margin-bottom:16px”>
+      <div class=”card green-l”>
+        <div class=”card-title”><span class=”chip green”><i class=”ti ti-circle-check” style=”font-size:10px”></i> success</span></div>
+        <div class=”card-body”>La última ejecución completó todos los pasos sin errores.</div>
+      </div>
+      <div class=”card amber-l”>
+        <div class=”card-title”><span class=”chip amber”><i class=”ti ti-alert-triangle” style=”font-size:10px”></i> partial</span></div>
+        <div class=”card-body”>Algunos pasos se completaron pero hubo errores. Los pasos exitosos no se revierten.</div>
+      </div>
+      <div class=”card coral-l”>
+        <div class=”card-title”><span class=”chip” style=”background:var(--coral-dim);border-color:rgba(251,113,133,0.25);color:var(--coral)”><i class=”ti ti-x” style=”font-size:10px”></i> failed</span></div>
+        <div class=”card-body”>La ejecución falló. Si <code>stopOnError</code> estaba activo, se detuvo en el primer error.</div>
+      </div>
+    </div>
+
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:20px”>
+      Las acciones de cada tarjeta son: <strong>Editar</strong> (abre el editor visual), <strong>Ejecutar</strong> (abre el panel de ejecución directamente) y <strong>Eliminar</strong> (con confirmación modal — borra el JSON de la orquestación pero no el historial de ejecuciones).
+    </p>
+
+    <!-- ── Editor visual ── -->
+    <h4>Editor visual — los tres paneles</h4>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Al crear o editar una orquestación, la vista cambia a un editor de tres paneles en paralelo.
+    </p>
+
+    <div class=”screenshot”>
+      <div class=”screenshot-placeholder”>
+        <i class=”ti ti-photo” aria-hidden=”true”></i>
+        <span>screenshots/orquestaciones-editor.png</span>
+        <em>Editor visual con los tres paneles: paleta de agentes, lienzo y configurador de conexión</em>
+      </div>
+    </div>
+
+    <div class=”grid3” style=”margin-bottom:20px”>
+      <div class=”card accent-l”>
+        <div class=”card-icon”><i class=”ti ti-list” style=”color:var(--accent)”></i></div>
+        <div class=”card-title”>Panel izquierdo — Paleta</div>
+        <div class=”card-body”>Listado buscable de todos los agentes disponibles (global, sección, tecnología y proyecto). Arrastra cualquier agente al lienzo central para añadirlo al workflow.</div>
+      </div>
+      <div class=”card blue-l”>
+        <div class=”card-icon”><i class=”ti ti-layout-kanban” style=”color:var(--blue)”></i></div>
+        <div class=”card-title”>Panel central — Lienzo</div>
+        <div class=”card-body”>Visualización vertical del workflow. Los agentes aparecen como nodos conectados por líneas. Las conexiones son clicables para abrir su configurador. Los nodos son arrastrables para reordenar.</div>
+      </div>
+      <div class=”card green-l”>
+        <div class=”card-icon”><i class=”ti ti-adjustments” style=”color:var(--green)”></i></div>
+        <div class=”card-title”>Panel derecho — Configurador</div>
+        <div class=”card-body”>Aparece al hacer clic en una conexión del lienzo. Muestra los controles de DataFlow, contexto fijo, contexto temporal y configuración de ejecución. Auto-guarda al cambiar de conexión.</div>
+      </div>
+    </div>
+
+    <div class=”callout tip”>
+      <i class=”ti ti-drag-drop” aria-hidden=”true”></i>
+      <div class=”callout-body”>
+        <div class=”callout-title”>Drag &amp; drop para construir el flujo</div>
+        <div class=”callout-text”>Arrastra agentes desde la paleta izquierda a cualquier posición del lienzo. Para reordenar, arrastra el icono de grip (<i class=”ti ti-grip-vertical” style=”font-size:11px”></i>) del nodo a la posición deseada. Las conexiones se regeneran automáticamente preservando su configuración.</div>
+      </div>
+    </div>
+
+    <!-- ── DataFlow ── -->
+    <h4>DataFlow — qué se pasa entre agentes</h4>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      En cada conexión defines exactamente qué información del agente anterior recibe el siguiente. Activa o desactiva cada canal con un checkbox en el configurador:
+    </p>
+    <div class=”grid2” style=”margin-bottom:16px”>
+      <div class=”card accent-l”>
+        <div class=”card-title”><i class=”ti ti-message” style=”margin-right:6px;color:var(--accent)”></i>Output del agente anterior</div>
+        <div class=”card-body”>El texto completo de respuesta que generó el agente anterior. Es el canal más habitual: el reviewer escribe su análisis y el refactorizador lo lee como punto de partida.</div>
+      </div>
+      <div class=”card blue-l”>
+        <div class=”card-title”><i class=”ti ti-files” style=”margin-right:6px;color:var(--blue)”></i>Ficheros modificados</div>
+        <div class=”card-body”>Lista de rutas + contenido de todos los ficheros que el paso anterior creó o modificó. El agente receptor los recibe en su contexto para trabajar sobre ellos.</div>
+      </div>
+      <div class=”card green-l”>
+        <div class=”card-title”><i class=”ti ti-file-description” style=”margin-right:6px;color:var(--green)”></i>CLAUDE.md del proyecto</div>
+        <div class=”card-body”>El fichero de contexto del proyecto. Útil para pasar las reglas y convenciones del proyecto a un agente que no las conozca de antemano.</div>
+      </div>
+      <div class=”card amber-l”>
+        <div class=”card-title”><i class=”ti ti-file-search” style=”margin-right:6px;color:var(--amber)”></i>Ficheros selectivos</div>
+        <div class=”card-body”>Rutas específicas del proyecto separadas por coma. Para pasar un fichero concreto que no necesariamente modificó el paso anterior pero que el siguiente necesita ver.</div>
+      </div>
+    </div>
+    <div class=”callout warn”>
+      <i class=”ti ti-alert-triangle” aria-hidden=”true”></i>
+      <div class=”callout-body”>
+        <div class=”callout-title”>Al menos un canal debe estar activo</div>
+        <div class=”callout-text”>La validación previa a la ejecución rechaza conexiones donde ningún canal de DataFlow está activado: el agente receptor no tendría ningún contexto relevante del paso anterior y ejecutaría “en vacío”.</div>
+      </div>
+    </div>
+
+    <!-- ── Contexto fijo y temporal ── -->
+    <h4>Contexto fijo y contexto temporal</h4>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Además del DataFlow, cada conexión puede incluir contexto adicional que se suma al mensaje del agente receptor.
+    </p>
+    <div class=”grid2” style=”margin-bottom:16px”>
+      <div class=”card green-l”>
+        <div class=”card-icon”><i class=”ti ti-database” style=”color:var(--green)”></i></div>
+        <div class=”card-title”>Contexto fijo</div>
+        <div class=”card-body”>
+          <p style=”margin-bottom:6px”>Se configura en el editor y siempre se incluye en esa conexión:</p>
+          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:3px”>
+            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Texto libre</strong> — reglas adicionales, instrucciones extra, un fragmento de código de referencia.</li>
+            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Ficheros del proyecto</strong> — rutas absolutas o relativas que se leen en tiempo de ejecución. Selecciona con el selector de fichero nativo (<i class=”ti ti-folder” style=”font-size:11px”></i>).</li>
+          </ul>
         </div>
       </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-body">
-          <div class="step-title">Añade agentes en secuencia</div>
-          <div class="step-desc">Desde el canvas del editor, agrega los agentes que componen el workflow. Cada agente es un nodo. El orden determina la secuencia de ejecución.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-body">
-          <div class="step-title">Configura las conexiones</div>
-          <div class="step-desc">Para cada conexión entre agentes puedes configurar qué parte del output del paso anterior se inyecta como contexto al siguiente (<strong>dataFlow</strong>) y si hay contexto extra fijo o temporal.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-body">
-          <div class="step-title">Guarda y ejecuta</div>
-          <div class="step-desc">Pulsa <strong>Guardar</strong> para persistir la definición. Pulsa <strong>Ejecutar</strong> para lanzar el workflow. El panel de ejecución muestra logs en tiempo real por paso.</div>
+      <div class=”card amber-l”>
+        <div class=”card-icon”><i class=”ti ti-forms” style=”color:var(--amber)”></i></div>
+        <div class=”card-title”>Contexto temporal</div>
+        <div class=”card-body”>
+          <p style=”margin-bottom:6px”>Campos que Agent Hub pide al usuario cada vez que se ejecuta la orquestación:</p>
+          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:3px”>
+            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Tipo texto</strong> — campo libre para introducir cualquier valor en cada run (mensaje de PR, número de ticket, rama de referencia…).</li>
+            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Tipo fichero</strong> — selector de fichero que se abre al inicio de cada ejecución.</li>
+          </ul>
+          <p style=”margin-top:6px;font-size:12px;color:var(--text1)”>Los campos marcados como <strong>requeridos</strong> bloquean el inicio de la ejecución si están vacíos.</p>
         </div>
       </div>
     </div>
 
+    <!-- ── Config de ejecución ── -->
+    <h4>Configuración de ejecución</h4>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Aparece en la parte inferior del panel configurador al seleccionar cualquier conexión. Aplica a toda la orquestación:
+    </p>
+    <div class=”grid2” style=”margin-bottom:16px”>
+      <div class=”card”>
+        <div class=”card-title”><code>stopOnError</code></div>
+        <div class=”card-body”>Si está activo (defecto: sí), la ejecución se detiene en el primer paso que falle. Si está desactivado, continúa con los pasos siguientes aunque alguno haya fallado.</div>
+      </div>
+      <div class=”card”>
+        <div class=”card-title”><code>maxTurns</code></div>
+        <div class=”card-body”>Máximo de turnos del Subsistema CLI por paso (defecto: 10). Aumenta este valor si tus agentes necesitan muchas iteraciones para completar su tarea.</div>
+      </div>
+      <div class=”card”>
+        <div class=”card-title”><code>timeout</code></div>
+        <div class=”card-body”>Tiempo máximo por paso en milisegundos (defecto: 300 000 ms = 5 min). Si un paso supera este tiempo, se cancela y se registra como error.</div>
+      </div>
+      <div class=”card”>
+        <div class=”card-title”><code>validateAfterEachStep</code></div>
+        <div class=”card-body”>Reservado para versiones futuras. Actualmente sin efecto en la ejecución.</div>
+      </div>
+    </div>
+
+    <!-- ── Crear una orquestación ── -->
+    <h4>Crear una orquestación paso a paso</h4>
+    <div class=”steps”>
+      <div class=”step”>
+        <div class=”step-num accent”>1</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Selecciona el proyecto en el topbar</div>
+          <div class=”step-desc”>El selector de proyecto en la barra superior de la vista Orquestaciones filtra las orquestaciones por proyecto. Si cambias de proyecto se descarta el editor en curso.</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num accent”>2</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Pulsa “Nueva orquestación”</div>
+          <div class=”step-desc”>Un modal pide nombre y descripción. Al aceptar, la orquestación se crea en disco (vacía, sin agentes) y el editor visual se abre directamente.</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num accent”>3</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Arrastra agentes desde la paleta al lienzo</div>
+          <div class=”step-desc”>Busca en la paleta izquierda el primer agente del workflow y arrástralo al lienzo. Repite con el segundo, tercero… El lienzo los muestra en orden vertical con flechas de conexión entre ellos.</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num accent”>4</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Haz clic en cada conexión para configurarla</div>
+          <div class=”step-desc”>La flecha entre dos agentes representa la conexión. Al hacer clic, el panel derecho muestra el configurador: activa los canales de DataFlow que necesites, añade contexto fijo si aplica y define campos temporales si quieres que te los pidan en cada run.</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num accent”>5</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Ajusta la configuración de ejecución</div>
+          <div class=”step-desc”>En el panel derecho, la sección inferior permite cambiar <code>stopOnError</code>, <code>maxTurns</code> y <code>timeout</code>. El botón “Aplicar cambios” guarda la conexión activa; al cambiar de conexión el auto-save lo hace automáticamente.</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num accent”>6</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Ejecuta</div>
+          <div class=”step-desc”>Usa el botón <strong>Ejecutar</strong> en el topbar del editor para lanzar la orquestación directamente desde el editor, o vuelve al listado y usa el botón de ejecución de la tarjeta.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Panel de ejecución ── -->
     <h4>Panel de ejecución</h4>
-    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Durante la ejecución cada paso muestra su estado en tiempo real via Server-Sent Events (SSE). Para cada paso puedes ver:
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      El panel de ejecución tiene tres fases secuenciales.
     </p>
-    <div class="grid3" style="margin-bottom:12px">
-      <div class="card green-l">
-        <div class="card-icon"><i class="ti ti-circle-check" style="color:var(--green)"></i></div>
-        <div class="card-title">Completado</div>
-        <div class="card-body">El agente terminó sin errores. Muestra los ficheros modificados y tokens consumidos.</div>
-      </div>
-      <div class="card amber-l">
-        <div class="card-icon"><i class="ti ti-player-play" style="color:var(--amber)"></i></div>
-        <div class="card-title">Ejecutando</div>
-        <div class="card-body">El agente está procesando. El log se actualiza en tiempo real con cada herramienta que invoca.</div>
-      </div>
-      <div class="card coral-l">
-        <div class="card-icon"><i class="ti ti-alert-circle" style="color:var(--coral)"></i></div>
-        <div class="card-title">Error</div>
-        <div class="card-body">Fallo en el paso. La ejecución se detiene si <code>stopOnError</code> está activo y se ofrece el rollback del paso fallido.</div>
+
+    <div class=”screenshot”>
+      <div class=”screenshot-placeholder”>
+        <i class=”ti ti-photo” aria-hidden=”true”></i>
+        <span>screenshots/orquestaciones-ejecucion.png</span>
+        <em>Panel de ejecución en curso — logs SSE por paso con estados en tiempo real</em>
       </div>
     </div>
 
+    <div class=”steps” style=”margin-bottom:20px”>
+      <div class=”step”>
+        <div class=”step-num amber”>1</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Formulario previo</div>
+          <div class=”step-desc”>Si la orquestación tiene campos de contexto temporal, Agent Hub los muestra antes de lanzar. Los campos requeridos bloquean el botón “Ejecutar”. También muestra un resumen de la configuración de ejecución (agentes, <code>maxTurns</code>, <code>timeout</code>).</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num amber”>2</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Ejecución en tiempo real</div>
+          <div class=”step-desc”>Los logs de cada paso se reciben en tiempo real vía SSE. Para cada paso se muestra: nombre del agente, estado (ejecutando / completado / error), ficheros modificados hasta ese momento y progreso general del workflow. Los eventos de tipo <code>step-progress</code> aparecen como líneas de log con su nivel (info / warn / error).</div>
+        </div>
+      </div>
+      <div class=”step”>
+        <div class=”step-num amber”>3</div>
+        <div class=”step-body”>
+          <div class=”step-title”>Resultado final</div>
+          <div class=”step-desc”>Al completar, se muestra: estado global (success / partial / failed), tarjeta por paso con respuesta del agente, ficheros modificados, tokens consumidos y duración. Los pasos con error muestran el mensaje de error y la categoría del fallo.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class=”grid3” style=”margin-bottom:16px”>
+      <div class=”card green-l”>
+        <div class=”card-icon”><i class=”ti ti-circle-check” style=”color:var(--green)”></i></div>
+        <div class=”card-title”>Paso completado</div>
+        <div class=”card-body”>El agente terminó sin errores. Se muestran los ficheros modificados, tokens de entrada/salida y duración del paso.</div>
+      </div>
+      <div class=”card amber-l”>
+        <div class=”card-icon”><i class=”ti ti-loader” style=”color:var(--amber)”></i></div>
+        <div class=”card-title”>Paso ejecutando</div>
+        <div class=”card-body”>El log SSE muestra en tiempo real cada herramienta que invoca el agente (lectura de fichero, escritura, búsqueda…).</div>
+      </div>
+      <div class=”card coral-l”>
+        <div class=”card-icon”><i class=”ti ti-alert-circle” style=”color:var(--coral)”></i></div>
+        <div class=”card-title”>Paso fallido</div>
+        <div class=”card-body”>El mensaje de error y su categoría se muestran en la tarjeta del paso. Si <code>stopOnError</code> está activo, los pasos posteriores aparecen como no ejecutados.</div>
+      </div>
+    </div>
+
+    <!-- ── Rollback ── -->
     <h4>Rollback granular</h4>
-    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Antes de ejecutar cada paso, Agent Hub hace un backup de los ficheros afectados. Desde el historial de ejecuciones puedes revertir cualquier paso concreto de cualquier ejecución anterior sin afectar al resto.
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Antes de ejecutar la orquestación, Agent Hub toma un <strong>snapshot</strong> del estado del filesystem del proyecto (hasta 500 ficheros de texto, máx. 256 KB por fichero). Este snapshot se guarda en:
     </p>
-
-    <h4>Casos de uso habituales</h4>
-    <div class="grid3">
-      <div class="card accent-l">
-        <div class="card-title">Review → Refactor → Testing</div>
-        <div class="card-body">El revisor analiza el código, el refactorizador aplica mejoras basadas en ese análisis, el generador de tests crea tests para los cambios resultantes.</div>
-      </div>
-      <div class="card blue-l">
-        <div class="card-title">Security Audit → Fix</div>
-        <div class="card-body">El auditor identifica vulnerabilidades y genera un reporte. El fixer aplica los patches basándose en ese reporte.</div>
-      </div>
-      <div class="card green-l">
-        <div class="card-title">Doc Generation</div>
-        <div class="card-body">El analizador extrae firmas y comentarios. El doc-writer genera la documentación. El formateador estructura el resultado.</div>
+    <div class=”code-block” style=”margin-bottom:12px”>
+      <span class=”dim”>{ruta-del-proyecto}/</span><br>
+      <span class=”dim”>└── </span><span class=”acc”>.agent-hub/</span><br>
+      <span class=”dim”>    └── executions/</span><br>
+      <span class=”dim”>        └── </span><span class=”hi”>{timestamp}-{orchId}/</span><br>
+      <span class=”dim”>            ├── </span><span class=”grn”>result.json</span><span class=”dim”>      ← resultado completo de la ejecución</span><br>
+      <span class=”dim”>            └── </span><span class=”grn”>snapshot.json</span><span class=”dim”>    ← contenido previo del filesystem</span>
+    </div>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Desde el resultado final puedes hacer rollback de cualquier paso individual pulsando el botón correspondiente en su tarjeta. El rollback restaura solo los ficheros que ese paso modificó, sin tocar lo que hicieron los demás pasos.
+    </p>
+    <div class=”callout tip”>
+      <i class=”ti ti-history” aria-hidden=”true”></i>
+      <div class=”callout-body”>
+        <div class=”callout-title”>Historial de ejecuciones</div>
+        <div class=”callout-text”>Cada ejecución queda registrada. Puedes ver el historial completo de una orquestación desde su tarjeta en el listado. El historial incluye fecha, duración, estado y el detalle completo de cada paso con posibilidad de rollback posterior.</div>
       </div>
     </div>
 
-    <div class="callout tip">
-      <i class="ti ti-bulb" aria-hidden="true"></i>
-      <div class="callout-body">
-        <div class="callout-title">Funciona con cualquier proveedor</div>
-        <div class="callout-text">El orquestador usa el Subsistema CLI para que los proveedores API y GitHub Copilot puedan operar sobre el filesystem del proyecto con las mismas capacidades que Claude CLI nativo. No necesitas CLI instalada para ejecutar orquestaciones con API key o GitHub Copilot.</div>
+    <!-- ── Validación ── -->
+    <h4>Validación previa</h4>
+    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+      Antes de lanzar cualquier ejecución, Agent Hub valida la orquestación. Si hay errores, los muestra en un banner coral y bloquea el inicio. Las comprobaciones son:
+    </p>
+    <div class=”grid2” style=”margin-bottom:16px”>
+      <div class=”card”>
+        <div class=”card-body”>
+          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:5px”>
+            <li style=”font-size:12px;color:var(--text1)”>Al menos 2 agentes en la orquestación</li>
+            <li style=”font-size:12px;color:var(--text1)”>Todos los agentes existen en disco</li>
+            <li style=”font-size:12px;color:var(--text1)”>Número de nodos = agentes − 1</li>
+            <li style=”font-size:12px;color:var(--text1)”>Índices <code>from</code>/<code>to</code> consecutivos y válidos</li>
+          </ul>
+        </div>
+      </div>
+      <div class=”card”>
+        <div class=”card-body”>
+          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:5px”>
+            <li style=”font-size:12px;color:var(--text1)”>Cada conexión tiene al menos un canal de DataFlow activo</li>
+            <li style=”font-size:12px;color:var(--text1)”>Los ficheros de contexto fijo existen en disco</li>
+            <li style=”font-size:12px;color:var(--text1)”>El directorio del proyecto existe</li>
+            <li style=”font-size:12px;color:var(--text1)”><code>timeout ≥ 5 000 ms</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Casos de uso ── -->
+    <h4>Casos de uso habituales</h4>
+    <div class=”grid3” style=”margin-bottom:16px”>
+      <div class=”card accent-l”>
+        <div class=”card-title”><i class=”ti ti-git-pull-request” style=”margin-right:6px;color:var(--accent)”></i>Review → Refactor → Tests</div>
+        <div class=”card-body”>El reviewer analiza el código y produce un informe. El refactorizador aplica mejoras basándose en ese informe. El test-writer genera tests para los cambios introducidos. DataFlow: output + ficheros modificados en ambas conexiones.</div>
+      </div>
+      <div class=”card blue-l”>
+        <div class=”card-title”><i class=”ti ti-shield-check” style=”margin-right:6px;color:var(--blue)”></i>Security Audit → Fix</div>
+        <div class=”card-body”>El auditor identifica vulnerabilidades con referencias a rutas concretas. El fixer aplica los patches sobre esas rutas. Contexto temporal: rama o versión del código a auditar.</div>
+      </div>
+      <div class=”card green-l”>
+        <div class=”card-title”><i class=”ti ti-file-text” style=”margin-right:6px;color:var(--green)”></i>Análisis → Documentación</div>
+        <div class=”card-body”>El analizador extrae firmas, exportaciones y comentarios. El doc-writer genera el fichero de documentación. Contexto fijo en la segunda conexión: plantilla de formato que se debe usar.</div>
+      </div>
+      <div class=”card amber-l”>
+        <div class=”card-title”><i class=”ti ti-bug” style=”margin-right:6px;color:var(--amber)”></i>Debug → Fix → Validate</div>
+        <div class=”card-body”>El debugger localiza la causa raíz de un bug. El fixer lo corrige. El validador ejecuta los tests y confirma la reparación. Contexto temporal en el primer paso: descripción del bug o fragmento de log.</div>
+      </div>
+      <div class=”card coral-l”>
+        <div class=”card-title”><i class=”ti ti-arrows-transfer-up” style=”margin-right:6px;color:var(--coral)”></i>Refactor incremental</div>
+        <div class=”card-body”>Varias pasadas de refactorización con agentes especializados: primero renombrado y estructura, luego rendimiento, luego eliminación de código muerto. Cada paso recibe los ficheros del anterior como punto de partida.</div>
+      </div>
+      <div class=”card”>
+        <div class=”card-title”><i class=”ti ti-git-commit” style=”margin-right:6px;color:var(--text2)”></i>Onboarding automático</div>
+        <div class=”card-body”>El analizador lee el proyecto y produce un resumen. El doc-writer genera el CLAUDE.md o README inicial. Contexto temporal: nombre del equipo o tech lead al que va dirigida la documentación.</div>
+      </div>
+    </div>
+
+    <div class=”callout tip”>
+      <i class=”ti ti-cpu” aria-hidden=”true”></i>
+      <div class=”callout-body”>
+        <div class=”callout-title”>Funciona con cualquier proveedor de IA</div>
+        <div class=”callout-text”>El orquestador usa el Subsistema CLI para que los proveedores API Anthropic y GitHub Copilot puedan operar directamente sobre el filesystem del proyecto (leer, escribir, buscar ficheros) con las mismas capacidades que Claude CLI nativo. No necesitas tener la CLI instalada para ejecutar orquestaciones si usas API key o GitHub Copilot.</div>
+      </div>
+    </div>
+
+    <div class=”callout warn”>
+      <i class=”ti ti-clock” aria-hidden=”true”></i>
+      <div class=”callout-body”>
+        <div class=”callout-title”>Las orquestaciones consumen más tiempo y tokens que un agente solo</div>
+        <div class=”callout-text”>Cada paso es una ejecución completa de un agente con acceso al filesystem. Una orquestación de 3 agentes con <code>maxTurns: 10</code> puede suponer hasta 30 turnos de IA en total. Ajusta <code>maxTurns</code> y <code>timeout</code> según la complejidad real de cada paso para no exceder límites de tu proveedor.</div>
       </div>
     </div>
   </div>
@@ -1707,19 +1941,23 @@ const observer = new IntersectionObserver(entries => {
 }, { rootMargin: '-30% 0px -60% 0px' });
 sections.forEach(s => s.id && observer.observe(s));
 
-// Muestra las capturas reales si los ficheros existen
+// Muestra las capturas reales si los ficheros existen; si no, deja el placeholder visible
 document.querySelectorAll('.screenshot').forEach(el => {
-  const placeholder = el.querySelector('.screenshot-placeholder span');
-  if (!placeholder) return;
-  const src = placeholder.textContent.trim();
+  const ph = el.querySelector('.screenshot-placeholder');
+  const span = ph ? ph.querySelector('span') : null;
+  if (!span) return;
+  const src = './' + span.textContent.trim();
   const img = new Image();
   img.onload = () => {
+    img.setAttribute('src', img.src);
     img.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin:0 auto';
     el.innerHTML = '';
     el.appendChild(img);
     el.style.padding = '0';
     el.style.border = 'none';
+    el.style.minHeight = '';
   };
+  img.onerror = () => { ph.style.display = 'flex'; };
   img.src = src;
 });
 </script>
