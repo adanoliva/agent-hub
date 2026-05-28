@@ -27,7 +27,6 @@ type FlatAgent = Agent & { level?: string };
 
 const QUICK_PROMPTS = [
   { label: 'Optimizar agente', icon: 'ti-robot',     text: 'Tengo el siguiente system prompt de un agente. Analízalo y propón mejoras para hacerlo más preciso y efectivo:\n\n' },
-  { label: 'Crear CLAUDE.md',  icon: 'ti-file-text', text: 'Ayúdame a crear un archivo CLAUDE.md para un proyecto de tipo: ' },
   { label: 'Revisar prompt',   icon: 'ti-eye',        text: 'Revisa este system prompt e indica si hay instrucciones contradictorias, vagas o que puedan mejorarse:\n\n' },
   { label: 'Nuevo agente',     icon: 'ti-plus',       text: 'Quiero crear un agente para: ' },
 ];
@@ -460,6 +459,18 @@ export function Chat() {
 
           {/* Quick prompts */}
           <div className="chat-quick">
+            {/* Context-file quick prompt: adapts to the project's provider */}
+            {(() => {
+              const ctxFile = ctxInfo?.label ?? 'contexto del proyecto';
+              const ctxText = ctxInfo?.type === 'github'
+                ? `Ayúdame a crear un archivo ${ctxFile} para un proyecto de tipo: `
+                : `Ayúdame a crear un archivo ${ctxFile} para un proyecto de tipo: `;
+              return (
+                <button className="chat-quick-btn" onClick={() => insertQuick(ctxText)}>
+                  <i className="ti ti-file-text" /> Crear {ctxFile}
+                </button>
+              );
+            })()}
             {QUICK_PROMPTS.map((q) => (
               <button key={q.label} className="chat-quick-btn" onClick={() => insertQuick(q.text)}>
                 <i className={`ti ${q.icon}`} /> {q.label}

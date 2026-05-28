@@ -14,6 +14,7 @@ export function useElectron() {
     openExternal:  (url: string)            => api?.openExternal(url),
     openVSCode:    (p: string)              => api?.openVSCode(p),
     pickFolder:    (): Promise<string|null> => api?.pickFolder()      ?? Promise.resolve(null),
+    pickFile:      (): Promise<string|null> => api?.pickFile()        ?? Promise.resolve(null),
     checkForUpdate:()                       => api?.checkForUpdate?.(),
     downloadUpdate:()                       => api?.downloadUpdate?.(),
     installUpdate: ()                       => api?.installUpdate?.(),

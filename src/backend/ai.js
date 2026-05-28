@@ -201,18 +201,25 @@ function callCLI(prompt, opts = {}) {
       }
       const raw = stdout.trim();
       try {
-        const parsed = JSON.parse(raw);
-        const text   = parsed.result ?? raw;
-        const usage  = parsed.usage || {};
-        trackUsage({
-          inputTokens:  usage.input_tokens  || 0,
-          outputTokens: usage.output_tokens || 0,
-          costUSD:      parsed.total_cost_usd || 0,
-        });
-        resolve(text.trim());
+        const parsed       = JSON.parse(raw);
+        const text         = (parsed.result ?? raw).trim();
+        const usage        = parsed.usage || {};
+        const inputTokens  = usage.input_tokens  || 0;
+        const outputTokens = usage.output_tokens || 0;
+        const costUSD      = parsed.total_cost_usd || 0;
+        trackUsage({ inputTokens, outputTokens, costUSD });
+        if (opts.returnRich) {
+          resolve({ text, inputTokens, outputTokens, costUSD });
+        } else {
+          resolve(text);
+        }
       } catch {
         // Old CLI version without JSON output — use raw text, no usage data
-        resolve(raw);
+        if (opts.returnRich) {
+          resolve({ text: raw, inputTokens: 0, outputTokens: 0, costUSD: 0 });
+        } else {
+          resolve(raw);
+        }
       }
     });
 
@@ -225,6 +232,24 @@ function callCLI(prompt, opts = {}) {
       }
     });
   });
+}
+
+// ── callAIRich — returns { text, inputTokens, outputTokens, costUSD } ────────
+
+/**
+ * Like callAI but returns { text, inputTokens, outputTokens, costUSD }.
+ * For CLI: parses the JSON output from --output-format json.
+ * For API/GitHub: the orchestrator uses callAIWithSubsystemCLI which already returns tokens;
+ * those paths fall back to callAI (text only) when invoked from here.
+ */
+async function callAIRich(prompt, opts = {}) {
+  const cfg      = readConfig();
+  const provider = cfg.aiProvider || 'cli';
+  if (provider === 'cli') return callCLI(prompt, { ...opts, returnRich: true });
+  // For API/GitHub the orchestrator uses callAIWithSubsystemCLI which already returns tokens.
+  // Provide a passthrough that returns text with zero token counts.
+  const text = await callAI(prompt, opts);
+  return { text, inputTokens: 0, outputTokens: 0, costUSD: 0 };
 }
 
 // ── API backend ───────────────────────────────────────────────────────────────
@@ -913,6 +938,122 @@ async function callAIChat(messages, opts = {}) {
   return callCLI(lines.join('\n\n'), opts);
 }
 
+// ── Low-level chat with token tracking (for Subsystem CLI) ───────────────────
+
+/**
+ * Sends a multi-turn conversation to the configured AI provider and returns
+ * both the response text and token counts. Used internally by the Subsystem CLI.
+ *
+ * @param {Array<{role:'user'|'assistant', content:string}>} messages
+ * @param {string} [systemPrompt]
+ * @param {object} [opts]
+ * @param {string} [opts.provider]    — override provider ('api'|'github')
+ * @param {number} [opts.maxTokens]
+ * @returns {Promise<{ text: string, inputTokens: number, outputTokens: number }>}
+ */
+async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
+  const cfg      = readConfig();
+  const provider = opts.provider || cfg.aiProvider || 'cli';
+
+  if (provider === 'api') {
+    if (!cfg.apiKey) throw new Error('No API key configured');
+    let Anthropic;
+    try { Anthropic = require('@anthropic-ai/sdk'); }
+    catch { throw new Error('@anthropic-ai/sdk not installed. Run: npm install @anthropic-ai/sdk'); }
+
+    const client = new Anthropic.default({ apiKey: cfg.apiKey });
+    const params = {
+      model:      MODEL,
+      max_tokens: opts.maxTokens || 4096,
+      messages,
+    };
+    if (systemPrompt) params.system = systemPrompt;
+
+    const result = await client.messages.create(params);
+    const usage  = result.usage || {};
+    const inputTokens  = usage.input_tokens  || 0;
+    const outputTokens = usage.output_tokens || 0;
+    trackUsage({
+      inputTokens,
+      outputTokens,
+      costUSD: calcAnthropicCost(result.model || MODEL, inputTokens, outputTokens),
+    });
+    return {
+      text: result.content.filter(b => b.type === 'text').map(b => b.text).join(''),
+      inputTokens,
+      outputTokens,
+    };
+  }
+
+  if (provider === 'github') {
+    if (!cfg.githubToken) throw new Error('No GitHub token configured');
+    const msgsToSend = systemPrompt
+      ? [{ role: 'system', content: systemPrompt }, ...messages]
+      : messages;
+
+    const response = await fetch(GITHUB_MODELS_URL, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${cfg.githubToken}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        model:      cfg.githubModel || GITHUB_MODELS_DEFAULT,
+        messages:   msgsToSend,
+        max_tokens: opts.maxTokens || 4096,
+      }),
+      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err.error?.message || err.message || response.statusText;
+      throw new Error(mapGitHubModelsError(response.status, msg));
+    }
+
+    const data  = await response.json();
+    const usage = data.usage || {};
+    const inputTokens  = usage.prompt_tokens     || 0;
+    const outputTokens = usage.completion_tokens || 0;
+    trackUsage({ inputTokens, outputTokens });
+    return {
+      text: data.choices?.[0]?.message?.content || '',
+      inputTokens,
+      outputTokens,
+    };
+  }
+
+  throw new Error('Subsystem CLI is only available for api and github providers');
+}
+
+// ── Subsystem CLI integration ─────────────────────────────────────────────────
+
+/**
+ * Executes a prompt using the Subsystem CLI (virtual tool-use loop).
+ * Intended for API / GitHub providers that lack native filesystem access.
+ *
+ * @param {string} prompt              — user task / instruction
+ * @param {string} agentSystemPrompt   — agent's original system prompt
+ * @param {object} opts
+ * @param {string}  opts.projectPath   — absolute path to project root
+ * @param {string}  [opts.projectContext] — content of CLAUDE.md / instructions
+ * @param {string}  [opts.provider]    — 'api' | 'github'
+ * @param {number}  [opts.maxTurns=10]
+ * @param {number}  [opts.timeout=300000]
+ * @returns {Promise<SubsystemCLIResult>}
+ */
+async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
+  const { execute } = require('./subsystem-cli');
+
+  const result = await execute(prompt, agentSystemPrompt || '', {
+    projectPath:    opts.projectPath    || '',
+    projectContext: opts.projectContext || '',
+    maxTurns:       opts.maxTurns       || 10,
+    timeout:        opts.timeout        || 300_000,
+    callAIRaw: (messages, systemPrompt) =>
+      callAIChatWithTokens(messages, systemPrompt, { provider: opts.provider }),
+  });
+
+  return result;
+}
+
 // ── Agent system prompt cross-provider adaptation ─────────────────────────────
 
 const ADAPTATION_PROMPTS = {
@@ -958,9 +1099,13 @@ async function adaptSystemPromptForProvider(agent, targetProvider) {
 
 module.exports = {
   callAI,
+  callAIRich,
+  calcAnthropicCost,
   adaptSystemPromptForProvider,
   generateProjectSuggestions,
   callAIChat,
+  callAIChatWithTokens,
+  callAIWithSubsystemCLI,
   generateAgentPrompt,
   generateSuggestions,
   getSuggestions,

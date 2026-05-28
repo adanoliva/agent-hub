@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Dialogs
   pickFolder:  ()    => ipcRenderer.invoke('dialog:pickFolder'),
+  pickFile:    ()    => ipcRenderer.invoke('dialog:pickFile'),
 
   // Close dialog
   onCloseRequested: (cb) => ipcRenderer.on('app:close-requested', () => cb()),

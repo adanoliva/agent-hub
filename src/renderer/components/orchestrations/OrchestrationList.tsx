@@ -1,0 +1,141 @@
+import React, { useState, useEffect } from 'react';
+import { req } from '../../api';
+import type { Orchestration, OrchestrateNode, Project } from '../../types';
+import { useStore } from '../../store';
+import { Modal } from '../ui/Modal';
+
+interface Props {
+  orchestrations: Orchestration[];
+  project:        Project;
+  onSelect:       (orch: Orchestration) => void;
+  onDelete:       (orchId: string) => void;
+  onExecute:      (orch: Orchestration) => void;
+  onNew:          () => void;
+}
+
+const STATUS_META: Record<string, { icon: string; cls: string; label: string }> = {
+  success: { icon: 'ti-circle-check', cls: 'green',  label: 'Exitoso'   },
+  partial: { icon: 'ti-alert-triangle', cls: 'amber', label: 'Parcial'   },
+  failed:  { icon: 'ti-alert-circle',   cls: 'coral', label: 'Fallido'   },
+};
+
+export function OrchestrationList({ orchestrations, project, onSelect, onDelete, onExecute, onNew }: Props) {
+  const addToast   = useStore(s => s.addToast);
+  const [deleting,        setDeleting]        = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const confirmOrch = orchestrations.find(o => o.id === confirmDeleteId);
+
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
+    setDeleting(confirmDeleteId);
+    setConfirmDeleteId(null);
+    try {
+      await req('DELETE', `/orchestrations/${confirmDeleteId}`);
+      onDelete(confirmDeleteId);
+      addToast('Orquestación eliminada', 'ok');
+    } catch {
+      addToast('Error al eliminar', 'err');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  if (orchestrations.length === 0) {
+    return (
+      <div className="orch-empty">
+        <i className="ti ti-topology-ring-2" />
+        <p>No hay orquestaciones para <strong>{project.name}</strong></p>
+        <button className="btn primary" onClick={onNew}>
+          <i className="ti ti-plus" /> Nueva orquestación
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+    <div className="orch-list">
+      {orchestrations.map(orch => {
+        const statusMeta = orch.lastExecutionStatus ? STATUS_META[orch.lastExecutionStatus] : null;
+        return (
+          <div key={orch.id} className="orch-card" onClick={() => onSelect(orch)}>
+            <div className="orch-card-header">
+              <div className="orch-card-title">
+                <i className="ti ti-topology-ring-2" />
+                <span>{orch.name}</span>
+              </div>
+              <div className="orch-card-actions" onClick={e => e.stopPropagation()}>
+                <button
+                  className="btn ghost sm"
+                  title="Ejecutar"
+                  onClick={() => onExecute(orch)}
+                >
+                  <i className="ti ti-player-play" />
+                </button>
+                <button
+                  className="btn ghost sm"
+                  title="Eliminar"
+                  disabled={deleting === orch.id}
+                  onClick={e => { e.stopPropagation(); setConfirmDeleteId(orch.id); }}
+                >
+                  <i className="ti ti-trash" />
+                </button>
+              </div>
+            </div>
+
+            {orch.description && (
+              <p className="orch-card-desc">{orch.description}</p>
+            )}
+
+            <div className="orch-card-meta">
+              <span className="orch-card-agents">
+                <i className="ti ti-cpu" />
+                {orch.agents.length} agente{orch.agents.length !== 1 ? 's' : ''}
+              </span>
+              {orch.executionCount > 0 && (
+                <span className="orch-card-runs">
+                  <i className="ti ti-history" />
+                  {orch.executionCount} ejecución{orch.executionCount !== 1 ? 'es' : ''}
+                </span>
+              )}
+              {statusMeta && (
+                <span className={`badge ${statusMeta.cls}`}>
+                  <i className={`ti ${statusMeta.icon}`} /> {statusMeta.label}
+                </span>
+              )}
+            </div>
+
+            <div className="orch-card-agents-preview">
+              {orch.agents.slice(0, 4).map((name, i) => (
+                <React.Fragment key={i}>
+                  <span className="orch-agent-chip">{name}</span>
+                  {i < orch.agents.length - 1 && i < 3 && (
+                    <i className="ti ti-arrow-right orch-arrow" />
+                  )}
+                </React.Fragment>
+              ))}
+              {orch.agents.length > 4 && (
+                <span className="orch-agent-chip more">+{orch.agents.length - 4}</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {confirmOrch && (
+      <Modal
+        title="Eliminar orquestación"
+        sub={`¿Seguro que quieres eliminar <strong>${confirmOrch.name}</strong>? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        confirmClass="btn danger"
+        onConfirm={handleDelete}
+        onClose={() => setConfirmDeleteId(null)}
+      >
+        <></>
+      </Modal>
+    )}
+    </>
+  );
+}

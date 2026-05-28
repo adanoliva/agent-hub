@@ -94,7 +94,114 @@ export interface AgentDirectoryStatus {
   lastResult:       { updated: number; skipped: number; errors: { path: string; error: string }[]; error?: string; upToDate?: boolean } | null;
 }
 
-export type View = 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings';
+export type View = 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings' | 'orchestrations';
+
+// ── Orchestration types ───────────────────────────────────────────────────────
+
+export interface DataFlow {
+  agentOutput:    boolean;
+  filesModified:  boolean;
+  projectContext:       boolean;
+  selectiveFiles: string[];
+}
+
+export interface FixedContext {
+  freeText: string;
+  files:    string[];
+}
+
+export interface TemporalContext {
+  id:          string;
+  type:        'file' | 'text';
+  label:       string;
+  placeholder?: string;
+  required:    boolean;
+}
+
+export interface ContextExtra {
+  fixed:    FixedContext;
+  temporal: TemporalContext[];
+}
+
+export interface OrchestrateNode {
+  id:           string;
+  from:         number;
+  to:           number;
+  dataFlow:     DataFlow;
+  contextExtra: ContextExtra;
+}
+
+export interface ExecutionConfig {
+  stopOnError:           boolean;
+  validateAfterEachStep: boolean;
+  maxTurns:              number;
+  timeout:               number;
+  maxContextChars?:      number;  // max chars for user message per step (default 12 000)
+}
+
+export interface Orchestration {
+  id:                   string;
+  projectId:            string;
+  name:                 string;
+  description:          string;
+  enabled:              boolean;
+  agents:               string[];
+  nodes:                OrchestrateNode[];
+  executionConfig:      ExecutionConfig;
+  createdAt:            string;
+  updatedAt:            string;
+  lastExecutedAt?:      string;
+  lastExecutionStatus?: 'success' | 'partial' | 'failed';
+  executionCount:       number;
+}
+
+export interface StepResult {
+  stepIndex:     number;
+  agentName:     string;
+  input:         { systemPrompt: string; userMessage: string };
+  output:        { response: string; toolCalls?: unknown[]; toolResults?: unknown[] };
+  filesModified: string[];
+  tokensUsed:    { input: number; output: number };
+  estimatedCost: number;
+  duration:      number;
+  status:        'success' | 'error' | 'warning';
+  error?:        { message: string; category: string; recoverable: boolean };
+  backupPath:    string | null;
+}
+
+export interface ExecutionSummary {
+  filesModified: number;
+  filesCreated:  number;
+  filesDeleted:  number;
+  linesAdded:    number;
+  linesRemoved:  number;
+}
+
+export interface ExecutionResult {
+  orchestrationId: string;
+  projectId:       string;
+  executionId:     string;
+  startedAt:       string;
+  completedAt:     string;
+  duration:        number;
+  status:          'success' | 'partial' | 'failed';
+  stepsCompleted:  number;
+  totalSteps:      number;
+  totalTokensUsed: { input: number; output: number };
+  estimatedCost:   number;
+  results:         StepResult[];
+  errors:          Array<{ message: string; category: string; recoverable: boolean }>;
+  summary:         ExecutionSummary;
+  changes:         Array<{ path: string; status: string }>;
+  backups:         Record<string, string | null>;
+}
+
+export interface ExecutionLog {
+  timestamp: string;
+  level:     'info' | 'warn' | 'error' | 'debug';
+  message:   string;
+  data?:     unknown;
+}
 
 export interface PendingAgentToEdit {
   name: string;

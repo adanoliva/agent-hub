@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-25 · Versión: 1.8.2
+> Última actualización: 2026-05-28 · Versión: 1.8.3
 
 ---
 
@@ -18,18 +18,21 @@ src/renderer/
 ├── store/index.ts          ← Zustand store global
 ├── hooks/
 │   ├── useToast.ts         ← devuelve addToast directamente (no objeto)
-│   └── useCategoryHelpers.ts ← catName, catColor, techName desde config
+│   ├── useCategoryHelpers.ts ← catName, catColor, techName desde config
+│   └── useElectron.ts      ← pickFolder, pickFile (IPC wrappers)
 ├── constants/tools.ts      ← ALL_TOOLS[], agentIcon(), MODEL_ICON, LEVEL_COLOR
 ├── components/
 │   ├── layout/             ← Sidebar, Topbar, Statusbar
 │   ├── ui/                 ← Toast, Modal, Wizard, CloseDialog
 │   ├── projects/           ← ProjectCard, ProjectDrawer, modales
-│   └── agents/             ← AgentCard, AgentsTree, AgentsCenter, AgentEditor, AgentExecutePanel
+│   ├── agents/             ← AgentCard, AgentsTree, AgentsCenter, AgentEditor, AgentExecutePanel
+│   └── orchestrations/     ← OrchestrationList, NodeCanvas, ConnectionConfigurator, OrchestrationEditor, ExecutionPanel
 └── pages/
     ├── Dashboard.tsx
     ├── Projects.tsx
     ├── Agents.tsx
     ├── Chat.tsx
+    ├── Orchestrations.tsx
     └── Settings.tsx
 ```
 
@@ -45,7 +48,7 @@ src/renderer/
 
 ```ts
 interface AppState {
-  view:          'dashboard' | 'projects' | 'agents' | 'chat' | 'settings';
+  view:          'dashboard' | 'projects' | 'agents' | 'chat' | 'settings' | 'orchestrations';
   config:        Config | null;
   projects:      Project[];
   appVersion:    string | null;
@@ -162,6 +165,91 @@ interface DashboardData {
   hiddenSnoozed?: number;
   lastSyncAt: string | null;
 }
+
+// Orquestaciones
+interface DataFlow {
+  agentOutput:    boolean;   // incluir la salida del agente anterior como entrada
+  filesModified:  boolean;   // incluir lista de ficheros modificados por el agente anterior
+  claudeMd:       boolean;   // incluir CLAUDE.md del proyecto
+  selectiveFiles: string[];  // ficheros adicionales específicos (paths)
+}
+interface FixedContext {
+  freeText: string;   // texto libre de contexto estático
+  files:    string[]; // rutas absolutas o relativas de ficheros de contexto
+}
+interface TemporalContext {
+  id:          string;
+  type:        'file' | 'text';  // tipo de campo que rellena el usuario antes de ejecutar
+  label:       string;
+  placeholder?: string;
+  required:    boolean;
+}
+interface ContextExtra {
+  fixed:    FixedContext;      // contexto estático que siempre se incluye
+  temporal: TemporalContext[]; // campos dinámicos que se piden al usuario en cada ejecución
+}
+interface OrchestrateNode {
+  id:           string;  // node-{from}-{to}-{timestamp}
+  from:         number;  // índice del agente origen en agents[]
+  to:           number;  // índice del agente destino en agents[]
+  dataFlow:     DataFlow;
+  contextExtra: ContextExtra;
+}
+interface ExecutionConfig {
+  stopOnError:           boolean;
+  validateAfterEachStep: boolean;
+  maxTurns:              number;   // máx. turnos por paso (default 10)
+  timeout:               number;   // ms totales (default 300 000)
+}
+interface Orchestration {
+  id:                   string;   // orch-{timestamp}-{hex}
+  projectId:            string;
+  name:                 string;
+  description:          string;
+  enabled:              boolean;
+  agents:               string[]; // nombres de agentes en orden de ejecución
+  nodes:                OrchestrateNode[]; // agents.length - 1 nodos
+  executionConfig:      ExecutionConfig;
+  createdAt:            string;
+  updatedAt:            string;
+  lastExecutedAt?:      string;
+  lastExecutionStatus?: 'success' | 'partial' | 'failed';
+  executionCount:       number;
+}
+interface StepResult {
+  stepIndex: number; agentName: string;
+  input:  { systemPrompt: string; userMessage: string };
+  output: { response: string; toolCalls?: unknown[]; toolResults?: unknown[] };
+  filesModified: string[];
+  tokensUsed: { input: number; output: number };
+  duration: number;
+  status: 'success' | 'error' | 'warning';
+  error?: { message: string; category: string; recoverable: boolean };
+  backupPath: string | null;
+}
+interface ExecutionSummary {
+  filesModified: number; filesCreated: number; filesDeleted: number;
+  linesAdded: number; linesRemoved: number;
+}
+interface ExecutionResult {
+  orchestrationId: string; projectId: string; executionId: string;
+  startedAt: string; completedAt: string; duration: number;
+  status: 'success' | 'partial' | 'failed';
+  stepsCompleted: number; totalSteps: number;
+  totalTokensUsed: { input: number; output: number };
+  estimatedCost: number;
+  results: StepResult[];
+  errors: Array<{ message: string; category: string; recoverable: boolean }>;
+  summary: ExecutionSummary;
+  changes: Array<{ path: string; status: string }>;
+  backups: Record<string, string | null>;
+}
+interface ExecutionLog {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  message: string;
+  data?: unknown;
+}
 ```
 
 ---
@@ -205,13 +293,41 @@ Layout shell: `#app` (flex row) → `.sidebar` (48px) + `.main` (flex: 1, flex c
 **Clases del chat:**
 - `.chat-mismatch-banner` — banner ámbar encima del input cuando hay mismatch de proveedor.
 
+**Clases de orquestaciones (`.orch-*`):**
+- `.orch-page` — contenedor raíz con topbar y vista activa.
+- `.orch-list` — grid de tarjetas `.orch-card` / `.orch-card-empty` / `.orch-card-header` / `.orch-card-meta` / `.orch-card-actions`.
+- `.orch-editor` — layout 3 columnas (paleta | lienzo | configurador).
+- `.orch-palette-panel` — panel izquierdo: buscador + lista de `.orch-palette-card` (cada card tiene icono cuadrado, nombre, descripción y grip handle `ti-grip-vertical`).
+- `.orch-canvas-panel` — panel central: scroll vertical, recibe todos los eventos drag-and-drop.
+- `.orch-node-canvas` — SVG + nodos superpuestos. Exportado: `CANVAS_W_CONST=270`, `CANVAS_SLOT_H=100`, `CANVAS_PAD_TOP=10`, `CANVAS_ZONE_H=32`.
+- `.orch-node-agent` — nodo de agente en el lienzo: badge de índice, icono, nombre, botón de eliminar (visible en hover). Atributo `draggable`. Tiene `.orch-grip` como handle.
+- `.orch-drop-zone` — zona visual de drop (solo visual, `pointer-events:none`). Con `.dragging-active` muestra borde discontinuo; con `.active` muestra fondo de acento.
+- `.orch-conn-panel` — panel derecho: título de la conexión seleccionada + secciones configurables.
+- `.orch-conn-section` / `.orch-conn-section-title` — secciones plegables del configurador de conexiones.
+- `.orch-conn-row` — fila con checkbox y etiqueta para DataFlow.
+- `.orch-conn-actions` — pie del panel con botón "Aplicar cambios" / "Guardado".
+- `.orch-config-*` — formulario de config de ejecución: `orch-config-row`, `orch-config-label`, `orch-config-input`.
+- `.orch-file-item` / `.orch-file-name` / `.orch-file-remove` — líneas de fichero en el selector de contexto fijo.
+- `.orch-exec-panel` — panel de ejecución. Estados: formulario previo → corriendo (logs SSE) → resultado.
+- `.orch-exec-header` / `.orch-exec-log` / `.orch-exec-log-entry.{info|warn|error|debug}` — cabecera y visor de logs.
+- `.orch-exec-result-*` — tarjetas de resultado por paso (`.orch-exec-step-card`, `.orch-exec-step-status.{success|error|warning}`).
+- `.orch-error-banner` — banner coral de error.
+
 ---
 
 ## Componentes de layout
 
-- **`Sidebar`**: nav vertical 48px. Íconos: `ti-robot` (logo→proyectos), `ti-layout-grid` (proyectos), `ti-cpu` (agentes), `ti-message-chatbot` (chat), `ti-settings` (ajustes). Clase `.active` según `view`.
+- **`Sidebar`**: nav vertical 48px. Íonos: `ti-robot` (logo→proyectos), `ti-layout-grid` (proyectos), `ti-cpu` (agentes), `ti-topology-ring-2` (orquestaciones), `ti-message-chatbot` (chat), `ti-settings` (ajustes). Clase `.active` según `view`.
 - **`Topbar`**: props `title`, `sub?`, `actions?` (ReactNode en el extremo derecho — cada página inyecta sus controles aquí).
 - **`Statusbar`**: al montar llama `GET /health`, `GET /ai/status` y `GET /ai/usage`. Muestra: conexión servidor, estado proveedor IA (punto verde si `ready`), tokens totales acumulados (entrada/salida), tokens de sesión (entrada/salida), versión. El polling de usage se repite cada 30s.
+
+---
+
+## Hooks
+
+- **`useToast`**: devuelve `addToast(msg, type?)` directamente. Tipos: `'ok'` (3.5s), `'err'`/`'warn'` (5s), `'info'` (3.5s).
+- **`useCategoryHelpers`**: lee `config` del store y expone `catName(id)`, `catColor(id)`, `techName(catId, techId)`.
+- **`useElectron`**: encapsula las llamadas IPC vía `window.api`. Expone `pickFolder(): Promise<string|null>` (selector de carpeta) y `pickFile(): Promise<string|null>` (selector de fichero individual). Ambos devuelven `null` si el usuario cancela o si la app corre fuera de Electron.
 
 ---
 
@@ -333,6 +449,84 @@ Tab Directorio: toggle habilitado, input URL del repo, estado de última sync, b
 **Sección guías de editor** — tres tabs seleccionables (`editorTab: 'vscode' | 'intellij' | 'eclipse'`). El contenido de cada tab se adapta al proveedor de IA configurado (Claude vs. GitHub Copilot). En IntelliJ y Eclipse, se muestran instrucciones del plugin/extension correspondiente si está disponible, o instrucciones de terminal CLI como fallback.
 
 Toggle de tema inyectado en `Topbar` vía prop `actions`.
+
+### `Orchestrations.tsx`
+
+Página de gestión de orquestaciones. Tres sub-vistas internas controladas por `subView: 'list' | 'editor' | 'execution'`.
+
+**Topbar:** selector de proyecto (auto-selecciona el primer proyecto activo al montar) + botón "Nueva orquestación" que abre `CreateOrchestrationModal` (inline en la página).
+
+**CreateOrchestrationModal:** modal genérico con un campo de nombre y uno de descripción. `POST /orchestrations` con el `projectId` activo. Al crear, navega directamente a la sub-vista `'editor'`.
+
+**Cambio de proyecto:** cuando cambia `projectId`, recarga la lista de orquestaciones y resetea a sub-vista `'list'`.
+
+---
+
+## Componentes de orquestaciones
+
+### `OrchestrationList.tsx`
+
+Grid de tarjetas. Cada tarjeta muestra: nombre, descripción, badge de estado (`lastExecutionStatus`: green=success, coral=failed, amber=partial), contador de ejecuciones, fecha de última ejecución. Acciones: editar (navega a `'editor'`), ejecutar (navega a `'execution'`), eliminar.
+
+El botón de eliminar usa `Modal` (no `confirm()` nativo) con mensaje de confirmación. Estados internos: `deleting`, `confirmDeleteId`.
+
+### `OrchestrationEditor.tsx`
+
+Editor principal con layout de tres paneles:
+
+**Panel izquierdo — Paleta de agentes:** buscador + grid de `.orch-palette-card`. Cada card muestra icono cuadrado (`getAgentIcon`), nombre, descripción truncada y grip handle. Son **arrastrables** (`draggable`), iniciando un drag de tipo `palette`.
+
+**Panel central — Lienzo:** `NodeCanvas` envuelto en `.orch-canvas-panel`. Este panel recibe todos los eventos DnD directamente:
+- `onDragOver` — calcula la zona de drop a partir de `e.clientY - panelRect.top - 20 + panel.scrollTop`. Fórmula: `zone = clamp(round((yRel - PAD_TOP - SLOT_H/4) / SLOT_H), 0, n)` donde `n = agents.length`.
+- `onDrop` — distingue entre drop de paleta (inserción de nuevo agente) y reordenación de nodo existente (`splice` + desplazamiento).
+
+Estado DnD: `isDragging`, `draggingNodeIdx`, `dragOverZone`, `draggingRef`, `canvasPanelRef`.
+
+`rebuildNodes()` — cuando cambia el array `agents`, preserva las configuraciones de nodo existentes mapeando por posición.
+
+**Panel derecho — Configurador de conexión:** `ConnectionConfigurator` cuando hay una conexión seleccionada (`selectedNodeId`), o placeholder si no hay nodos.
+
+### `NodeCanvas.tsx`
+
+Canvas visual. Renderiza SVG de conexiones + nodos HTML superpuestos.
+
+**Constantes exportadas:**
+- `CANVAS_SLOT_H = 100` — altura en px de cada slot de agente.
+- `CANVAS_PAD_TOP = 10` — padding superior del canvas.
+- `CANVAS_ZONE_H = 32` — altura visual de cada zona de drop.
+- `CANVAS_W_CONST = 270` — ancho del canvas.
+
+**Función exportada:** `getAgentIcon(name: string): string` — igual que `agentIcon` de `constants/tools.ts`.
+
+Lineas SVG (`<path>`) conectan los nodos con curvas cubicas Bézier. `pointerEvents: isDragging ? 'none' : 'all'` evita que el SVG bloquee los eventos de drop durante el drag.
+
+Zonas de drop (`.orch-drop-zone`): `pointer-events: none` siempre — son puramente visuales. Las clases `dragging-active` y `active` las controla `OrchestrationEditor` desde fuera.
+
+Nodos (`.orch-node-agent`): `draggable`, badge de índice, icono, nombre. Botón de eliminar visible en hover. Click en nodo (no en eliminar ni grip) dispara `onSelectNode(nodeId)`.
+
+### `ConnectionConfigurator.tsx`
+
+Panel de configuración para la conexión entre dos agentes. Auto-guarda al cambiar de nodo usando refs.
+
+**Auto-save:** refs `dataFlowRef`, `contextExtraRef`, `dirtyRef`, `nodeRef`, `onUpdateRef`. El cleanup del `useEffect` de nodo llama `onUpdate` si `dirtyRef.current === true` antes de desmontar/cambiar de nodo.
+
+**`normalizeContextExtra(raw)`:** migra datos legacy donde `fixed` podía ser `null` — devuelve `{ freeText: '', files: [] }` como valor seguro.
+
+**Sección DataFlow:** checkboxes para `agentOutput`, `filesModified`, `claudeMd`. Campo de texto para `selectiveFiles` (separados por coma).
+
+**Sección Contexto fijo:** textarea para `freeText` + componente `FilePicker`. `FilePicker` muestra un botón "Añadir archivo" que llama `pickFile()` (IPC nativo). Cada archivo se lista en una sola línea con icono, nombre truncado (tooltip = ruta completa) y botón de eliminar.
+
+**Sección Contexto temporal:** tabla de campos dinámicos (tipo, etiqueta, placeholder, requerido). Botón añadir / eliminar filas.
+
+**Botón de guardar:** muestra `"Guardado"` cuando `!dirty`, `"Aplicar cambios"` cuando `dirty`.
+
+### `ExecutionPanel.tsx`
+
+Panel de ejecución de una orquestación. Tres estados internos:
+
+1. **Formulario previo:** muestra la configuración de ejecución y los campos de contexto temporal pendientes de rellenar. Botón "Ejecutar" llama `POST /orchestrations/:id/execute { projectId, temporalContextValues }` y almacena el `executionId` devuelto.
+2. **Corriendo (SSE):** abre `EventSource` apuntando a `GET /orchestrations/:id/execute/stream?executionId=`. Recibe eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error`. Los logs se muestran en `.orch-exec-log` con clase según nivel. Botón "Rollback" por paso completado llama `POST /orchestrations/:id/executions/:execId/rollback { stepIndex }`.
+3. **Resultado:** muestra resumen (`ExecutionResult`), tarjetas por paso con estado, ficheros modificados, tokens y botones de rollback.
 
 ---
 

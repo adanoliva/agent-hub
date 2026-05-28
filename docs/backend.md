@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-25 · Versión: 1.8.2
+> Última actualización: 2026-05-28 · Versión: 1.8.3
 
 ---
 
@@ -15,12 +15,16 @@
 6. [Sincronización del directorio de agentes (`agents-sync.js`)](#6-sincronización-del-directorio-de-agentes-agents-syncjs)
 7. [Gestión de proyectos (`projects.js`)](#7-gestión-de-proyectos-projectsjs)
 8. [Integración IA (`ai.js`)](#8-integración-ia-aijs)
-9. [Bandeja del sistema (`tray.js`)](#9-bandeja-del-sistema-trayjs)
-10. [Bridge IPC (`preload.js`)](#10-bridge-ipc-preloadjs)
-11. [Agentes por defecto (`defaults.js`)](#11-agentes-por-defecto-defaultsjs)
-12. [Plantillas de contexto (`templates.js`)](#12-plantillas-de-contexto-templatesjs)
-13. [Flujos clave end-to-end](#13-flujos-clave-end-to-end)
-14. [Dashboard y seguimiento de uso](#14-dashboard-y-seguimiento-de-uso)
+9. [Servicio de filesystem (`api-fs.js`)](#9-servicio-de-filesystem-api-fsjs)
+10. [Subsistema CLI (`subsystem-cli.js`)](#10-subsistema-cli-subsystem-clijs)
+11. [Orquestaciones — CRUD (`workflows.js`)](#11-orquestaciones--crud-workflowsjs)
+12. [Orquestaciones — Motor de ejecución (`orchestrator.js`)](#12-orquestaciones--motor-de-ejecución-orchestratorjs)
+13. [Bandeja del sistema (`tray.js`)](#13-bandeja-del-sistema-trayjs)
+14. [Bridge IPC (`preload.js`)](#14-bridge-ipc-preloadjs)
+15. [Agentes por defecto (`defaults.js`)](#15-agentes-por-defecto-defaultsjs)
+16. [Plantillas de contexto (`templates.js`)](#16-plantillas-de-contexto-templatesjs)
+17. [Flujos clave end-to-end](#17-flujos-clave-end-to-end)
+18. [Dashboard y seguimiento de uso](#18-dashboard-y-seguimiento-de-uso)
 
 ---
 
@@ -35,12 +39,16 @@ El backend es el proceso principal de Electron (`main process`). Corre en Node.j
 Electron main process (Node.js)
   │
   ├── main.js          ← punto de entrada, BrowserWindow, ciclo de vida
-  ├── server.js        ← Express: todas las rutas /api/*
+  ├── server.js        ← Express: todas las rutas /api/* y /api-fs/*
   ├── config.js        ← lectura/escritura de config.json
   ├── agents.js        ← CRUD de agentes (.md con frontmatter YAML)
   ├── agents-sync.js   ← sincronización con el Directorio de Agentes (GitHub)
   ├── projects.js      ← CRUD de proyectos, sync de agentes a proyectos
   ├── ai.js            ← llamadas a IA (CLI / Anthropic API / GitHub)
+  ├── api-fs.js        ← operaciones de filesystem para el Subsistema CLI
+  ├── subsystem-cli.js ← CLI virtual multi-turno para providers API/GitHub
+  ├── workflows.js     ← CRUD de orquestaciones (JSON en .agent-hub/)
+  ├── orchestrator.js  ← motor de ejecución de orquestaciones + SSE streaming
   ├── tray.js          ← icono en la bandeja del sistema
   ├── preload.js       ← contextBridge: window.api expuesto al renderer
   ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
@@ -127,6 +135,7 @@ Solo activo en producción. Comprueba actualizaciones en el repo privado `adanol
 | `shell:openExternal` | `shell.openExternal(url)` |
 | `shell:openVSCode` | `exec('code "path"')` |
 | `dialog:pickFolder` | `dialog.showOpenDialog({ openDirectory })` |
+| `dialog:pickFile` | `dialog.showOpenDialog({ openFile })` — selector de fichero individual |
 | `update:check` | `autoUpdater.checkForUpdates()` |
 | `update:download` | `autoUpdater.downloadUpdate()` |
 | `update:install` | `autoUpdater.quitAndInstall()` |
@@ -330,6 +339,34 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/chat/history?projectId=` | Carga historial (`cache/chat-{projectId}.json`) |
 | PUT | `/api/chat/history` | Guarda historial `{ projectId, messages }` |
 | DELETE | `/api/chat/history?projectId=` | Borra fichero de historial |
+
+#### Orquestaciones
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/orchestrations?projectId=` | Lista todas las orquestaciones de un proyecto |
+| POST | `/api/orchestrations` | Crea una orquestación `{ projectId, name, description?, agents?, nodes?, executionConfig? }` |
+| GET | `/api/orchestrations/:id` | Lee una orquestación por id (requiere `?projectId=`) |
+| PUT | `/api/orchestrations/:id` | Actualiza la orquestación (mismos campos que POST; requiere `?projectId=`) |
+| DELETE | `/api/orchestrations/:id` | Elimina la orquestación y su JSON del disco (requiere `?projectId=`) |
+| POST | `/api/orchestrations/:id/validate` | Valida la orquestación sin ejecutarla. Devuelve `{ valid, errors[] }` |
+| POST | `/api/orchestrations/:id/execute` | Lanza la ejecución. Body: `{ projectId, temporalContextValues? }`. Devuelve `{ executionId, status: 'started' }` |
+| GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso. Emite eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error` |
+| GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones de una orquestación (requiere `?projectId=`) |
+| GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución específica |
+
+#### Subsistema CLI (API-FS)
+
+Endpoints bajo el prefijo `/api-fs`. Requieren que el proyecto exista en config. Usan `api-fs.js` internamente. Todos responden con código `500` + `{ error, code }` en caso de fallo.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api-fs/projects/:id/files/read?path=` | Lee un fichero del proyecto. Devuelve `{ path, content, size, hash, language, modified }` |
+| GET | `/api-fs/projects/:id/files/list?pattern=` | Lista ficheros del proyecto. `pattern` acepta globs simples (`*.ts`, `src/**`) |
+| POST | `/api-fs/projects/:id/files/write` | Escribe fichero. Body: `{ path, content, metadata? }`. Crea backup automático. `422` si validación falla |
+| POST | `/api-fs/projects/:id/bash` | Ejecuta comando de la whitelist. Body: `{ command }`. `403` si el comando no está permitido |
+| POST | `/api-fs/projects/:id/grep` | Busca patrón en ficheros. Body: `{ pattern, file? }`. Devuelve `{ matches, count }` |
+| POST | `/api-fs/projects/:id/execute-agent` | Ejecuta el loop completo del Subsistema CLI. Body: `{ prompt, agentSystemPrompt?, projectContext?, maxTurns?, timeout? }`. Solo para providers `api`/`github` |
 
 ### Servido de archivos estáticos
 
@@ -631,6 +668,43 @@ Acepta un objeto de opciones:
 
 Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación en texto plano. También registra tokens en cada llamada.
 
+### Chat con tokens (`callAIChatWithTokens`)
+
+Función interna utilizada por el Subsistema CLI. Igual que `callAIChat` pero devuelve un objeto `{ text, inputTokens, outputTokens }` en lugar del texto plano, permitiendo al loop multi-turno acumular el conteo de tokens por turno. Solo funciona con providers `api` y `github`; lanza error si se invoca con `cli`.
+
+### Subsistema CLI (`callAIWithSubsystemCLI`)
+
+Punto de entrada público que ejecuta el loop multi-turno completo sobre un proyecto. Delega en `subsystem-cli.execute()`.
+
+```js
+callAIWithSubsystemCLI(prompt, agentSystemPrompt, {
+  projectPath,      // requerido: ruta absoluta al proyecto
+  projectContext,   // contenido de CLAUDE.md / copilot-instructions.md
+  provider,         // 'api' | 'github'
+  maxTurns,         // default: 10
+  timeout,          // ms, default: 300 000
+})
+// → Promise<SubsystemCLIResult>
+```
+
+Devuelve `SubsystemCLIResult`:
+
+```ts
+{
+  success:       boolean;
+  finalResponse: string;       // última respuesta del agente
+  turns:         number;
+  toolCalls:     ParsedToolCall[];
+  results:       OperationResult[];
+  errors:        ToolExecutionError[];
+  tokens:        { input, output, total };
+  duration:      number;       // ms
+  filesModified: string[];     // paths relativos modificados
+  backups:       string[];     // paths de backups creados en .agent-hub/backups/
+  error?:        string;       // 'MAX_TURNS_EXCEEDED' | 'TIMEOUT_EXCEEDED' | mensaje
+}
+```
+
 ### Funciones de generación
 
 - `generateAgentPrompt({ description, level, tools, lang })` — genera un system prompt desde descripción informal.
@@ -676,13 +750,269 @@ key = `project::${projectId}`                            // nivel proyecto
 
 ---
 
-## 9. Bandeja del sistema (`tray.js`)
+## 9. Servicio de filesystem (`api-fs.js`)
+
+Encapsula todas las operaciones de I/O que el Subsistema CLI necesita para que los agentes puedan leer, escribir y buscar en el proyecto. Todas las operaciones validan la ruta antes de ejecutarse.
+
+### Seguridad y restricciones
+
+- **Path traversal**: rechaza cualquier ruta que contenga `..`.
+- **Fuera de proyecto**: rechaza rutas que no resuelvan dentro de `projectPath`.
+- **Directorios excluidos**: `node_modules`, `dist`, `.git`, `.next`, `build`, `__pycache__`, `.venv`, `venv`, `out`, `coverage`, `.svelte-kit`, `target`, `.nuxt`.
+- **Archivos binarios**: extensiones `.exe`, `.bin`, `.o`, `.so`, `.dll`, imágenes, audio, vídeo, fuentes, archivos comprimidos.
+- **Tamaño máximo**: 10 MB por fichero.
+- **Bash whitelist**: solo `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`. Además, patrones prohibidos (`rm`, `del`, `sudo`, `npm install`, `git push`, `curl`, `wget`, encadenamiento con `;`, `|`, `&`).
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `readFile(projectPath, filePath)` | Lee un fichero de texto. Devuelve `{ path, content, size, hash, language, modified, encoding }` |
+| `writeFile(projectPath, filePath, content, metadata?)` | Escribe, crea backup del anterior y valida JSON si aplica. Devuelve `{ saved, path, hash, changes, backupPath, validations }` |
+| `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5) respetando exclusiones. Acepta globs simples (`*.ts`, `src/**`). Máx. 500 resultados |
+| `bashCommand(projectPath, command)` | Ejecuta un comando de la whitelist en el directorio del proyecto. Timeout 30 s. Devuelve `{ stdout, stderr, exitCode }` |
+| `grepFiles(projectPath, pattern, glob?)` | Búsqueda de patrón regex en los ficheros del proyecto. Máx. 300 coincidencias. Devuelve `{ matches, count }` |
+
+### Backups automáticos
+
+Antes de cada `writeFile` se crea una copia del fichero existente en `{projectPath}/.agent-hub/backups/{nombre}_{timestamp}.bak`. La función devuelve el `backupPath` relativo al proyecto.
+
+---
+
+## 10. Subsistema CLI (`subsystem-cli.js`)
+
+Emula la interfaz de herramientas de Claude Code CLI para proveedores que no tienen acceso nativo al filesystem (Anthropic API, GitHub Models). Implementa un loop multi-turno en el que la IA puede solicitar operaciones de archivo y el subsistema las ejecuta, devolviendo los resultados en el siguiente mensaje.
+
+### Formato de tool calls en las respuestas de la IA
+
+La IA emite bloques separados por `---` (solos en su línea):
+
+```
+TOOL: read
+PATH: src/main.ts
+
+---
+
+TOOL: write
+PATH: src/utils.ts
+CONTENT:
+[contenido completo del archivo]
+
+---
+
+TOOL: bash
+COMMAND: find src -name "*.ts" -type f
+
+---
+
+TOOL: grep
+PATTERN: export const
+FILE: src/**/*.ts
+```
+
+Cuando la IA no emite ningún bloque `TOOL:`, el loop termina y esa respuesta es la final.
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `parseAgentResponse(text)` | Extrae bloques `TOOL:` del texto. Devuelve `{ text, toolCalls, hasClosed }` |
+| `executeToolCall(toolCall, projectPath)` | Traduce un tool call a una operación `api-fs`. Devuelve `OperationResult` |
+| `buildToolResultsMessage(results)` | Formatea los resultados de un turno en texto para el siguiente mensaje al modelo |
+| `buildSubsystemSystemPrompt(agentSystemPrompt, projectContext?)` | Inyecta las instrucciones de herramientas al system prompt del agente |
+| `execute(prompt, agentSystemPrompt, config)` | Loop multi-turno completo. `config` requiere `projectPath` y `callAIRaw` |
+
+### Loop multi-turno
+
+```
+execute(prompt, systemPrompt, config)
+  │
+  ├── while (turn < maxTurns && elapsed < timeout):
+  │   ├── callAIRaw(messages, systemPrompt)        ← un turno de la IA
+  │   ├── parseAgentResponse()                    ← extraer tool calls
+  │   ├── si no hay tool calls → RETORNAR (done)
+  │   ├── para cada tool call → executeToolCall()  ← operar en disco
+  │   ├── buildToolResultsMessage()
+  │   └── añadir respuesta IA + resultados a messages
+  └── RETORNAR (máx. turnos o timeout)
+```
+
+**Parámetros de `config`:**
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| `projectPath` | `string` | Requerido. Ruta absoluta al proyecto |
+| `callAIRaw` | `Function` | Requerido. `async (messages, systemPrompt) → { text, inputTokens, outputTokens }` |
+| `projectContext` | `string` | Contenido del fichero de contexto del proyecto |
+| `maxTurns` | `number` | Máx. iteraciones (default: 10) |
+| `timeout` | `number` | Ms totales (default: 300 000) |
+
+### Estructura de directorios generados en el proyecto
+
+```
+{projectPath}/
+└── .agent-hub/
+    └── backups/
+        ├── src_main_ts_1748450000000.bak
+        └── src_utils_ts_1748450001000.bak
+```
+
+---
+
+## 13. Orquestaciones — CRUD (`workflows.js`)
+
+Gestiona la persistencia de las definiciones de orquestación. Cada orquestación se almacena como fichero JSON en:
+
+```
+{projectPath}/.agent-hub/orchestrations/{id}.json
+```
+
+El historial de ejecuciones se guarda en:
+
+```
+{projectPath}/.agent-hub/executions/{timestamp}-{orchId}/
+  ├── result.json      ← ExecutionResult completo
+  └── snapshot.json    ← snapshot del estado del filesystem antes de ejecutar
+```
+
+### Estructura de una orquestación en disco
+
+```json
+{
+  "id": "orch-1748450000000-a1b2c3d4",
+  "projectId": "p1234567890abc",
+  "name": "CI Full",
+  "description": "",
+  "enabled": true,
+  "agents": ["code-reviewer", "test-writer", "doc-writer"],
+  "nodes": [
+    {
+      "id": "node-0-1-1748450000001",
+      "from": 0, "to": 1,
+      "dataFlow": { "agentOutput": true, "filesModified": true, "claudeMd": true, "selectiveFiles": [] },
+      "contextExtra": {
+        "fixed": { "freeText": "", "files": [] },
+        "temporal": []
+      }
+    }
+  ],
+  "executionConfig": {
+    "stopOnError": true,
+    "validateAfterEachStep": false,
+    "maxTurns": 10,
+    "timeout": 300000
+  },
+  "createdAt": "2026-05-28T10:00:00Z",
+  "updatedAt": "2026-05-28T10:00:00Z",
+  "executionCount": 0
+}
+```
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `create(projectId, projectPath, data)` | Genera id, establece defaults y escribe el JSON |
+| `read(orchId, projectPath)` | Lee un JSON por id; devuelve `null` si no existe |
+| `update(orchId, projectPath, changes)` | Merge de cambios + actualiza `updatedAt` |
+| `remove(orchId, projectPath)` | Elimina el fichero JSON |
+| `list(projectId, projectPath)` | Lista todos los JSONs del directorio de orquestaciones |
+| `listExecutions(orchId, projectPath)` | Lista el historial de ejecuciones (metadatos básicos sin resultados completos) |
+| `readExecution(orchId, executionId, projectPath)` | Lee el `result.json` de una ejecución específica |
+| `saveExecution(orchId, projectPath, result)` | Escribe `result.json` en el directorio de la ejecución y actualiza el JSON de la orquestación (`lastExecutedAt`, `lastExecutionStatus`, `executionCount`) |
+
+---
+
+## 12. Orquestaciones — Motor de ejecución (`orchestrator.js`)
+
+Implementa la ejecución secuencial de una orquestación, paso a paso. Extiende `EventEmitter` para emitir eventos de progreso que el servidor envía al renderer vía SSE.
+
+### Clase `OrchestrationExecutor`
+
+```js
+new OrchestrationExecutor(orchestration, project, temporalContextValues?)
+```
+
+- `orchestration` — objeto `Orchestration` completo.
+- `project` — objeto `Project` del config.
+- `temporalContextValues` — mapa `{ tempContextId: value }` con los valores recogidos del usuario antes de ejecutar.
+
+### Eventos emitidos
+
+| Evento | Payload | Descripción |
+|---|---|---|
+| `step-start` | `{ stepIndex, agentName, totalSteps }` | Comienza un paso |
+| `step-progress` | `{ stepIndex, message }` | Progreso interno (lectura de archivos, etc.) |
+| `step-complete` | `{ stepIndex, result: StepResult }` | Paso completado con éxito |
+| `step-error` | `{ stepIndex, error }` | Error en un paso |
+| `complete` | `ExecutionResult` | Ejecución completa |
+| `error` | `{ message }` | Error fatal antes de comenzar |
+
+### Flujo de ejecución
+
+```
+executor.execute()
+  │
+  ├── validate()                            ← comprueba agentes, nodos, paths y ficheros de contexto
+  │   └── si hay errores → emite 'error'
+  │
+  ├── takeSnapshot()                        ← crea snapshot del filesystem para rollback
+  │
+  └── para cada agente (i = 0..n-1):
+      ├── emit 'step-start'
+      ├── _buildSystemPrompt(i)             ← system prompt del agente
+      ├── _buildUserMessage(i)              ← salida del paso anterior + contexto fijo + temporal
+      ├── callAI() / callAIWithSubsystemCLI()
+      ├── detecta ficheros modificados
+      ├── emit 'step-complete'
+      └── si error y stopOnError → romper bucle
+  │
+  └── emit 'complete' con ExecutionResult
+```
+
+### Construcción del prompt del paso (`_buildUserMessage`)
+
+Para cada paso `i` (salvo el primero), el mensaje de usuario incluye:
+
+1. **Salida del agente anterior** — si `dataFlow.agentOutput === true`.
+2. **Ficheros modificados** — si `dataFlow.filesModified === true`, lista de paths + contenido.
+3. **CLAUDE.md del proyecto** — si `dataFlow.claudeMd === true`.
+4. **Texto libre de contexto fijo** — si `node.contextExtra.fixed.freeText` no está vacío.
+5. **Archivos de contexto fijo** — para cada path en `node.contextExtra.fixed.files`, se lee el fichero (ruta absoluta o relativa al proyecto).
+
+### Snapshot y rollback
+
+Antes de ejecutar se crea un snapshot JSON en:
+```
+{projectPath}/.agent-hub/executions/{timestamp}-{orchId}/snapshot.json
+```
+
+El snapshot contiene el contenido de todos los ficheros de texto del proyecto (hasta `MAX_SNAPSHOT_FILES = 500`, máximo `MAX_FILE_SIZE_BYTES = 256 KB` por fichero). Se usa para poder revertir si la ejecución falla.
+
+### Validación previa (`validate`)
+
+Comprueba:
+- La orquestación tiene al menos 2 agentes.
+- Todos los agentes existen en disco (`agents/global/`, `agents/section-*`, etc.).
+- El número de nodos es correcto (`agents.length - 1`).
+- Cada nodo tiene índices `from`/`to` consecutivos válidos.
+- Cada nodo transmite al menos una información (`agentOutput || filesModified || claudeMd`).
+- Los ficheros de contexto fijo existen en disco (rutas absolutas o relativas al proyecto).
+- El directorio del proyecto existe.
+- `executionConfig.timeout >= 5000`.
+
+### Ejecución con CLI vs. API/GitHub
+
+- **CLI** (`aiProvider: 'cli'`): usa `callAI(prompt, systemPrompt, { extraArgs, cwd, timeout })` — proceso nativo de Claude Code.
+- **API / GitHub**: usa `callAIWithSubsystemCLI(prompt, systemPrompt, { projectPath, projectContext, provider, maxTurns, timeout })` — loop multi-turno con el Subsistema CLI.
+
+---
 
 Icono en la bandeja de Windows. Click izquierdo muestra la ventana; click derecho abre menú con "Abrir", "Reiniciar" y "Salir". `destroyTray()` se llama desde `app.on('before-quit')`.
 
 ---
 
-## 10. Bridge IPC (`preload.js`)
+## 14. Bridge IPC (`preload.js`)
 
 `contextBridge.exposeInMainWorld('api', {...})` expone `window.api` al renderer. El renderer **nunca** usa `require` ni accede directamente a Node.
 
@@ -699,6 +1029,7 @@ window.api = {
   openExternal(url)        → void
   openVSCode(p)            → Promise<{ ok: boolean; error?: string }>
   pickFolder()             → Promise<string | null>
+  pickFile()               → Promise<string | null>   // selector de fichero individual
   onCloseRequested(cb)     → void
   closeResponse(action, remember) → void
   checkForUpdate()         → Promise<any>
@@ -713,13 +1044,13 @@ window.api = {
 
 ---
 
-## 11. Agentes por defecto (`defaults.js`)
+## 15. Agentes por defecto (`defaults.js`)
 
 `DEFAULT_AGENTS` está vacío (`{}`). Los agentes ya no se seedean desde código: provienen del Directorio de Agentes externo descargado en el arranque. El fichero se conserva para no romper la importación en `agents.js`, pero no define ningún agente.
 
 ---
 
-## 12. Plantillas de contexto (`templates.js`)
+## 16. Plantillas de contexto (`templates.js`)
 
 Genera el contenido inicial de `CLAUDE.md` y `.github/copilot-instructions.md` al crear un proyecto.
 
@@ -746,7 +1077,7 @@ Misma lógica adaptada para Copilot: sustituye "Rules" → "Coding standards" y 
 
 ---
 
-## 13. Flujos clave end-to-end
+## 17. Flujos clave end-to-end
 
 ### Primer arranque con Directorio de Agentes
 
@@ -876,7 +1207,7 @@ Frontend: POST /api/chat { messages, systemPrompt }
 
 ---
 
-## 14. Dashboard y seguimiento de uso
+## 18. Dashboard y seguimiento de uso
 
 ### Dashboard (`GET /api/dashboard`)
 

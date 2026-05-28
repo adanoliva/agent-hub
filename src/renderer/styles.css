@@ -18,6 +18,12 @@ body.light{
 }
 html,body,#root{height:100%;background:var(--bg0);color:var(--text0);font-family:var(--sans);font-size:13px;line-height:1.6;overflow:hidden;user-select:none}
 button{background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer}
+/* ── Global form controls ── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),textarea,select{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--text0);font-family:var(--sans);transition:border-color .15s;outline:none}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,textarea:focus,select:focus{border-color:var(--accent)}
+input::placeholder,textarea::placeholder{color:var(--text3)}
+select option{background:var(--bg2)}
+.sm:is(input,textarea,select),.input.sm{padding:4px 8px;font-size:11px;border-radius:6px}
 /* ── Scrollbars ── */
 *::-webkit-scrollbar{width:5px;height:5px}
 *::-webkit-scrollbar-track{background:transparent}
@@ -477,6 +483,207 @@ body.light .theme-option.selected{border-color:rgba(108,92,231,0.3)}
 .modal-body.project-edit-body{padding:22px 24px 18px}
 .project-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .project-edit-col-span-2{grid-column:1/-1}
+
+/* ── Orchestrations ────────────────────────────────────────────────────────── */
+.orch-page{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.orch-content{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* Project selector in topbar */
+.orch-project-select{max-width:200px;height:28px;font-size:12px;padding:0 8px}
+
+/* Empty / loading states */
+.orch-empty,.orch-no-project,.orch-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:200px;color:var(--text3);font-size:13px}
+.orch-empty i,.orch-no-project i,.orch-loading i{font-size:36px}
+.orch-empty p,.orch-no-project p{text-align:center}
+
+/* Orchestration list */
+.orch-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.orch-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+.orch-card:hover{border-color:var(--accent)}
+.orch-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.orch-card-title{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px;color:var(--text0);min-width:0}
+.orch-card-title i{color:var(--accent);flex-shrink:0}
+.orch-card-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orch-card-actions{display:flex;gap:4px;flex-shrink:0}
+.orch-card-desc{font-size:11px;color:var(--text2);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orch-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.orch-card-agents,.orch-card-runs{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)}
+.orch-card-agents-preview{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:2px}
+.orch-agent-chip{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:10px;color:var(--text1);font-family:var(--mono)}
+.orch-agent-chip.more{color:var(--text3)}
+.orch-arrow{font-size:10px;color:var(--text3)}
+
+/* Editor layout */
+.orch-editor{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.orch-editor-header{display:flex;align-items:flex-start;justify-content:space-between;padding:14px 20px 10px;border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
+.orch-editor-title{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.orch-name-input{background:transparent;border:none;outline:none;font-size:16px;font-weight:700;color:var(--text0);font-family:var(--sans);width:100%}
+.orch-name-input::placeholder{color:var(--text3)}
+.orch-desc-input{background:transparent;border:none;outline:none;font-size:12px;color:var(--text2);font-family:var(--sans);width:100%}
+.orch-desc-input::placeholder{color:var(--text3)}
+.orch-editor-actions{display:flex;gap:8px;flex-shrink:0}
+.orch-error-banner{background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.3);border-radius:8px;padding:8px 12px;margin:8px 20px 0;font-size:12px;color:#fb7185;display:flex;flex-direction:column;gap:3px}
+.orch-error-banner i{margin-right:4px}
+.orch-editor-body{flex:1;display:flex;overflow:hidden}
+
+/* Agent palette (left panel) */
+.orch-palette-panel{width:230px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.orch-panel-title{padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);border-bottom:1px solid var(--border)}
+.orch-picker-search{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border)}
+.orch-picker-search i{color:var(--text3);font-size:14px;flex-shrink:0}
+.orch-picker-search input{flex:1;background:transparent;border:none;outline:none;font-size:12px;color:var(--text0);padding:0}
+.orch-palette-list{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+.orch-palette-card{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:grab;transition:all .12s;user-select:none}
+.orch-palette-card:hover:not(.in-use){background:var(--bg3);border-color:var(--border2);box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.orch-palette-card:active:not(.in-use){cursor:grabbing}
+.orch-palette-card.in-use{opacity:.45;cursor:default}
+.orch-palette-card-icon{width:30px;height:30px;border-radius:7px;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.orch-palette-card-icon i{font-size:15px;color:var(--accent)}
+.orch-palette-info{flex:1;min-width:0}
+.orch-palette-name{font-size:12px;color:var(--text0);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orch-palette-desc{font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.orch-palette-check{color:var(--green);font-size:14px;flex-shrink:0}
+.orch-palette-grip{color:var(--text3);font-size:14px;flex-shrink:0;opacity:0;transition:opacity .1s}
+.orch-palette-card:hover:not(.in-use) .orch-palette-grip{opacity:1}
+.orch-picker-empty{padding:12px 8px;text-align:center;font-size:11px;color:var(--text3)}
+.btn.xs{padding:2px 5px;font-size:10px;min-width:0}
+
+/* Canvas panel */
+.orch-canvas-panel{flex:1;overflow:auto;position:relative;background:var(--bg1);display:flex;align-items:flex-start;justify-content:center;padding:20px}
+.orch-canvas-wrap{position:relative}
+.orch-canvas-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;color:var(--text3);font-size:12px;text-align:center;width:270px}
+.orch-canvas-empty i{font-size:36px}
+
+/* Node canvas */
+.orch-node-canvas{position:relative}
+.orch-node-agent{position:absolute;background:var(--bg2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 10px 0 4px;cursor:grab;transition:box-shadow .15s,border-color .15s}
+.orch-node-agent:hover{border-color:var(--border2);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.orch-node-agent.dragging{opacity:.35;cursor:grabbing}
+.orch-node-drag-handle{color:var(--text3);font-size:15px;padding:0 4px;cursor:grab;flex-shrink:0}
+.orch-node-remove{opacity:0;transition:opacity .1s;padding:3px 5px !important;flex-shrink:0}
+.orch-node-agent:hover .orch-node-remove{opacity:1}
+/* Drop zones — always in DOM with pointer-events:all (set inline); visible only while dragging */
+.orch-drop-zone{border-radius:6px;border:2px dashed transparent;transition:background .1s,border-color .1s}
+.orch-drop-zone.dragging-active{border-color:var(--border2)}
+.orch-drop-zone.active{background:var(--accent-dim) !important;border-color:var(--accent) !important}
+.orch-node-index{width:18px;height:18px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.orch-node-icon{color:var(--text2);font-size:16px}
+.orch-node-name{font-size:11px;color:var(--text0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.orch-connections{}
+.orch-conn-line{stroke:var(--border2);transition:stroke .15s}
+.orch-conn-line.selected{stroke:var(--accent)}
+.orch-conn-arrow{fill:var(--border2);transition:fill .15s}
+.orch-conn-arrow.selected{fill:var(--accent)}
+.orch-conn-dot{fill:var(--bg2);stroke:var(--border2);stroke-width:1.5;transition:all .15s;cursor:pointer}
+.orch-conn-dot:hover,.orch-conn-dot.selected{stroke:var(--accent)}
+.orch-conn-dot.configured{fill:var(--accent-dim)}
+.orch-conn-dot-icon{fill:var(--text2);pointer-events:none}
+
+/* Config panel */
+.orch-config-panel{width:260px;border-left:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.orch-config-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:200px;color:var(--text3);font-size:11px;text-align:center;padding:16px}
+.orch-config-placeholder i{font-size:28px}
+
+/* Connection configurator */
+.orch-conn-config{padding:12px 14px;display:flex;flex-direction:column;gap:14px}
+.orch-conn-config-header{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text0);font-weight:600;border-bottom:1px solid var(--border);padding-bottom:10px}
+.orch-config-section{display:flex;flex-direction:column;gap:7px}
+.orch-config-section h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);display:flex;align-items:center;gap:5px;margin:0}
+.orch-check-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text1);cursor:pointer}
+.orch-check-row input{accent-color:var(--accent)}
+.orch-check-row.sm{font-size:11px}
+.orch-subsection{padding-left:12px;display:flex;flex-direction:column;gap:5px}
+.orch-label{font-size:11px;color:var(--text2)}
+.orch-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--text0);font-family:var(--mono);resize:vertical;min-height:60px}
+.orch-context-fixed-item{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;display:flex;align-items:center;gap:6px;min-width:0}
+.orch-context-fixed-item>i{flex-shrink:0;color:var(--text2);font-size:13px}
+.orch-context-fixed-item>.btn{flex-shrink:0}
+.orch-context-fixed-label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text0)}
+.orch-context-fixed-path{font-size:12px;color:var(--text1);font-family:var(--mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orch-fixed-picker{display:flex;flex-direction:column;gap:5px}
+.orch-context-temp-item{display:flex;align-items:flex-start;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:4px}
+.orch-context-temp-fields{flex:1;display:flex;flex-direction:column;gap:5px}
+
+/* Editor footer */
+.orch-editor-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;border-top:1px solid var(--border);flex-shrink:0}
+
+/* Execution panel */
+.orch-exec-panel{flex:1;overflow-y:auto;padding:20px}
+.orch-exec-form,.orch-exec-running,.orch-exec-result{max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.orch-exec-form-header{display:flex;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.orch-exec-form-header i{font-size:28px;color:var(--accent);flex-shrink:0;margin-top:2px}
+.orch-exec-form-header h3{margin:0;font-size:15px}
+.orch-exec-form-header p{margin:4px 0 0;font-size:12px;color:var(--text2)}
+.orch-exec-info{display:flex;flex-direction:column;gap:5px}
+.orch-exec-info-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text2)}
+.orch-exec-section{display:flex;flex-direction:column;gap:10px}
+.orch-exec-section h4{margin:0;font-size:12px;font-weight:700;color:var(--text1)}
+.orch-exec-field{display:flex;flex-direction:column;gap:5px}
+.orch-exec-field label{font-size:12px;color:var(--text1)}
+.orch-required{color:#fb7185;margin-left:3px}
+.orch-exec-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding-top:4px}
+
+/* Running state */
+.orch-exec-running-header{display:flex;align-items:center;gap:10px}
+.orch-exec-running-header i{font-size:22px;color:var(--accent)}
+.orch-exec-running-header h3{margin:0;font-size:14px}
+.orch-steps-progress{display:flex;flex-direction:column;gap:4px}
+.orch-step-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:var(--bg2);border:1px solid var(--border)}
+.orch-step-row.active{border-color:var(--accent);background:var(--accent-dim)}
+.orch-step-row.done-success{border-color:rgba(62,207,142,.3)}
+.orch-step-row.done-error{border-color:rgba(251,113,133,.3)}
+.orch-step-indicator{width:22px;height:22px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.orch-step-indicator i{font-size:12px}
+.orch-step-name{flex:1;font-size:12px;color:var(--text0);font-family:var(--mono)}
+.orch-step-dur{font-size:10px;color:var(--text3)}
+
+/* Logs */
+.orch-logs{background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:10px 12px;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;font-family:var(--mono);font-size:11px}
+.orch-logs.compact{max-height:180px}
+.orch-log-line{display:flex;gap:8px}
+.orch-log-time{color:var(--text3);flex-shrink:0}
+.orch-log-msg{color:var(--text1);word-break:break-word}
+.orch-log-line.level-error .orch-log-msg{color:#fb7185}
+.orch-log-line.level-warn  .orch-log-msg{color:#fbbf24}
+.orch-logs-summary{cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;list-style:none;padding:0}
+
+/* Result */
+.orch-result-header{display:flex;align-items:flex-start;gap:12px;padding:14px;border-radius:10px;border:1px solid var(--border)}
+.orch-result-header.status-success{background:rgba(62,207,142,.07);border-color:rgba(62,207,142,.25)}
+.orch-result-header.status-partial{background:rgba(251,191,36,.07);border-color:rgba(251,191,36,.25)}
+.orch-result-header.status-failed{background:rgba(251,113,133,.07);border-color:rgba(251,113,133,.25)}
+.orch-result-header i{font-size:24px;flex-shrink:0;margin-top:2px}
+.status-success i{color:#3ecf8e}.status-partial i{color:#fbbf24}.status-failed i{color:#fb7185}
+.orch-result-header h3{margin:0;font-size:14px}
+.orch-result-header p{margin:3px 0 0;font-size:12px;color:var(--text2)}
+.orch-result-stats{display:flex;gap:16px;flex-wrap:wrap}
+.orch-stat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+.orch-stat-cost{color:var(--green);font-weight:600}
+.orch-step-tokens{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);white-space:nowrap;margin-left:auto}
+.orch-result-section{display:flex;flex-direction:column;gap:8px}
+.orch-result-section h4{margin:0;font-size:12px;font-weight:700;color:var(--text1);display:flex;align-items:center;gap:5px}
+.orch-changes-list{display:flex;flex-direction:column;gap:2px;max-height:120px;overflow-y:auto}
+.orch-change-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text1);font-family:var(--mono);padding:2px 4px}
+.orch-step-result{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.orch-step-result.status-success{border-color:rgba(62,207,142,.2)}
+.orch-step-result.status-error{border-color:rgba(251,113,133,.2)}
+.orch-step-result-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px}
+.orch-step-result-title{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.orch-step-result-name{font-size:12px;color:var(--text0);font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orch-step-badge{font-size:10px;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.orch-step-badge.success{color:#3ecf8e;background:rgba(62,207,142,.1)}
+.orch-step-badge.error{color:#fb7185;background:rgba(251,113,133,.1)}
+.orch-step-badge.warning{color:#fbbf24;background:rgba(251,191,36,.1)}
+.orch-step-error{padding:6px 12px 8px;font-size:11px;color:#fb7185;display:flex;align-items:center;gap:6px}
+.orch-step-details{padding:6px 12px 8px;border-top:1px solid var(--border)}
+.orch-step-details summary{cursor:pointer;font-size:11px;color:var(--text2);list-style:none;padding:0}
+.orch-step-files{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.orch-file-chip{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:10px;font-family:var(--mono);color:var(--text1)}
+.orch-step-response{background:var(--bg1);border-radius:6px;padding:8px;margin-top:6px;font-size:11px;color:var(--text1);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;font-family:var(--mono)}
+
+/* Spin animation */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .7s linear infinite}
 .project-edit-warning{font-size:11px;color:var(--text1);padding:8px 10px;background:var(--amber-dim);border-radius:6px;border:1px solid rgba(251,191,36,.2);margin-top:6px}
 
 @media (max-width: 900px){

@@ -9,6 +9,7 @@ const path    = require('path');
 const fs      = require('fs');
 
 const { readConfig, writeConfig, bootstrapDirectories, APP_DIR, getAgentDir } = require('./config');
+const apiFs = require('./api-fs');
 const {
   listAgentsByLevel,
   getApplicableAgents,
@@ -1450,6 +1451,329 @@ app.post('/api/projects/:id/open-folder', (req, res) => {
   // Actual shell.openPath handled via IPC in main.js
   // Return path for the renderer to call window.api.openPath()
   res.json({ path: project.path });
+});
+
+// ── API-FS — Filesystem operations for Subsystem CLI ─────────────────────────
+
+function resolveProjectPath(projectId) {
+  const project = readConfig().projects.find(p => p.id === projectId);
+  if (!project) {
+    const err = new Error('Project not found');
+    err.status = 404;
+    throw err;
+  }
+  return project.path;
+}
+
+// GET /api-fs/projects/:id/files/read?path=<relative-path>
+app.get('/api-fs/projects/:id/files/read', (req, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.id);
+    const filePath    = req.query.path;
+    if (!filePath) return res.status(400).json({ error: 'path query param required' });
+    res.json(apiFs.readFile(projectPath, filePath));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, code: e.code });
+  }
+});
+
+// GET /api-fs/projects/:id/files/list?pattern=<glob>
+app.get('/api-fs/projects/:id/files/list', (req, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.id);
+    res.json(apiFs.listFiles(projectPath, req.query.pattern));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, code: e.code });
+  }
+});
+
+// POST /api-fs/projects/:id/files/write
+// Body: { path, content, metadata? }
+app.post('/api-fs/projects/:id/files/write', (req, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.id);
+    const { path: filePath, content, metadata } = req.body;
+    if (!filePath) return res.status(400).json({ error: 'path required' });
+    if (typeof content !== 'string') return res.status(400).json({ error: 'content (string) required' });
+    const result = apiFs.writeFile(projectPath, filePath, content, metadata);
+    if (!result.saved) return res.status(422).json({ error: 'Validation failed', ...result });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, code: e.code });
+  }
+});
+
+// POST /api-fs/projects/:id/bash
+// Body: { command }
+app.post('/api-fs/projects/:id/bash', async (req, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.id);
+    const { command } = req.body;
+    if (!command) return res.status(400).json({ error: 'command required' });
+    const result = await apiFs.bashCommand(projectPath, command);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || (e.code === 'FORBIDDEN_COMMAND' ? 403 : 500)).json({ error: e.message, code: e.code });
+  }
+});
+
+// POST /api-fs/projects/:id/grep
+// Body: { pattern, file }
+app.post('/api-fs/projects/:id/grep', (req, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.id);
+    const { pattern, file } = req.body;
+    if (!pattern) return res.status(400).json({ error: 'pattern required' });
+    res.json(apiFs.grepFiles(projectPath, pattern, file));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, code: e.code });
+  }
+});
+
+// POST /api-fs/projects/:id/execute-agent
+// Body: { prompt, agentSystemPrompt, projectContext?, maxTurns?, timeout? }
+// Runs the full Subsystem CLI loop for a given prompt.
+app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
+  const { callAIWithSubsystemCLI } = require('./ai');
+  const cfg     = readConfig();
+  const project = cfg.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const provider = project.aiProvider || cfg.aiProvider || 'cli';
+  if (provider === 'cli') {
+    return res.status(400).json({ error: 'Subsystem CLI is only for api and github providers. Use the CLI provider natively.' });
+  }
+
+  const { prompt, agentSystemPrompt, projectContext, maxTurns, timeout } = req.body;
+  if (!prompt) return res.status(400).json({ error: 'prompt required' });
+
+  try {
+    const result = await callAIWithSubsystemCLI(prompt, agentSystemPrompt || '', {
+      projectPath:    project.path,
+      projectContext: projectContext || '',
+      provider,
+      maxTurns:       maxTurns  || 10,
+      timeout:        timeout   || 300_000,
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Orchestrations ────────────────────────────────────────────────────────────
+
+const workflows                         = require('./workflows');
+const { OrchestrationExecutor, registerExecutor, getExecutor } = require('./orchestrator');
+
+/**
+ * Finds the project that owns a given orchestration id by scanning all projects.
+ */
+function resolveOrchProject(orchId) {
+  const cfg = readConfig();
+  for (const project of (cfg.projects || [])) {
+    if (!project.path) continue;
+    try {
+      const orchFile = path.join(project.path, '.agent-hub', 'orchestrations', `${orchId}.json`);
+      if (fs.existsSync(orchFile)) return project;
+    } catch {}
+  }
+  return null;
+}
+
+// GET /api/orchestrations?projectId=
+app.get('/api/orchestrations', (req, res) => {
+  const { projectId } = req.query;
+  if (!projectId) return res.status(400).json({ error: 'projectId required' });
+  const project = readConfig().projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.path || !fs.existsSync(project.path)) return res.json([]);
+  try {
+    res.json(workflows.list(project.path));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/orchestrations
+app.post('/api/orchestrations', (req, res) => {
+  const { projectId, ...data } = req.body;
+  if (!projectId) return res.status(400).json({ error: 'projectId required' });
+  const project = readConfig().projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  try {
+    res.json(workflows.create(projectId, project.path, data));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/orchestrations/:id
+app.get('/api/orchestrations/:id', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const orch = workflows.read(req.params.id, project.path);
+  if (!orch) return res.status(404).json({ error: 'Orchestration not found' });
+  res.json(orch);
+});
+
+// PUT /api/orchestrations/:id
+app.put('/api/orchestrations/:id', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  try {
+    res.json(workflows.update(req.params.id, project.path, req.body));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/orchestrations/:id
+app.delete('/api/orchestrations/:id', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  workflows.delete(req.params.id, project.path);
+  res.json({ ok: true });
+});
+
+// POST /api/orchestrations/:id/validate
+app.post('/api/orchestrations/:id/validate', async (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const orch = workflows.read(req.params.id, project.path);
+  if (!orch) return res.status(404).json({ error: 'Orchestration not found' });
+  try {
+    const executor = new OrchestrationExecutor(orch, project, {});
+    const result   = await executor.validate();
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/orchestrations/:id/execute
+app.post('/api/orchestrations/:id/execute', async (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const orch = workflows.read(req.params.id, project.path);
+  if (!orch) return res.status(404).json({ error: 'Orchestration not found' });
+
+  const { temporalContexts = {} } = req.body;
+  const executor = new OrchestrationExecutor(orch, project, temporalContexts);
+
+  const validation = await executor.validate();
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validation failed', errors: validation.errors });
+  }
+
+  registerExecutor(executor);
+  res.json({ executionId: executor.executionId, status: 'started' });
+
+  executor.execute()
+    .then(result => {
+      try {
+        const current = workflows.read(orch.id, project.path);
+        if (current) {
+          workflows.update(orch.id, project.path, {
+            ...current,
+            lastExecutedAt:     result.completedAt,
+            lastExecutionStatus: result.status,
+            executionCount:      (current.executionCount || 0) + 1,
+          });
+        }
+      } catch {}
+    })
+    .catch(err => {
+      console.error('[orchestrator] Background execution error:', err.message);
+    });
+});
+
+// GET /api/orchestrations/:id/execute/stream?executionId=...
+app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
+  const { executionId } = req.query;
+  if (!executionId) return res.status(400).json({ error: 'executionId required' });
+  const executor = getExecutor(executionId);
+  if (!executor) return res.status(404).json({ error: 'Execution not found or already completed' });
+
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  const send = (eventName, data) => {
+    res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Replay existing logs
+  for (const log of executor.logs) send('message', log);
+
+  const onLog       = (log)    => send('message', log);
+  const onStepDone  = (result) => send('step-done', { type: 'step-done', data: result });
+  const onCompleted = (result) => {
+    send('completed', { type: 'completed', data: result });
+    cleanup();
+    res.end();
+  };
+  const onError = (err) => {
+    send('error', { type: 'error', message: err.message });
+    cleanup();
+    res.end();
+  };
+
+  const cleanup = () => {
+    executor.off('log',       onLog);
+    executor.off('step-done', onStepDone);
+    executor.off('completed', onCompleted);
+    executor.off('error',     onError);
+  };
+
+  executor.on('log',       onLog);
+  executor.on('step-done', onStepDone);
+  executor.on('completed', onCompleted);
+  executor.on('error',     onError);
+  req.on('close', cleanup);
+});
+
+// GET /api/orchestrations/:id/executions
+app.get('/api/orchestrations/:id/executions', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  try {
+    res.json(workflows.getExecutions(req.params.id, project.path));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/orchestrations/:id/executions/:executionId
+app.get('/api/orchestrations/:id/executions/:executionId', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const execution = workflows.getExecution(req.params.executionId, project.path);
+  if (!execution) return res.status(404).json({ error: 'Execution not found' });
+  res.json(execution);
+});
+
+// POST /api/orchestrations/:id/executions/:executionId/rollback
+app.post('/api/orchestrations/:id/executions/:executionId/rollback', async (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const { stepIndex } = req.body;
+  if (stepIndex === undefined || stepIndex === null) {
+    return res.status(400).json({ error: 'stepIndex required' });
+  }
+  try {
+    const orch    = workflows.read(req.params.id, project.path);
+    const execDir = workflows.findExecutionDir(req.params.executionId, project.path);
+    if (!execDir) return res.status(404).json({ error: 'Execution not found' });
+
+    const executor  = new OrchestrationExecutor(orch, project, {});
+    executor.execDir = execDir;
+    await executor.rollbackStep(Number(stepIndex));
+    res.json({ ok: true, message: `Paso ${Number(stepIndex) + 1} deshecho correctamente` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Catch-all ─────────────────────────────────────────────────────────────────

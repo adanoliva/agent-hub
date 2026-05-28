@@ -164,6 +164,13 @@ ipcMain.handle('dialog:pickFolder', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle('dialog:pickFile', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
 ipcMain.handle('shell:openVSCode', async (_, projectPath) => {
   const { exec } = require('child_process');
   return new Promise((resolve) => {
