@@ -46,7 +46,8 @@
       "Bash(python -c \"import pptx; print\\('python-pptx ok'\\)\")",
       "Bash(rtk pip *)",
       "Bash(python *)",
-      "Bash(del \"c:\\\\Users\\\\folivaba\\\\Downloads\\\\cdm\\\\agent-hub\\\\src\\\\renderer\\\\components\\\\agents\\\\AgentExecutePanel.tsx\")"
+      "Bash(del \"c:\\\\Users\\\\folivaba\\\\Downloads\\\\cdm\\\\agent-hub\\\\src\\\\renderer\\\\components\\\\agents\\\\AgentExecutePanel.tsx\")",
+      "Bash(powershell *)"
     ]
   }
 }

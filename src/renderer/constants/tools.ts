@@ -1,7 +1,21 @@
-export const ALL_TOOLS = [
-  'Bash', 'Read', 'Write', 'Grep', 'Edit', 'MultiEdit',
-  'WebFetch', 'WebSearch', 'TodoRead', 'TodoWrite',
+export interface ToolGroup {
+  id:    string;
+  label: string;
+  icon:  string;
+  tools: string[];
+}
+
+export const TOOL_GROUPS: ToolGroup[] = [
+  { id: 'files',    label: 'Archivos',  icon: 'ti-files',          tools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Grep'] },
+  { id: 'terminal', label: 'Terminal',  icon: 'ti-terminal-2',     tools: ['Bash'] },
+  { id: 'web',      label: 'Web',       icon: 'ti-world',          tools: ['WebFetch', 'WebSearch'] },
+  { id: 'tasks',    label: 'Tareas',    icon: 'ti-checkbox',       tools: ['TodoRead', 'TodoWrite'] },
+  { id: 'browser',  label: 'Navegador', icon: 'ti-browser',        tools: ['browser_open', 'browser_navigate', 'browser_extract', 'browser_close'] },
 ];
+
+export const ALL_TOOLS = TOOL_GROUPS.flatMap(g => g.tools);
+
+export const BROWSER_TOOLS = TOOL_GROUPS.find(g => g.id === 'browser')!.tools;
 
 export function agentIcon(name: string): string {
   const n = name.toLowerCase();

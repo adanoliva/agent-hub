@@ -64,13 +64,14 @@ export function OrchestrationList({ orchestrations, project, onSelect, onDelete,
               <div className="orch-card-title">
                 <i className="ti ti-topology-ring-2" />
                 <span>{orch.name}</span>
+                {statusMeta && (
+                  <span className={`badge ${statusMeta.cls}`} style={{ marginLeft: 4 }}>
+                    <i className={`ti ${statusMeta.icon}`} /> {statusMeta.label}
+                  </span>
+                )}
               </div>
               <div className="orch-card-actions" onClick={e => e.stopPropagation()}>
-                <button
-                  className="btn ghost sm"
-                  title="Ejecutar"
-                  onClick={() => onExecute(orch)}
-                >
+                <button className="btn ghost sm" title="Ejecutar" onClick={() => onExecute(orch)}>
                   <i className="ti ti-player-play" />
                 </button>
                 <button
@@ -88,35 +89,36 @@ export function OrchestrationList({ orchestrations, project, onSelect, onDelete,
               <p className="orch-card-desc">{orch.description}</p>
             )}
 
-            <div className="orch-card-meta">
-              <span className="orch-card-agents">
-                <i className="ti ti-cpu" />
-                {orch.agents.length} agente{orch.agents.length !== 1 ? 's' : ''}
-              </span>
-              {orch.executionCount > 0 && (
-                <span className="orch-card-runs">
-                  <i className="ti ti-history" />
-                  {orch.executionCount} ejecución{orch.executionCount !== 1 ? 'es' : ''}
-                </span>
-              )}
-              {statusMeta && (
-                <span className={`badge ${statusMeta.cls}`}>
-                  <i className={`ti ${statusMeta.icon}`} /> {statusMeta.label}
-                </span>
-              )}
-            </div>
-
             <div className="orch-card-agents-preview">
               {orch.agents.slice(0, 4).map((name, i) => (
                 <React.Fragment key={i}>
                   <span className="orch-agent-chip">{name}</span>
                   {i < orch.agents.length - 1 && i < 3 && (
-                    <i className="ti ti-arrow-right orch-arrow" />
+                    <i className="ti ti-chevron-right orch-arrow" />
                   )}
                 </React.Fragment>
               ))}
               {orch.agents.length > 4 && (
                 <span className="orch-agent-chip more">+{orch.agents.length - 4}</span>
+              )}
+            </div>
+
+            <div className="orch-card-footer">
+              <span className="orch-card-stat">
+                <i className="ti ti-cpu" />
+                {orch.agents.length} agente{orch.agents.length !== 1 ? 's' : ''}
+              </span>
+              {orch.executionCount > 0 && (
+                <span className="orch-card-stat">
+                  <i className="ti ti-history" />
+                  {orch.executionCount} ejecución{orch.executionCount !== 1 ? 'es' : ''}
+                </span>
+              )}
+              {orch.lastExecutedAt && (
+                <span className="orch-card-stat orch-card-date">
+                  <i className="ti ti-clock" />
+                  {new Date(orch.lastExecutedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                </span>
               )}
             </div>
           </div>

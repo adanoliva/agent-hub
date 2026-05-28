@@ -43,7 +43,7 @@ function create(projectId, projectPath, data) {
     id:           `input-node-${Date.now()}`,
     from:         -1,
     to:           0,
-    dataFlow:     { agentOutput: false, filesModified: false, projectContext: true, selectiveFiles: [] },
+    dataFlow:     { agentOutput: false, filesModified: false, projectContext: true },
     contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
   };
 

@@ -7,7 +7,6 @@ interface Props {
   fromAgent:   string;
   toAgent:     string;
   onUpdate:    (node: OrchestrateNode) => void;
-  isInputNode?: boolean;  // true = Orquestador entry node (no dataFlow, task description)
 }
 
 function generateTempId(): string {
@@ -24,7 +23,8 @@ function normalizeContextExtra(ce: ContextExtra): ContextExtra {
   };
 }
 
-export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate, isInputNode = false }: Props) {
+export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate }: Props) {
+  const isInputNode = false;
   const [dataFlow,     setDataFlow]     = useState<DataFlow>(node.dataFlow);
   const [contextExtra, setContextExtra] = useState<ContextExtra>(() => normalizeContextExtra(node.contextExtra));
   const [dirty, setDirty]              = useState(false);
@@ -130,18 +130,6 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate, isI
           <span>Contexto del proyecto (CLAUDE.md / copilot-instructions.md)</span>
         </label>
 
-        {dataFlow.filesModified && (
-          <div className="orch-subsection">
-            <label className="orch-label">Archivos específicos (opcional, uno por línea):</label>
-            <textarea
-              className="orch-textarea"
-              placeholder={'src/main.ts\nsrc/utils.ts'}
-              rows={3}
-              value={dataFlow.selectiveFiles.join('\n')}
-              onChange={e => patchDF({ selectiveFiles: e.target.value.split('\n').filter(Boolean) })}
-            />
-          </div>
-        )}
       </section>
       )}
 
@@ -228,13 +216,17 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate, isI
         </button>
       </section>
 
-      <button
-        className="btn primary"
-        disabled={!dirty}
-        onClick={handleSave}
-      >
-        <i className="ti ti-check" /> {dirty ? 'Aplicar cambios' : 'Guardado'}
-      </button>
+      <div className="orch-conn-apply">
+        <button
+          className="btn primary"
+          style={{ width: '100%' }}
+          disabled={!dirty}
+          onClick={handleSave}
+        >
+          <i className={`ti ${dirty ? 'ti-check' : 'ti-circle-check'}`} />
+          {dirty ? 'Aplicar cambios' : 'Guardado'}
+        </button>
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import type { OrchestrateNode } from '../../types';
 interface Props {
   agents:          string[];
   nodes:           OrchestrateNode[];
-  inputNode?:      OrchestrateNode;    // Orquestador → Agent[0] connection
+  inputNode?:      OrchestrateNode;
   selectedNode:    number | null;      // -1 = inputNode selected
   onSelectNode:    (idx: number) => void;
   onNodeDragStart: (idx: number, e: React.DragEvent) => void;
@@ -14,6 +14,7 @@ interface Props {
   isDragging:      boolean;
   draggingNodeIdx: number | null;
   onRemoveAgent:   (idx: number) => void;
+  agentModels?:    Record<string, string>;
 }
 
 export function getAgentIcon(name: string): string {
@@ -33,57 +34,120 @@ function hasConfig(node: OrchestrateNode): boolean {
   return !!(
     node.contextExtra?.fixed?.freeText?.trim() ||
     (node.contextExtra?.fixed?.files?.length ?? 0) > 0 ||
-    (node.contextExtra?.temporal?.length ?? 0) > 0 ||
-    (node.dataFlow?.selectiveFiles?.length ?? 0) > 0
+    (node.contextExtra?.temporal?.length ?? 0) > 0
   );
 }
 
-// Exported so parent can compute zone from cursor Y
-export const CANVAS_SLOT_H       = 100; // ZONE_H + NODE_H
-export const CANVAS_PAD_TOP      = 10;
-export const CANVAS_ZONE_H       = 32;
-export const CANVAS_W_CONST      = 270;
-export const CANVAS_ORCH_NODE_H  = 44;   // height of Orchestrator fixed node
-export const CANVAS_ORCH_CONN_H  = 40;   // gap between Orchestrator node and first agent zone
-// Agents Y-offset = CANVAS_PAD_TOP + CANVAS_ORCH_NODE_H + CANVAS_ORCH_CONN_H
+const NODE_H = 80;
+const ZONE_H = 48;  // connection gap between nodes
+
+export const CANVAS_SLOT_H        = NODE_H + ZONE_H;   // 128
+export const CANVAS_PAD_TOP       = 16;
+export const CANVAS_ZONE_H        = ZONE_H;
+export const CANVAS_W_CONST       = 300;
+export const CANVAS_ORCH_NODE_H   = NODE_H;             // same height as agent nodes
+export const CANVAS_ORCH_CONN_H   = 0;
 export const CANVAS_AGENTS_OFFSET = CANVAS_PAD_TOP + CANVAS_ORCH_NODE_H + CANVAS_ORCH_CONN_H;
 
-const ZONE_H       = CANVAS_ZONE_H;
-const NODE_H       = 68;
-const ORCH_NODE_H  = CANVAS_ORCH_NODE_H;
-const NODE_W       = 190;
-const SLOT_H       = CANVAS_SLOT_H;
-const PAD_TOP      = CANVAS_PAD_TOP;
-const PAD_BOT      = 10;
-const CANVAS_W     = CANVAS_W_CONST;
-const CX           = CANVAS_W / 2;
-const ORCH_CONN_H  = CANVAS_ORCH_CONN_H;
+const ORCH_NODE_H = CANVAS_ORCH_NODE_H;
+const NODE_W      = 244;
+const SLOT_H      = CANVAS_SLOT_H;
+const PAD_TOP     = CANVAS_PAD_TOP;
+const PAD_BOT     = 24;
+const CANVAS_W    = CANVAS_W_CONST;
+const CX          = CANVAS_W / 2;
+const ORCH_CONN_H = CANVAS_ORCH_CONN_H;
+
+// Arrow and line geometry
+const LINE_TOP_GAP = 3;    // gap from node bottom to line start
+const ARROW_H      = 13;   // height of arrowhead
+const ARROW_W      = 7;    // half-width of arrowhead
+const LINE_END_GAP = 2;    // gap from arrowhead tip to node top
 
 export function NodeCanvas({
   agents, nodes, inputNode, selectedNode, onSelectNode,
   onNodeDragStart, onDropAtZone, dragOverZone, onDragOverZone,
-  isDragging, draggingNodeIdx, onRemoveAgent,
+  isDragging, draggingNodeIdx, onRemoveAgent, agentModels = {},
 }: Props) {
   const n = agents.length;
 
-  // Layout: Orchestrator node → ORCH_CONN_H gap → (zones + agent nodes)
   const orchNodeTop  = PAD_TOP;
   const orchNodeBot  = orchNodeTop + ORCH_NODE_H;
-  const agentsOffset = orchNodeBot + ORCH_CONN_H;  // where agent slots start
+  const agentsOffset = orchNodeBot + ORCH_CONN_H;
   const canvasH      = agentsOffset + Math.max(n, 0) * SLOT_H + ZONE_H + PAD_BOT;
   const nodeLeft     = (CANVAS_W - NODE_W) / 2;
 
   const yNodeTop    = (i: number) => agentsOffset + i * SLOT_H + ZONE_H;
   const yNodeBottom = (i: number) => agentsOffset + (i + 1) * SLOT_H;
 
-  // inputNode config indicator
   const inputCfg = !!(
     inputNode?.contextExtra?.fixed?.freeText?.trim() ||
     (inputNode?.contextExtra?.fixed?.files?.length ?? 0) > 0 ||
     (inputNode?.contextExtra?.temporal?.length ?? 0) > 0
   );
-  const inputConnMidY = orchNodeBot + ORCH_CONN_H / 2;
+  const inputConnEndY = n > 0 ? yNodeTop(0) : agentsOffset;
+  const inputConnMidY = (orchNodeBot + inputConnEndY) / 2;
   const inputConnSel  = selectedNode === -1;
+
+  const hasSelection = selectedNode !== null;
+
+  // Which agent indices are "active" (participants of the selected connection)
+  function agentState(i: number): 'active' | 'inactive' | 'neutral' {
+    if (!hasSelection) return 'neutral';
+    if (selectedNode === -1) return i === 0 ? 'active' : 'inactive';
+    return (i === selectedNode || i === selectedNode + 1) ? 'active' : 'inactive';
+  }
+
+  const orchState = !hasSelection ? 'neutral' : selectedNode === -1 ? 'active' : 'inactive';
+
+  function renderConn(
+    y1: number, y2: number, midY: number,
+    sel: boolean, cfg: boolean,
+    onClick: () => void,
+  ) {
+    const lineY1   = y1 + LINE_TOP_GAP;
+    const arrowTip = y2 - LINE_END_GAP;
+    const arrowBot = arrowTip - ARROW_H;
+    const lineY2   = arrowBot;
+
+    return (
+      <g style={{ cursor: 'pointer' }} onClick={onClick}>
+        {/* Click target */}
+        <rect x={CX - 22} y={y1} width={44} height={y2 - y1} fill="transparent" />
+
+        {/* Track */}
+        <line
+          x1={CX} y1={lineY1} x2={CX} y2={lineY2}
+          stroke="rgba(124,106,247,.12)" strokeWidth={6} strokeLinecap="round"
+        />
+
+        {/* Animated flow line */}
+        <line
+          x1={CX} y1={lineY1} x2={CX} y2={lineY2}
+          className={`orch-conn-flow${sel ? ' selected' : ''}`}
+          strokeWidth={sel ? 2.5 : 2}
+          strokeLinecap="round"
+          strokeDasharray="6 5"
+        />
+
+        {/* Arrowhead */}
+        <polygon
+          points={`${CX - ARROW_W},${arrowBot} ${CX + ARROW_W},${arrowBot} ${CX},${arrowTip}`}
+          className={`orch-conn-arrow${sel ? ' selected' : ''}`}
+        />
+
+        {/* Mid dot */}
+        <circle
+          cx={CX} cy={midY} r={12}
+          className={`orch-conn-dot${sel ? ' selected' : ''}${cfg ? ' configured' : ''}`}
+        />
+        {cfg
+          ? <text x={CX} y={midY + 4.5} textAnchor="middle" fontSize={12} className="orch-conn-dot-icon">⚙</text>
+          : <text x={CX} y={midY + 4}   textAnchor="middle" fontSize={11} className="orch-conn-dot-icon-dim">↓</text>
+        }
+      </g>
+    );
+  }
 
   return (
     <div className="orch-node-canvas" style={{ position: 'relative', width: CANVAS_W, height: canvasH }}>
@@ -92,62 +156,21 @@ export function NodeCanvas({
       {n === 0 && (
         <div className="orch-canvas-empty" style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
           <i className="ti ti-topology-ring-2" />
-          <p>Arrastra agentes desde el panel izquierdo</p>
+          <p>Arrastra agentes desde el panel izquierdo para construir tu flujo</p>
         </div>
       )}
 
-      {/* ── Orchestrator (fixed entry node) ── */}
-      <div
-        style={{
-          position: 'absolute',
-          top: orchNodeTop,
-          left: nodeLeft,
-          width: NODE_W,
-          height: ORCH_NODE_H,
-          zIndex: 2,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          background: 'var(--bg3)',
-          border: '1.5px solid var(--accent)',
-          borderRadius: 8,
-          padding: '0 12px',
-          cursor: 'default',
-          userSelect: 'none',
-        }}
-      >
-        <i className="ti ti-circuit-diode" style={{ color: 'var(--accent)', fontSize: 16 }} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', flex: 1 }}>Orquestador</span>
-        <span style={{ fontSize: 10, color: 'var(--text3)' }}>entrada</span>
-      </div>
-
-      {/* ── SVG: inputNode connection + inter-agent connections ── */}
+      {/* ── SVG: connections (below nodes) ── */}
       <svg
         width={CANVAS_W}
         height={canvasH}
         style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, pointerEvents: isDragging ? 'none' : 'all' }}
       >
-        {/* Orquestador → Agent[0] connection */}
-        {n > 0 && (
-          <g style={{ cursor: 'pointer' }} onClick={() => onSelectNode(-1)}>
-            <rect x={CX - 16} y={orchNodeBot} width={32} height={ORCH_CONN_H} fill="transparent" />
-            <line
-              x1={CX} y1={orchNodeBot} x2={CX} y2={agentsOffset - 8}
-              className={`orch-conn-line${inputConnSel ? ' selected' : ''}`}
-              strokeWidth={inputConnSel ? 3 : 2}
-            />
-            <polygon
-              points={`${CX - 6},${agentsOffset - 8} ${CX + 6},${agentsOffset - 8} ${CX},${agentsOffset}`}
-              className={`orch-conn-arrow${inputConnSel ? ' selected' : ''}`}
-            />
-            <circle
-              cx={CX} cy={inputConnMidY} r={9}
-              className={`orch-conn-dot${inputConnSel ? ' selected' : ''}${inputCfg ? ' configured' : ''}`}
-            />
-            {inputCfg && (
-              <text x={CX} y={inputConnMidY + 4} textAnchor="middle" fontSize={9} className="orch-conn-dot-icon">⚙</text>
-            )}
-          </g>
+        {/* Orquestador → Agent[0] */}
+        {n > 0 && renderConn(
+          orchNodeBot, inputConnEndY, inputConnMidY,
+          inputConnSel, inputCfg,
+          () => onSelectNode(-1),
         )}
 
         {/* Inter-agent connections */}
@@ -155,34 +178,24 @@ export function NodeCanvas({
           const y1   = yNodeBottom(i);
           const y2   = yNodeTop(i + 1);
           const midY = (y1 + y2) / 2;
-          const sel  = selectedNode === i;
-          const cfg  = hasConfig(node);
-
-          return (
-            <g key={node.id} style={{ cursor: 'pointer' }} onClick={() => onSelectNode(i)}>
-              <rect x={CX - 16} y={y1} width={32} height={y2 - y1} fill="transparent" />
-              <line
-                x1={CX} y1={y1} x2={CX} y2={y2 - 8}
-                className={`orch-conn-line${sel ? ' selected' : ''}`}
-                strokeWidth={sel ? 3 : 2}
-              />
-              <polygon
-                points={`${CX - 6},${y2 - 8} ${CX + 6},${y2 - 8} ${CX},${y2}`}
-                className={`orch-conn-arrow${sel ? ' selected' : ''}`}
-              />
-              <circle
-                cx={CX} cy={midY} r={9}
-                className={`orch-conn-dot${sel ? ' selected' : ''}${cfg ? ' configured' : ''}`}
-              />
-              {cfg && (
-                <text x={CX} y={midY + 4} textAnchor="middle" fontSize={9} className="orch-conn-dot-icon">⚙</text>
-              )}
-            </g>
-          );
+          return renderConn(y1, y2, midY, selectedNode === i, hasConfig(node), () => onSelectNode(i));
         })}
       </svg>
 
-      {/* ── Drop zones — visual feedback only ── */}
+      {/* ── Orchestrator node — same card structure as agent nodes ── */}
+      <div
+        className={`orch-node-agent orch-node-entry node-${orchState}`}
+        style={{ position: 'absolute', top: orchNodeTop, left: nodeLeft, width: NODE_W, height: ORCH_NODE_H, zIndex: 2 }}
+      >
+        <div className="orch-node-icon"><i className="ti ti-circuit-diode" /></div>
+        <div className="orch-node-info">
+          <div className="orch-node-name">Orquestador</div>
+          <span className="orch-node-model model-orch">punto de entrada</span>
+        </div>
+        <span className="orch-node-entry-badge">INICIO</span>
+      </div>
+
+      {/* ── Drop zones ── */}
       {Array.from({ length: n + 1 }, (_, zi) => (
         <div
           key={`zone-${zi}`}
@@ -200,34 +213,40 @@ export function NodeCanvas({
       ))}
 
       {/* ── Agent nodes ── */}
-      {agents.map((agentName, i) => (
-        <div
-          key={i}
-          className={`orch-node-agent${draggingNodeIdx === i ? ' dragging' : ''}`}
-          draggable
-          onDragStart={e => onNodeDragStart(i, e)}
-          style={{
-            position: 'absolute',
-            top:      yNodeTop(i),
-            left:     nodeLeft,
-            width:    NODE_W,
-            height:   NODE_H,
-            zIndex:   2,
-          }}
-        >
-          <div className="orch-node-drag-handle"><i className="ti ti-grip-vertical" /></div>
-          <div className="orch-node-index">{i + 1}</div>
-          <div className="orch-node-icon"><i className={`ti ${getAgentIcon(agentName)}`} /></div>
-          <div className="orch-node-name" title={agentName}>{agentName}</div>
-          <button
-            className="btn ghost xs orch-node-remove"
-            onClick={e => { e.stopPropagation(); onRemoveAgent(i); }}
-            title="Quitar"
+      {agents.map((agentName, i) => {
+        const model = agentModels[agentName] || '';
+        return (
+          <div
+            key={i}
+            className={`orch-node-agent${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
+            draggable
+            onDragStart={e => onNodeDragStart(i, e)}
+            style={{
+              position: 'absolute',
+              top:      yNodeTop(i),
+              left:     nodeLeft,
+              width:    NODE_W,
+              height:   NODE_H,
+              zIndex:   2,
+            }}
           >
-            <i className="ti ti-x" />
-          </button>
-        </div>
-      ))}
+            <div className="orch-node-drag-handle"><i className="ti ti-grip-vertical" /></div>
+            <div className="orch-node-index">{i + 1}</div>
+            <div className="orch-node-icon"><i className={`ti ${getAgentIcon(agentName)}`} /></div>
+            <div className="orch-node-info">
+              <div className="orch-node-name" title={agentName}>{agentName}</div>
+              {model && <span className={`orch-node-model model-${model}`}>{model}</span>}
+            </div>
+            <button
+              className="btn ghost xs orch-node-remove"
+              onClick={e => { e.stopPropagation(); onRemoveAgent(i); }}
+              title="Quitar"
+            >
+              <i className="ti ti-x" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

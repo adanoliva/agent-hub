@@ -190,7 +190,7 @@ class OrchestrationExecutor extends EventEmitter {
     // Project context: always for step 0 (unless inputNode disables it), or per dataFlow
     const includeContext = stepIndex === 0
       ? (prevDF ? prevDF.projectContext !== false : true)
-      : (prevDF?.projectContext === true || prevDF?.claudeMd === true);
+      : (prevDF?.projectContext === true);
 
     if (includeContext) {
       const contextFile = this._getContextFile();
@@ -414,7 +414,7 @@ class OrchestrationExecutor extends EventEmitter {
         errors.push(`Conexión ${i}: índices inválidos (esperado from=${i}, to=${i + 1})`);
       }
       const df = node.dataFlow || {};
-      if (!df.agentOutput && !df.filesModified && !df.claudeMd && !df.projectContext) {
+      if (!df.agentOutput && !df.filesModified && !df.projectContext) {
         errors.push(`Conexión ${i + 1}: debe transmitir al menos una información`);
       }
       if (node.contextExtra?.fixed?.files?.length > 0) {
@@ -444,7 +444,9 @@ class OrchestrationExecutor extends EventEmitter {
 
   async execute() {
     const cfg      = readConfig();
-    const provider = this.project.aiProvider || cfg.aiProvider || 'cli';
+    // Use the global AI provider — project.aiProvider is only for agent sync destinations,
+    // not for which engine runs the orchestration.
+    const provider = cfg.aiProvider || 'cli';
     const { orchestration } = this;
 
     // Create execution directory
@@ -507,7 +509,9 @@ class OrchestrationExecutor extends EventEmitter {
         if (provider === 'cli') {
           const fullPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
           const rich = await callAIRich(fullPrompt, {
-            timeout: orchestration.executionConfig?.timeout || 300000,
+            timeout:   orchestration.executionConfig?.timeout || 300000,
+            extraArgs: ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)],
+            cwd:       this.project.path,
           });
           response     = rich.text;
           inputTokens  = rich.inputTokens;
@@ -522,7 +526,6 @@ class OrchestrationExecutor extends EventEmitter {
             provider:       provider === 'github' ? 'github' : 'api',
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
             timeout:        orchestration.executionConfig?.timeout   || 300000,
-            useBrowser:     orchestration.executionConfig?.requiresBrowser === true,
           });
 
           // Surface internal failures as real errors so the catch block handles them

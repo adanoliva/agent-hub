@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { req } from '../../api';
-import type { BrowserStatus, Orchestration, OrchestrateNode, DataFlow, ContextExtra, Agent } from '../../types';
+import type { Orchestration, OrchestrateNode, DataFlow, ContextExtra, Agent } from '../../types';
 import { NodeCanvas, getAgentIcon, CANVAS_SLOT_H, CANVAS_AGENTS_OFFSET } from './NodeCanvas';
 import { ConnectionConfigurator } from './ConnectionConfigurator';
 import { useStore } from '../../store';
@@ -13,10 +13,9 @@ interface Props {
 }
 
 const DEFAULT_DATA_FLOW: DataFlow = {
-  agentOutput:   true,
-  filesModified: true,
-  projectContext:      true,
-  selectiveFiles: [],
+  agentOutput:    true,
+  filesModified:  true,
+  projectContext: false,
 };
 
 const DEFAULT_CONTEXT_EXTRA: ContextExtra = {
@@ -29,7 +28,7 @@ function makeNode(from: number, to: number): OrchestrateNode {
     id:           `node-${from}-${to}-${Date.now()}`,
     from,
     to,
-    dataFlow:     { ...DEFAULT_DATA_FLOW, selectiveFiles: [] },
+    dataFlow:     { ...DEFAULT_DATA_FLOW },
     contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
   };
 }
@@ -46,7 +45,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
       id:           `input-node-${Date.now()}`,
       from:         -1,
       to:           0,
-      dataFlow:     { agentOutput: false, filesModified: false, projectContext: true, selectiveFiles: [] },
+      dataFlow:     { agentOutput: false, filesModified: false, projectContext: true },
       contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
     }
   );
@@ -64,16 +63,6 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   const [allAgents,   setAllAgents]   = useState<Agent[]>([]);
   const [agentSearch, setAgentSearch] = useState('');
 
-  // Browser state
-  const [browserConnected, setBrowserConnected] = useState<boolean | null>(null);
-  const [requiresBrowser,  setRequiresBrowser]  = useState<boolean>(orchestration.executionConfig?.requiresBrowser ?? false);
-
-  // Poll browser status once when component mounts
-  useEffect(() => {
-    req<BrowserStatus>('GET', '/browser/status')
-      .then(s => setBrowserConnected(s.connected))
-      .catch(() => setBrowserConnected(false));
-  }, []);
 
   // Load all agents for this project: applicable (global/section/tech) + project-level
   useEffect(() => {
@@ -116,8 +105,21 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   };
 
   // ── DnD handlers ──
+  const dragGhostRef = useRef<HTMLElement | null>(null);
+
+  const clearDragGhost = (e: React.DragEvent) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    canvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;pointer-events:none';
+    document.body.appendChild(canvas);
+    e.dataTransfer.setDragImage(canvas, 0, 0);
+    dragGhostRef.current = canvas;
+  };
+
   const handlePaletteDragStart = (agentName: string, e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'copy';
+    clearDragGhost(e);
     draggingRef.current = { type: 'palette', payload: agentName };
     setIsDragging(true);
     setDraggingNodeIdx(null);
@@ -125,6 +127,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
 
   const handleNodeDragStart = (idx: number, e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
+    clearDragGhost(e);
     draggingRef.current = { type: 'node', payload: idx };
     setIsDragging(true);
     setDraggingNodeIdx(idx);
@@ -135,6 +138,10 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     setDraggingNodeIdx(null);
     setDragOverZone(null);
     draggingRef.current = null;
+    if (dragGhostRef.current) {
+      document.body.removeChild(dragGhostRef.current);
+      dragGhostRef.current = null;
+    }
   };
 
   const handleDropAtZone = (zone: number) => {
@@ -190,11 +197,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     if (!name.trim()) { addToast('El nombre es obligatorio', 'warn'); return; }
     setIsSaving(true);
     try {
-      const executionConfig = {
-        ...(orchestration.executionConfig ?? {}),
-        requiresBrowser,
-      };
-      await onSave({ name, description, agents, nodes, inputNode, executionConfig });
+      await onSave({ name, description, agents, nodes, inputNode });
       setErrors([]);
     } finally {
       setIsSaving(false);
@@ -202,12 +205,62 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   };
 
   const filteredAgents = allAgents.filter(a =>
-    a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
-    a.description?.toLowerCase().includes(agentSearch.toLowerCase())
+    !agents.includes(a.name) && (
+      a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+      a.description?.toLowerCase().includes(agentSearch.toLowerCase())
+    )
   );
 
+  const agentModels: Record<string, string> = {};
+  for (const a of allAgents) {
+    const m = a.model || '';
+    if (m.includes('haiku'))  agentModels[a.name] = 'haiku';
+    else if (m.includes('opus'))   agentModels[a.name] = 'opus';
+    else if (m.includes('sonnet')) agentModels[a.name] = 'sonnet';
+  }
+
+  function modelShort(m: string): string {
+    if (!m) return '';
+    if (m.includes('haiku'))  return 'haiku';
+    if (m.includes('opus'))   return 'opus';
+    if (m.includes('sonnet')) return 'sonnet';
+    return '';
+  }
+
   // Canvas needs a stable drag end when pointer leaves window
-  const canvasPanelRef = useRef<HTMLDivElement>(null);
+  const canvasPanelRef  = useRef<HTMLDivElement>(null);
+
+  // Pan-on-background-drag
+  const isPanning       = useRef(false);
+  const panStartY       = useRef(0);
+  const panStartScroll  = useRef(0);
+  const [panning, setPanning] = useState(false);
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging) return;
+    const t = e.target as HTMLElement;
+    const onBackground =
+      t === canvasPanelRef.current ||
+      t.classList.contains('orch-node-canvas') ||
+      t.classList.contains('orch-canvas-empty');
+    if (!onBackground) return;
+    isPanning.current    = true;
+    panStartY.current    = e.clientY;
+    panStartScroll.current = canvasPanelRef.current?.scrollTop ?? 0;
+    setPanning(true);
+    e.preventDefault();
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning.current || !canvasPanelRef.current) return;
+    canvasPanelRef.current.scrollTop = panStartScroll.current - (e.clientY - panStartY.current);
+  };
+
+  const stopPanning = () => {
+    if (!isPanning.current) return;
+    isPanning.current = false;
+    setPanning(false);
+  };
 
   // Panel-level drag handlers — work regardless of precise cursor position over zones
   const handleCanvasDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -280,6 +333,9 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
         <div className="orch-palette-panel">
           <div className="orch-panel-title">
             <i className="ti ti-package" /> Agentes
+            {agents.length > 0 && (
+              <span className="orch-palette-used-count">{agents.length} en uso</span>
+            )}
           </div>
           <div className="orch-picker-search">
             <i className="ti ti-search" />
@@ -292,43 +348,51 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
           </div>
           <div className="orch-palette-list">
             {filteredAgents.length === 0 ? (
-              <div className="orch-picker-empty">Sin resultados</div>
+              <div className="orch-picker-empty">
+                {agentSearch
+                  ? 'Sin resultados'
+                  : agents.length > 0 && allAgents.length > 0 && allAgents.every(a => agents.includes(a.name))
+                    ? <><i className="ti ti-checks" style={{ fontSize: 22, marginBottom: 6, display: 'block' }} />Todos los agentes están en el flujo</>
+                    : 'Sin agentes disponibles'
+                }
+              </div>
             ) : (
-              filteredAgents.map(a => {
-                const inUse = agents.includes(a.name);
-                return (
-                  <div
-                    key={a.name}
-                    className={`orch-palette-card${inUse ? ' in-use' : ''}`}
-                    draggable={!inUse}
-                    onDragStart={e => !inUse && handlePaletteDragStart(a.name, e)}
-                    title={inUse ? 'Ya está en la secuencia' : 'Arrastra al canvas para añadir'}
-                  >
-                    <div className="orch-palette-card-icon">
-                      <i className={`ti ${getAgentIcon(a.name)}`} />
-                    </div>
-                    <div className="orch-palette-info">
-                      <div className="orch-palette-name">{a.name}</div>
-                      {a.description && <div className="orch-palette-desc">{a.description}</div>}
-                    </div>
-                    {inUse
-                      ? <i className="ti ti-check orch-palette-check" />
-                      : <i className="ti ti-grip-vertical orch-palette-grip" />
-                    }
+              filteredAgents.map(a => (
+                <div
+                  key={a.name}
+                  className="orch-palette-card"
+                  draggable
+                  onDragStart={e => handlePaletteDragStart(a.name, e)}
+                  title="Arrastra al canvas para añadir"
+                >
+                  <div className="orch-palette-card-icon">
+                    <i className={`ti ${getAgentIcon(a.name)}`} />
                   </div>
-                );
-              })
+                  <div className="orch-palette-info">
+                    <div className="orch-palette-name">{a.name}</div>
+                    {a.description && <div className="orch-palette-desc">{a.description}</div>}
+                    {modelShort(a.model) && (
+                      <span className={`orch-palette-model model-${modelShort(a.model)}`}>{modelShort(a.model)}</span>
+                    )}
+                  </div>
+                  <i className="ti ti-grip-vertical orch-palette-grip" />
+                </div>
+              ))
             )}
           </div>
         </div>
 
         {/* Center: Canvas */}
         <div
-          className="orch-canvas-panel"
+          className={`orch-canvas-panel${panning || isDragging ? ' panning' : ''}`}
           ref={canvasPanelRef}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverZone(null); }}
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={stopPanning}
+          onMouseLeave={stopPanning}
         >
           <NodeCanvas
             agents={agents}
@@ -343,6 +407,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
             isDragging={isDragging}
             draggingNodeIdx={draggingNodeIdx}
             onRemoveAgent={removeAgent}
+            agentModels={agentModels}
           />
         </div>
 
@@ -354,7 +419,6 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
               fromAgent="Orquestador"
               toAgent={agents[0] ?? ''}
               onUpdate={handleUpdateNode}
-              isInputNode
             />
           ) : selectedNode !== null && nodes[selectedNode] ? (
             <ConnectionConfigurator
@@ -377,34 +441,6 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
         <button className="btn ghost" onClick={onBack}>
           <i className="ti ti-arrow-left" /> Volver
         </button>
-
-        {/* Browser indicator + requiresBrowser toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, marginLeft: 16 }}>
-          {browserConnected !== null && (
-            <span
-              className={`badge ${browserConnected ? 'green' : 'gray'}`}
-              title={browserConnected ? 'Navegador conectado vía CDP' : 'Navegador no conectado — ve a Ajustes › Navegador'}
-            >
-              <i className={`ti ti-browser`} />
-              {browserConnected ? 'Navegador' : 'Sin navegador'}
-            </span>
-          )}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)', cursor: 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={requiresBrowser}
-              onChange={e => setRequiresBrowser(e.target.checked)}
-              style={{ accentColor: 'var(--accent)' }}
-            />
-            Requiere navegador
-          </label>
-          {requiresBrowser && !browserConnected && (
-            <span className="badge amber" style={{ fontSize: 11 }}>
-              <i className="ti ti-alert-triangle" /> Sin conexión CDP
-            </span>
-          )}
-        </div>
-
         <button
           className="btn primary"
           onClick={onExecute}

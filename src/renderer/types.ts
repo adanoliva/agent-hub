@@ -128,7 +128,6 @@ export interface DataFlow {
   agentOutput:    boolean;
   filesModified:  boolean;
   projectContext:       boolean;
-  selectiveFiles: string[];
 }
 
 export interface FixedContext {

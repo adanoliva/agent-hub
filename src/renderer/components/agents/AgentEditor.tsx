@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { req } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useStore } from '../../store';
-import { ALL_TOOLS } from '../../constants/tools';
+import { TOOL_GROUPS } from '../../constants/tools';
 import type { Agent, SelectedNode } from '../../types';
 
 interface Props {
@@ -167,18 +167,35 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         </div>
 
         <div className="field">
-          <label>Herramientas</label>
-          <div className="tools-grid">
-            {ALL_TOOLS.map((t) => (
-              <label key={t} className="tool-check">
-                <input
-                  type="checkbox"
-                  checked={(a.tools ?? []).includes(t)}
-                  onChange={(e) => toggleTool(t, e.target.checked)}
-                />
-                {t}
-              </label>
-            ))}
+          <label>Permisos</label>
+          <div className="tool-groups">
+            {TOOL_GROUPS.map(group => {
+              const active = group.tools.every(t => (a.tools ?? []).includes(t));
+              const partial = !active && group.tools.some(t => (a.tools ?? []).includes(t));
+              const toggle = () => {
+                const current = a.tools ?? [];
+                if (active) {
+                  update({ tools: current.filter(t => !group.tools.includes(t)) });
+                } else {
+                  const merged = [...current, ...group.tools.filter(t => !current.includes(t))];
+                  update({ tools: merged });
+                }
+              };
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  className={`tool-group-btn${active ? ' active' : ''}${partial ? ' partial' : ''}`}
+                  onClick={toggle}
+                  title={group.tools.join(', ')}
+                >
+                  <i className={`ti ${group.icon}`} />
+                  <span>{group.label}</span>
+                  {active && <i className="ti ti-check tool-group-check" />}
+                  {partial && <i className="ti ti-minus tool-group-check" />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
