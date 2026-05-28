@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { req } from '../api';
 import { Topbar } from '../components/layout/Topbar';
@@ -104,12 +104,23 @@ export function Dashboard() {
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
   const [syncing,  setSyncing]  = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAll,  setShowAll]  = useState(false);
   const [usage,    setUsage]    = useState<AIUsage | null>(null);
+  const hasDataRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    hasDataRef.current = !!data;
+  }, [data]);
+
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    const hasData = hasDataRef.current;
+
+    if (!silent || !hasData) setLoading(true);
+    if (silent && hasData) setRefreshing(true);
+    if (!hasData) setError(null);
+
     try {
       const [dash, aiUsage] = await Promise.all([
         req<DashboardData>('GET', '/dashboard'),
@@ -118,9 +129,10 @@ export function Dashboard() {
       setData(dash);
       setUsage(aiUsage);
     } catch (e: any) {
-      setError(e.message);
+      if (!hasData) setError(e.message);
     } finally {
-      setLoading(false);
+      if (!silent || !hasData) setLoading(false);
+      if (silent && hasData) setRefreshing(false);
     }
   }, []);
 
@@ -138,20 +150,20 @@ export function Dashboard() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      load();
+      load({ silent: true });
     }, 30_000);
     return () => clearInterval(interval);
   }, [load]);
 
   async function syncAll() {
     setSyncing(true);
-    try { await req('POST', '/sync-all'); await load(); }
+    try { await req('POST', '/sync-all'); await load({ silent: true }); }
     finally { setSyncing(false); }
   }
 
   async function handleNotifAction(n: DashboardNotification) {
     if (n.action === 'sync-project' && n.targetId) {
-      try { await req('POST', `/projects/${n.targetId}/sync`); await load(); } catch { /**/ }
+      try { await req('POST', `/projects/${n.targetId}/sync`); await load({ silent: true }); } catch { /**/ }
     } else if (n.target === 'agent') {
       const resolvedLevel = (n.level as any)
         || (n.scopeLabel === 'Sin categoría' ? 'uncategorized' : 'global');
@@ -173,7 +185,7 @@ export function Dashboard() {
   async function dismissNotification(id: string) {
     try {
       await req('POST', '/dashboard/notifications/dismiss', { id });
-      await load();
+      await load({ silent: true });
     } catch {
       // no-op: dashboard will stay as-is
     }
@@ -182,7 +194,7 @@ export function Dashboard() {
   async function dismissGroup(group: 'agent' | 'scope', target: string) {
     try {
       await req('POST', '/dashboard/notifications/dismiss-group', { group, target });
-      await load();
+      await load({ silent: true });
     } catch {
       // no-op: dashboard will stay as-is
     }
@@ -191,7 +203,7 @@ export function Dashboard() {
   async function restoreHiddenNotifications() {
     try {
       await req('POST', '/dashboard/notifications/restore');
-      await load();
+      await load({ silent: true });
     } catch {
       // no-op: dashboard will stay as-is
     }
@@ -200,7 +212,7 @@ export function Dashboard() {
   async function snoozeNotification(id: string, days = 7) {
     try {
       await req('POST', '/dashboard/notifications/snooze', { id, days });
-      await load();
+      await load({ silent: true });
     } catch {
       // no-op
     }
@@ -242,8 +254,8 @@ export function Dashboard() {
       <Topbar
         title="Dashboard"
                 actions={
-          <button className="btn sm ghost" onClick={load} title="Actualizar datos">
-            <i className="ti ti-refresh" />
+          <button className="btn sm ghost" onClick={() => load({ silent: true })} title="Actualizar datos" disabled={refreshing}>
+            <i className={`ti ${refreshing ? 'ti-loader-2 dash-spin' : 'ti-refresh'}`} />
           </button>
         }
       />
