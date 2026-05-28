@@ -13,6 +13,13 @@ const SOURCE_PNG  = path.join(__dirname, '..', 'assets', 'source-icon.png');
 
 fs.mkdirSync(path.join(__dirname, '..', 'assets'), { recursive: true });
 
+function isUpToDate(sourcePath, targetPath) {
+  if (!fs.existsSync(sourcePath) || !fs.existsSync(targetPath)) return false;
+  const src = fs.statSync(sourcePath);
+  const dst = fs.statSync(targetPath);
+  return dst.mtimeMs >= src.mtimeMs && dst.size > 0;
+}
+
 // ── ICO builder (accepts PNG buffers) ────────────────────────────────────────
 
 function buildICO(pngs, sizes) {
@@ -113,6 +120,10 @@ function generateProgrammatic() {
 (function main() {
 // If source-icon.png exists, use sharp to convert it properly
 if (fs.existsSync(SOURCE_PNG)) {
+  if (isUpToDate(SOURCE_PNG, ICON_PATH)) {
+    console.log('[generate-icon] source-icon.png unchanged, skipping icon rebuild.');
+    process.exit(0);
+  }
   try {
     const sharp = require('sharp');
     Promise.all([

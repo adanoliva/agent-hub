@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { req } from '../api';
-import type { Config, Project, Toast, ToastType, View, PendingAgentToEdit } from '../types';
+import type { Config, Project, Toast, ToastType, View, PendingAgentToEdit, PendingNewAgentDraft } from '../types';
 
 interface AppState {
   // Core
@@ -18,6 +18,9 @@ interface AppState {
   // Agent to open in editor (consumed by Agents page on mount)
   pendingAgentToEdit: PendingAgentToEdit | null;
 
+  // New agent draft preloaded from other views (consumed by Agents page on mount)
+  pendingNewAgentDraft: PendingNewAgentDraft | null;
+
   // Agent name to preload in Chat (consumed on mount)
   pendingChatAgent: string | null;
 
@@ -29,6 +32,7 @@ interface AppState {
   navigateTo: (v: View, action?: string) => void;
   setPendingAction: (a: string | null) => void;
   setPendingAgentToEdit: (agent: PendingAgentToEdit | null) => void;
+  setPendingNewAgentDraft: (draft: PendingNewAgentDraft | null) => void;
   setPendingChatAgent: (name: string | null) => void;
   setConfig: (c: Config) => void;
   setProjects: (p: Project[]) => void;
@@ -47,6 +51,7 @@ export const useStore = create<AppState>((set) => ({
   showWizard: !localStorage.getItem('cdm-wizard-done'),
   pendingAction: null,
   pendingAgentToEdit: null,
+  pendingNewAgentDraft: null,
   pendingChatAgent: null,
   toasts: [],
 
@@ -54,6 +59,7 @@ export const useStore = create<AppState>((set) => ({
   navigateTo: (view, action) => set({ view, pendingAction: action ?? null }),
   setPendingAction: (pendingAction) => set({ pendingAction }),
   setPendingAgentToEdit: (pendingAgentToEdit) => set({ pendingAgentToEdit }),
+  setPendingNewAgentDraft: (pendingNewAgentDraft) => set({ pendingNewAgentDraft }),
   setPendingChatAgent: (pendingChatAgent) => set({ pendingChatAgent }),
   setConfig: (config) => set({ config }),
   setProjects: (projects) => set({ projects }),

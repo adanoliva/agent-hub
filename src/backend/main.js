@@ -12,6 +12,7 @@ const { migrateAgentFiles, syncGlobalAgentsToClaudeDir }         = require('./ag
 const agentsSync                                                  = require('./agents-sync');
 
 const isDev = !app.isPackaged;
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
 
 // ── Auto-updater ──────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ function createWindow() {
     },
   });
 
-  const url = `http://localhost:${PORT}`;
+  const url = (isDev && DEV_SERVER_URL) ? DEV_SERVER_URL : `http://localhost:${PORT}`;
   console.log(`[main] Loading URL: ${url}`);
   mainWindow.loadURL(url);
 
@@ -95,7 +96,7 @@ function createWindow() {
   });
 
   // En dev, recarga el renderer cuando Vite recompila el bundle
-  if (isDev) {
+  if (isDev && !DEV_SERVER_URL) {
     const fs = require('fs');
     const rendererDir = path.join(__dirname, '../../dist/renderer');
     let reloadTimer = null;

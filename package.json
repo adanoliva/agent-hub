@@ -5,15 +5,16 @@
   "main": "src/backend/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "concurrently -k --success first -n build,electron -c cyan,yellow \"vite build --watch\" \"wait-on dist/renderer/index.html && electron .\"",
+    "predev": "node scripts/kill-dev-ports.js",
+    "dev": "concurrently -k --success first -n vite,electron -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "dev:vite": "vite",
     "build:renderer": "vite build",
     "test:backend": "node --test tests/backend/*.test.js",
-    "prebuild": "npm run build:renderer && node scripts/generate-icon.js",
-    "build": "electron-builder --win portable",
-    "build:dir": "electron-builder --win dir",
+    "prepare:build": "npm run build:renderer && node scripts/generate-icon.js",
+    "build": "npm run prepare:build && electron-builder --win portable",
+    "build:dir": "npm run prepare:build && electron-builder --win dir",
     "postbuild": "node scripts/post-build.js",
-    "release": "electron-builder --win portable --publish always"
+    "release": "npm run prepare:build && electron-builder --win portable --publish always"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",

@@ -104,6 +104,14 @@ export interface PendingAgentToEdit {
   projectId?: string | null;
 }
 
+export interface PendingNewAgentDraft {
+  name?: string;
+  description?: string;
+  system?: string;
+  tools?: string[];
+  model?: string;
+}
+
 export interface DashboardNotification {
   id:         string;
   type:       'critical' | 'optimization' | 'info';

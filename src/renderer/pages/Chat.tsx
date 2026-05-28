@@ -3,7 +3,7 @@ import { Topbar } from '../components/layout/Topbar';
 import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
-import type { Agent, ProjectContextInfo } from '../types';
+import type { Agent, PendingNewAgentDraft, ProjectContextInfo } from '../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -94,6 +94,8 @@ export function Chat() {
   const toast               = useToast();
   const projects            = useStore((s) => s.projects);
   const setView             = useStore((s) => s.setView);
+  const setPendingAction    = useStore((s) => s.setPendingAction);
+  const setPendingNewAgentDraft = useStore((s) => s.setPendingNewAgentDraft);
   const pendingChatAgent    = useStore((s) => s.pendingChatAgent);
   const setPendingChatAgent = useStore((s) => s.setPendingChatAgent);
 
@@ -321,7 +323,23 @@ export function Chat() {
   // ── Action execution ─────────────────────────────────────────────────────────
 
   function execAction(action: ChatAction) {
-    if (action.type === 'open-agents' || action.type === 'create-agent') {
+    if (action.type === 'create-agent') {
+      const tools = Array.isArray(action.data?.tools) && action.data.tools.length > 0
+        ? action.data.tools
+        : ['Read'];
+      const draft: PendingNewAgentDraft = {
+        name: action.data?.name?.trim() || '',
+        description: action.data?.description?.trim() || '',
+        system: action.data?.system?.trim() || '',
+        tools,
+        model: action.data?.model || 'sonnet',
+      };
+      setPendingNewAgentDraft(draft);
+      setPendingAction('new-agent');
+      setView('agents');
+    } else if (action.type === 'open-agents') {
+      setPendingAction(null);
+      setPendingNewAgentDraft(null);
       setView('agents');
     } else if (action.type === 'open-settings') {
       setView('settings');
@@ -498,7 +516,44 @@ interface BubbleProps {
   onExecAction: (action: ChatAction) => void;
 }
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function MessageBubble({ message: m, onExecAction }: BubbleProps) {
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy(content: string) {
+    const ok = await copyToClipboard(content);
+    if (ok) {
+      setCopied(true);
+      toast('Texto copiado');
+      window.setTimeout(() => setCopied(false), 1200);
+    } else {
+      toast('No se pudo copiar el texto', 'err');
+    }
+  }
+
   if (m.role === 'user') {
     return (
       <div
@@ -517,6 +572,13 @@ function MessageBubble({ message: m, onExecAction }: BubbleProps) {
 
   return (
     <div className="chat-bubble assistant">
+      <button
+        className={`chat-copy-btn${copied ? ' copied' : ''}`}
+        onClick={() => handleCopy(m._clean ?? m.content)}
+        title="Copiar todo el mensaje"
+      >
+        <i className={`ti ${copied ? 'ti-check' : 'ti-copy'}`} />
+      </button>
       <div dangerouslySetInnerHTML={{ __html: renderMarkdown(m._clean ?? m.content) }} />
       {m._actions && m._actions.length > 0 && (
         <div className="chat-actions">

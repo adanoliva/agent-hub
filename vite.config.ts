@@ -17,7 +17,7 @@ export default defineConfig(({ command }) => ({
     strictPort: true,
     allowedHosts: true,
     proxy: {
-      '/api': { target: 'http://localhost:3737', changeOrigin: true },
+      '^/api(?:/|$)': { target: 'http://localhost:3737', changeOrigin: true },
     },
   },
   build: {

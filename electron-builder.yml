@@ -5,7 +5,7 @@ copyright: Copyright © 2025
 publish:
   provider: github
   owner: adanoliva
-  repo: cdm
+  repo: agent-hub
   private: true
   releaseType: release
 
@@ -30,8 +30,8 @@ portable:
   # so config.js can find the correct data directory next to the .exe
 
 files:
-  # Source files
-  - src/**/*
+  # Runtime source files (backend only)
+  - src/backend/**/*
   - dist/renderer/**/*
   - package.json
   # All node_modules (asar bundles them efficiently)
@@ -40,6 +40,8 @@ files:
   - "!node_modules/.bin/**"
   - "!node_modules/**/{test,tests,__tests__,spec,specs}/**"
   - "!node_modules/**/*.{md,markdown,txt,log}"
+  - "!node_modules/**/*.map"
+  - "!node_modules/**/*.d.ts"
   - "!node_modules/**/LICENSE*"
   - "!node_modules/**/CHANGELOG*"
   - "!node_modules/**/README*"
@@ -57,5 +59,5 @@ extraResources:
     to: app-update.yml
 
 asar: true
-compression: maximum
+compression: normal
 nodeGypRebuild: false

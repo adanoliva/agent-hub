@@ -39,8 +39,10 @@ const DEFAULT_NODE_KEY = suggestionsNodeKey(DEFAULT_NODE);
 export function Agents() {
   const toast                = useToast();
   const pendingAction        = useStore((s) => s.pendingAction);
+  const pendingNewAgentDraft = useStore((s) => s.pendingNewAgentDraft);
   const pendingAgentToEdit   = useStore((s) => s.pendingAgentToEdit);
   const setPendingAction     = useStore((s) => s.setPendingAction);
+  const setPendingNewAgentDraft = useStore((s) => s.setPendingNewAgentDraft);
   const setPendingAgentToEdit = useStore((s) => s.setPendingAgentToEdit);
   const navigateTo           = useStore((s) => s.navigateTo);
   const setPendingChatAgent  = useStore((s) => s.setPendingChatAgent);
@@ -161,9 +163,17 @@ export function Agents() {
 
   useEffect(() => {
     if (pendingAction === 'new-agent') {
-      setEditorAgent({ ...NEW_AGENT });
+      setEditorAgent({
+        ...NEW_AGENT,
+        ...(pendingNewAgentDraft ?? {}),
+        tools: pendingNewAgentDraft?.tools && pendingNewAgentDraft.tools.length > 0
+          ? pendingNewAgentDraft.tools
+          : NEW_AGENT.tools,
+        model: pendingNewAgentDraft?.model || NEW_AGENT.model,
+      });
       setEditorIsNew(true);
       setPendingAction(null);
+      setPendingNewAgentDraft(null);
     }
   }, []);
 
