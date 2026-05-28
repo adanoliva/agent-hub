@@ -1175,6 +1175,36 @@ app.post('/api/ai/optimize-agent', async (req, res) => {
   const { name, description, system, tools = [], model = 'sonnet', language = 'en' } = req.body;
   if (!system) return res.status(400).json({ error: 'system prompt required' });
 
+  const isContentFilterErr = (msg) => /content management policy|content filter|response was filtered|prompt triggering azure openai|politica de contenido|bloqueo la solicitud/i.test(String(msg || ''));
+  const fallbackDescription = () => {
+    const d = String(description || '').trim();
+    if (d) return d.slice(0, 80);
+    if (language === 'es') return `Optimiza prompts de ${name || 'agente'} con foco y claridad`.slice(0, 80);
+    return `Optimize ${name || 'agent'} prompts with focused, clear instructions`.slice(0, 80);
+  };
+  const extractHeadings = (text) => String(text || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l)
+    .filter((l) => /^#{1,6}\s+/.test(l) || /^\[[^\]]+\]$/.test(l));
+
+  const preservesFormat = (originalText, candidateText) => {
+    const original = String(originalText || '');
+    const candidate = String(candidateText || '');
+    const originalHeadings = extractHeadings(original);
+    if (!originalHeadings.length) return true;
+    const candidateHeadings = extractHeadings(candidate);
+    if (candidateHeadings.length < originalHeadings.length) return false;
+    return originalHeadings.every((h, i) => candidateHeadings[i] === h);
+  };
+  const fallbackSystem = () => {
+    const raw = String(system || '').trim();
+    if (raw) return raw;
+    return language === 'es'
+      ? 'Analiza el contexto disponible, prioriza instrucciones concretas, entrega pasos accionables y valida riesgos antes de proponer cambios.'
+      : 'Analyze available context, prioritize concrete instructions, provide actionable steps, and validate risks before proposing changes.';
+  };
+
   const toolList   = tools.join(', ') || 'ninguna';
   const langTarget = language === 'es' ? 'Spanish' : 'English';
 
@@ -1195,19 +1225,31 @@ Rules for the rewrite:
 - Keep ONLY what is specific and differentiating for THIS agent's task.
 - Use imperative verbs. No preamble.
 - Write in ${langTarget}.
+- Preserve the ORIGINAL FORMAT exactly: keep the same section headers, their order, list style, and spacing style.
+- Do NOT add, remove, or rename sections.
+- If the original prompt has a custom template, keep that template and only tighten wording.
 - If the current description is vague or generic, write a sharper one (one action sentence, max 80 chars, in ${langTarget}).
 
 Respond ONLY with valid JSON, no markdown:
-{"description":"<sharp one-sentence description>","system":"<rewritten prompt, 50-100 words>"}`;
+{"description":"<sharp one-sentence description>","system":"<rewritten prompt that preserves original format>"}`;
 
   try {
     const { callAI } = require('./ai');
     const raw = await callAI(prompt, { maxTokens: 500 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('La IA no devolvió JSON válido');
+    if (!jsonMatch) {
+      return res.json({ description: fallbackDescription(), system: fallbackSystem() });
+    }
     const { description: newDesc, system: newSystem } = JSON.parse(jsonMatch[0]);
-    res.json({ description: newDesc, system: newSystem });
+    const safeSystem = preservesFormat(system, newSystem) ? String(newSystem || fallbackSystem()) : fallbackSystem();
+    res.json({
+      description: String(newDesc || fallbackDescription()),
+      system: safeSystem,
+    });
   } catch (e) {
+    if (isContentFilterErr(e?.message)) {
+      return res.json({ description: fallbackDescription(), system: fallbackSystem() });
+    }
     res.status(500).json({ error: e.message });
   }
 });

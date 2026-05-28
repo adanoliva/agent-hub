@@ -264,6 +264,27 @@ async function callAPI(prompt, apiKey, opts = {}) {
 const GITHUB_MODELS_URL = 'https://models.inference.ai.azure.com/chat/completions';
 const GITHUB_MODELS_DEFAULT = 'gpt-4o-mini';
 
+function isGitHubContentFilterMessage(msg) {
+  return /content management policy|content filter|response was filtered|prompt triggering azure openai|politica de contenido|bloqueo la solicitud/i.test(String(msg || ''));
+}
+
+function mapGitHubModelsError(status, msg) {
+  if (status === 401) {
+    return 'GitHub token invalido o sin permisos. Verifica el token en Ajustes.';
+  }
+  if (status === 429) {
+    return 'Limite de peticiones de GitHub Models alcanzado. Intentalo en unos minutos.';
+  }
+  if (isGitHubContentFilterMessage(msg)) {
+    return [
+      'GitHub Models bloqueo la solicitud por su politica de contenido.',
+      'Prueba reformular el prompt con enfoque defensivo y profesional.',
+      'Evita pedir instrucciones ofensivas, dano, fraude o contenido sensible explicito.',
+    ].join(' ');
+  }
+  return `GitHub Models API error: ${msg}`;
+}
+
 async function callGitHub(prompt, githubToken, model, opts = {}) {
   if (!githubToken) throw new Error('No GitHub token configured');
 
@@ -284,9 +305,7 @@ async function callGitHub(prompt, githubToken, model, opts = {}) {
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     const msg = err.error?.message || err.message || response.statusText;
-    if (response.status === 401) throw new Error('GitHub token inválido o sin permisos. Verifica el token en Ajustes.');
-    if (response.status === 429) throw new Error('Límite de peticiones de GitHub Models alcanzado. Inténtalo en unos minutos.');
-    throw new Error(`GitHub Models API error: ${msg}`);
+    throw new Error(mapGitHubModelsError(response.status, msg));
   }
 
   const data  = await response.json();
@@ -347,7 +366,7 @@ async function generateAgentPrompt(params) {
 
   const prompt = `You are an expert at writing system prompts for Claude Code sub-agents.
 
-Create a complete, professional system prompt for a Claude Code agent with the following details:
+Create structured content for a Claude Code agent with the following details:
 
 Agent name: ${name}
 Brief description: ${description}
@@ -355,19 +374,202 @@ Agent level: ${levelLabels[level] || level}
 ${toolsNote}
 ${existingNote}
 
-Requirements for the system prompt:
-1. Be specific and actionable — concrete instructions, not vague principles
-2. Include the agent's primary responsibilities and approach
-3. Define what the agent should and should NOT do
-4. Include formatting or output requirements where relevant
-5. Keep it focused — this agent does ONE thing well
-6. Length: 80-150 words, no headers needed, just the prompt text
+Return ONLY valid JSON with this exact shape:
+{
+  "role": "string, concise role title",
+  "objective": "string, one sentence, max 20 words",
+  "responsibilities": ["3 to 5 concise bullet items"],
+  "boundaries": ["3 to 5 concise do-not rules"],
+  "outputFormat": ["2 to 4 concise output requirements"]
+}
+
+Content requirements:
+- Be specific and actionable, avoid generic filler
+- Keep focus on one core responsibility for this agent
+- Do NOT copy the user's brief description verbatim in any field
+- No markdown, no commentary outside JSON
 ${langInstr}
 
-Output ONLY the system prompt text. No preamble, no explanation, no markdown code blocks.`;
+Output ONLY JSON.`;
 
-  const result = await callAI(prompt, { maxTokens: 400 });
-  return result.trim();
+  try {
+    const result = await callAI(prompt, { maxTokens: 400 });
+    const parsed = parseJSONObjectSafely(result);
+    return renderStandardAgentPrompt({
+      description,
+      level,
+      categoryId,
+      techId,
+      tools,
+      language,
+      role: parsed.role,
+      objective: parsed.objective,
+      responsibilities: parsed.responsibilities,
+      boundaries: parsed.boundaries,
+      outputFormat: parsed.outputFormat,
+    });
+  } catch (err) {
+    // Some GitHub Models requests get false-positive content filtering.
+    // Return a deterministic prompt instead of failing the UX.
+    if (isGitHubContentFilterMessage(err?.message || '')) {
+      return renderStandardAgentPrompt({
+        description,
+        level,
+        categoryId,
+        techId,
+        tools,
+        language,
+      });
+    }
+    // If AI output cannot be parsed, still return the deterministic base format.
+    if (/could not parse ai response as json|expected json object/i.test(String(err?.message || ''))) {
+      return renderStandardAgentPrompt({ description, level, categoryId, techId, tools, language });
+    }
+    throw err;
+  }
+}
+
+function renderStandardAgentPrompt({
+  description,
+  level,
+  categoryId,
+  techId,
+  tools = [],
+  language = 'en',
+  role,
+  objective,
+  responsibilities,
+  boundaries,
+  outputFormat,
+}) {
+  const isEs = language === 'es';
+  const levelText = (() => {
+    if (level === 'global') return isEs ? 'todos los proyectos' : 'all projects';
+    if (level === 'section') return isEs ? `proyectos de la categoria ${categoryId || 'objetivo'}` : `${categoryId || 'target'} category projects`;
+    if (level === 'tech') return isEs
+      ? `proyectos ${techId || 'tecnologicos'} en ${categoryId || 'la categoria objetivo'}`
+      : `${techId || 'technology'} projects in ${categoryId || 'the target category'}`;
+    return isEs ? 'un proyecto especifico' : 'a specific project';
+  })();
+
+  const sanitizeList = (arr, fallback) => {
+    if (!Array.isArray(arr) || !arr.length) return fallback;
+    return arr.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 5);
+  };
+
+  const sanitizeLine = (text, fallback) => {
+    const v = String(text || '').trim();
+    return v || fallback;
+  };
+
+  const defaultRole = isEs
+    ? 'Actua como especialista tecnico con enfoque sistematico.'
+    : 'Act as a technical specialist with a systematic approach.';
+
+  const safeRole = sanitizeLine(role, defaultRole);
+
+  const safeObjective = String(objective || (isEs
+    ? 'Resolver la tarea asignada con pasos accionables y verificables.'
+    : 'Solve the assigned task with actionable, verifiable steps.')).trim();
+
+  const safeResponsibilities = sanitizeList(
+    responsibilities,
+    isEs
+      ? [
+        'Analizar el contexto disponible antes de proponer cambios.',
+        'Proponer pasos concretos y ordenados para ejecutar la tarea.',
+        'Priorizar soluciones simples, mantenibles y medibles.',
+      ]
+      : [
+        'Analyze available context before proposing changes.',
+        'Provide concrete, ordered steps to execute the task.',
+        'Prioritize simple, maintainable, measurable solutions.',
+      ],
+  );
+
+  const safeBoundaries = sanitizeList(
+    boundaries,
+    isEs
+      ? [
+        'No inventar archivos, comandos ni resultados.',
+        'No cambiar APIs publicas sin justificar impacto.',
+        'No omitir validaciones ni riesgos conocidos.',
+      ]
+      : [
+        'Do not invent files, commands, or outcomes.',
+        'Do not change public APIs without impact rationale.',
+        'Do not skip validations or known risks.',
+      ],
+  );
+
+  const safeOutput = sanitizeList(
+    outputFormat,
+    isEs
+      ? [
+        'Resumen breve del enfoque.',
+        'Pasos recomendados y ordenados.',
+        'Riesgos y comprobaciones finales.',
+      ]
+      : [
+        'Short summary of the approach.',
+        'Recommended ordered steps.',
+        'Risks and final validation checks.',
+      ],
+  );
+
+  const bullets = (items) => items.map((x) => `- ${x}`).join('\n');
+
+  if (isEs) {
+    return [
+      safeRole,
+      '',
+      '**Objetivo**:',
+      safeObjective,
+      '',
+      '**Alcance**:',
+      `Aplica a: ${levelText}.`,
+      '',
+      '**Proceso**:',
+      '1. Analiza el contexto y valida restricciones antes de actuar.',
+      '2. Prioriza hipotesis/acciones por impacto y probabilidad.',
+      '3. Ejecuta cambios minimos y verificables.',
+      '4. Valida resultados y riesgos de regresion.',
+      '',
+      '**Responsabilidades**:',
+      bullets(safeResponsibilities),
+      '',
+      '**Limites**:',
+      bullets(safeBoundaries),
+      '',
+      '**Formato de salida**:',
+      bullets(safeOutput),
+    ].join('\n');
+  }
+
+  return [
+    safeRole,
+    '',
+    '**Objective**:',
+    safeObjective,
+    '',
+    '**Scope**:',
+    `Applies to: ${levelText}.`,
+    '',
+    '**Process**:',
+    '1. Analyze context and validate constraints before acting.',
+    '2. Prioritize hypotheses/actions by impact and likelihood.',
+    '3. Execute minimal, verifiable changes.',
+    '4. Validate outcomes and regression risks.',
+    '',
+    '**Responsibilities**:',
+    bullets(safeResponsibilities),
+    '',
+    '**Boundaries**:',
+    bullets(safeBoundaries),
+    '',
+    '**Output format**:',
+    bullets(safeOutput),
+  ].join('\n');
 }
 
 // ── Suggestion generation ─────────────────────────────────────────────────────
@@ -613,6 +815,30 @@ function parseJSONSafely(raw) {
   }
 }
 
+function parseJSONObjectSafely(raw) {
+  let clean = String(raw || '')
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/, '')
+    .replace(/\s*```$/, '')
+    .trim();
+
+  const start = clean.indexOf('{');
+  const end   = clean.lastIndexOf('}');
+  if (start !== -1 && end !== -1) {
+    clean = clean.slice(start, end + 1);
+  }
+
+  try {
+    const parsed = JSON.parse(clean);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('Expected JSON object');
+    }
+    return parsed;
+  } catch {
+    throw new Error('Could not parse AI response as JSON object');
+  }
+}
+
 // ── Multi-turn chat ───────────────────────────────────────────────────────────
 
 /**
@@ -666,7 +892,8 @@ async function callAIChat(messages, opts = {}) {
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(`GitHub Models error: ${err.error?.message || response.statusText}`);
+      const msg = err.error?.message || err.message || response.statusText;
+      throw new Error(mapGitHubModelsError(response.status, msg));
     }
     const data  = await response.json();
     const usage = data.usage || {};

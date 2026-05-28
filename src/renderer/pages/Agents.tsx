@@ -33,6 +33,9 @@ function writeStoredSuggestionsCache(cache: Record<string, Agent[]>) {
   } catch {}
 }
 
+const INITIAL_SUGGESTIONS_CACHE = readStoredSuggestionsCache();
+const DEFAULT_NODE_KEY = suggestionsNodeKey(DEFAULT_NODE);
+
 export function Agents() {
   const toast                = useToast();
   const pendingAction        = useStore((s) => s.pendingAction);
@@ -51,7 +54,7 @@ export function Agents() {
     return new Set(keys);
   });
   const [agents,             setAgents]             = useState<Agent[]>([]);
-  const [suggestions,        setSuggestions]        = useState<Agent[]>([]);
+  const [suggestions,        setSuggestions]        = useState<Agent[]>(() => INITIAL_SUGGESTIONS_CACHE[DEFAULT_NODE_KEY] ?? []);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [search,             setSearch]             = useState('');
   const [allAgents,          setAllAgents]          = useState<Agent[]>([]);
@@ -67,7 +70,7 @@ export function Agents() {
   const pendingAgentNameRef                          = useRef<string | null>(null);
   const pendingNodeRef                               = useRef<SelectedNode | null>(null);
   const didInitialLoadRef                            = useRef(false);
-  const suggestionsCacheRef                          = useRef<Record<string, Agent[]>>(readStoredSuggestionsCache());
+  const suggestionsCacheRef                          = useRef<Record<string, Agent[]>>(INITIAL_SUGGESTIONS_CACHE);
 
   const sugAbortRef = useRef<AbortController | null>(null);
 
