@@ -9,7 +9,8 @@ const path    = require('path');
 const fs      = require('fs');
 
 const { readConfig, writeConfig, bootstrapDirectories, APP_DIR, getAgentDir } = require('./config');
-const apiFs = require('./api-fs');
+const apiFs   = require('./api-fs');
+const browser = require('./browser');
 const {
   listAgentsByLevel,
   getApplicableAgents,
@@ -269,9 +270,16 @@ app.get('/api/agents', (req, res) => {
   }
 });
 
-// GET /api/agents/applicable?categoryId=&techId=
+// GET /api/agents/applicable?projectId= OR ?categoryId=&techId=
 app.get('/api/agents/applicable', (req, res) => {
-  const { categoryId, techId } = req.query;
+  let { categoryId, techId, projectId } = req.query;
+  if (projectId && (!categoryId || !techId)) {
+    const project = readConfig().projects.find(p => p.id === projectId);
+    if (project) {
+      categoryId = categoryId || project.categoryId;
+      techId     = techId     || project.techId;
+    }
+  }
   res.json(getApplicableAgents(categoryId, techId));
 });
 
@@ -1771,6 +1779,101 @@ app.post('/api/orchestrations/:id/executions/:executionId/rollback', async (req,
     executor.execDir = execDir;
     await executor.rollbackStep(Number(stepIndex));
     res.json({ ok: true, message: `Paso ${Number(stepIndex) + 1} deshecho correctamente` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Browser automation routes ──────────────────────────────────────────────────
+
+/** GET /api/browser/status — Connection state, available browsers, open tabs */
+app.get('/api/browser/status', async (req, res) => {
+  try {
+    const status = await browser.getStatus();
+    res.json(status);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** POST /api/browser/connect — Connect to a running browser via CDP */
+app.post('/api/browser/connect', async (req, res) => {
+  try {
+    const { port, browserKey } = req.body;
+    const cdpPort = port || browser.DEFAULT_CDP_PORT;
+    const probe   = await browser.probeCdpPort(cdpPort);
+    if (!probe.active) {
+      return res.status(400).json({ error: `No hay ningún navegador escuchando en el puerto ${cdpPort}. Reinicia el navegador con la opción CDP o usa /api/browser/launch.` });
+    }
+
+    // Detect engine from browserKey or default to chromium
+    const installed = browser.listInstalledBrowsers();
+    let engine = 'chromium';
+    if (browserKey) {
+      const def = browser.BROWSER_DEFINITIONS[browserKey];
+      if (def) engine = def.engine;
+    } else {
+      // Auto-detect: try to guess from running browsers
+      const pref = browser.getPreferredBrowser();
+      if (pref) {
+        const def = browser.BROWSER_DEFINITIONS[pref];
+        if (def) engine = def.engine;
+      }
+    }
+
+    await browser.connectBrowser(cdpPort, engine);
+    if (browserKey) browser.setPreferredBrowser(browserKey);
+
+    const status = await browser.getStatus();
+    res.json({ ok: true, ...status });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** POST /api/browser/disconnect — Close CDP connection (browser stays open) */
+app.post('/api/browser/disconnect', async (req, res) => {
+  try {
+    await browser.disconnectBrowser();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** GET /api/browser/tabs — List open tabs from the CDP-enabled browser */
+app.get('/api/browser/tabs', async (req, res) => {
+  try {
+    const port = req.query.port ? Number(req.query.port) : browser.getCdpPort();
+    const tabs = await browser.listCdpTabs(port);
+    res.json(tabs);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** POST /api/browser/launch — Relaunch a browser with the CDP flag */
+app.post('/api/browser/launch', async (req, res) => {
+  try {
+    const { browserKey, port } = req.body;
+    if (!browserKey) return res.status(400).json({ error: 'browserKey requerido' });
+
+    const result = await browser.launchBrowserWithCdp(
+      browserKey,
+      port || browser.DEFAULT_CDP_PORT,
+    );
+    browser.setPreferredBrowser(browserKey);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** GET /api/browser/installed — List installed browsers on this machine */
+app.get('/api/browser/installed', (req, res) => {
+  try {
+    const installed = browser.listInstalledBrowsers();
+    res.json(installed);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -38,6 +38,15 @@ function generateId() {
 function create(projectId, projectPath, data) {
   const id = generateId();
   const now = new Date().toISOString();
+
+  const defaultInputNode = data.inputNode || {
+    id:           `input-node-${Date.now()}`,
+    from:         -1,
+    to:           0,
+    dataFlow:     { agentOutput: false, filesModified: false, projectContext: true, selectiveFiles: [] },
+    contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
+  };
+
   const orch = {
     id,
     projectId,
@@ -46,11 +55,13 @@ function create(projectId, projectPath, data) {
     enabled:     true,
     agents:      Array.isArray(data.agents) ? data.agents : [],
     nodes:       Array.isArray(data.nodes)  ? data.nodes  : [],
+    inputNode:   defaultInputNode,
     executionConfig: {
       stopOnError:           true,
       validateAfterEachStep: false,
       maxTurns:              10,
       timeout:               300000,
+      requiresBrowser:       false,
       ...(data.executionConfig || {}),
     },
     createdAt:      now,

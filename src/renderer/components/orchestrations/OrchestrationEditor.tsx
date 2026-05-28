@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { req } from '../../api';
-import type { Orchestration, OrchestrateNode, DataFlow, ContextExtra, Agent } from '../../types';
-import { NodeCanvas, getAgentIcon, CANVAS_SLOT_H, CANVAS_PAD_TOP } from './NodeCanvas';
+import type { BrowserStatus, Orchestration, OrchestrateNode, DataFlow, ContextExtra, Agent } from '../../types';
+import { NodeCanvas, getAgentIcon, CANVAS_SLOT_H, CANVAS_AGENTS_OFFSET } from './NodeCanvas';
 import { ConnectionConfigurator } from './ConnectionConfigurator';
 import { useStore } from '../../store';
 
@@ -41,7 +41,16 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   const [description, setDescription] = useState(orchestration.description);
   const [agents,      setAgents]      = useState<string[]>(orchestration.agents);
   const [nodes,       setNodes]       = useState<OrchestrateNode[]>(orchestration.nodes);
-  const [selectedNode, setSelectedNode] = useState<number | null>(null);
+  const [inputNode,   setInputNode]   = useState<OrchestrateNode>(() =>
+    orchestration.inputNode ?? {
+      id:           `input-node-${Date.now()}`,
+      from:         -1,
+      to:           0,
+      dataFlow:     { agentOutput: false, filesModified: false, projectContext: true, selectiveFiles: [] },
+      contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
+    }
+  );
+  const [selectedNode, setSelectedNode] = useState<number | null>(null);  // -1 = inputNode
   const [isSaving,    setIsSaving]    = useState(false);
   const [validating,  setValidating]  = useState(false);
 
@@ -55,12 +64,37 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   const [allAgents,   setAllAgents]   = useState<Agent[]>([]);
   const [agentSearch, setAgentSearch] = useState('');
 
-  // Load available agents
+  // Browser state
+  const [browserConnected, setBrowserConnected] = useState<boolean | null>(null);
+  const [requiresBrowser,  setRequiresBrowser]  = useState<boolean>(orchestration.executionConfig?.requiresBrowser ?? false);
+
+  // Poll browser status once when component mounts
   useEffect(() => {
-    req<Agent[]>('GET', '/agents/flat')
-      .then(a => setAllAgents(a))
-      .catch(() => {});
+    req<BrowserStatus>('GET', '/browser/status')
+      .then(s => setBrowserConnected(s.connected))
+      .catch(() => setBrowserConnected(false));
   }, []);
+
+  // Load all agents for this project: applicable (global/section/tech) + project-level
+  useEffect(() => {
+    if (!orchestration.projectId) {
+      req<Agent[]>('GET', '/agents/flat')
+        .then(a => setAllAgents(a))
+        .catch(() => {});
+      return;
+    }
+    Promise.all([
+      req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(orchestration.projectId)}`).catch(() => [] as Agent[]),
+      req<Agent[]>('GET', `/projects/${encodeURIComponent(orchestration.projectId)}/agents`).catch(() => [] as Agent[]),
+    ]).then(([applicable, projectAgents]) => {
+      const seen = new Set<string>();
+      const merged: Agent[] = [];
+      for (const a of [...applicable, ...projectAgents]) {
+        if (!seen.has(a.name)) { seen.add(a.name); merged.push(a); }
+      }
+      setAllAgents(merged);
+    });
+  }, [orchestration.projectId]);
 
   // Rebuild nodes preserving config by position
   const rebuildNodes = (newAgents: string[], currentNodes: OrchestrateNode[]): OrchestrateNode[] => {
@@ -124,7 +158,11 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   };
 
   const handleUpdateNode = (updated: OrchestrateNode) => {
-    setNodes(ns => ns.map(n => n.id === updated.id ? updated : n));
+    if (updated.from === -1) {
+      setInputNode(updated);
+    } else {
+      setNodes(ns => ns.map(n => n.id === updated.id ? updated : n));
+    }
   };
 
   const handleValidate = async () => {
@@ -152,7 +190,11 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     if (!name.trim()) { addToast('El nombre es obligatorio', 'warn'); return; }
     setIsSaving(true);
     try {
-      await onSave({ name, description, agents, nodes });
+      const executionConfig = {
+        ...(orchestration.executionConfig ?? {}),
+        requiresBrowser,
+      };
+      await onSave({ name, description, agents, nodes, inputNode, executionConfig });
       setErrors([]);
     } finally {
       setIsSaving(false);
@@ -178,7 +220,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     const panelRect = panel.getBoundingClientRect();
     // panel has padding:20px, canvas is centered horizontally but top-aligned
     const yRelCanvas = e.clientY - panelRect.top - 20 + panel.scrollTop;
-    const zone = Math.max(0, Math.min(agents.length, Math.round((yRelCanvas - CANVAS_PAD_TOP - CANVAS_SLOT_H / 4) / CANVAS_SLOT_H)));
+    const zone = Math.max(0, Math.min(agents.length, Math.round((yRelCanvas - CANVAS_AGENTS_OFFSET - CANVAS_SLOT_H / 4) / CANVAS_SLOT_H)));
     setDragOverZone(zone);
   };
 
@@ -188,7 +230,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     if (!panel) return;
     const panelRect = panel.getBoundingClientRect();
     const yRelCanvas = e.clientY - panelRect.top - 20 + panel.scrollTop;
-    const zone = Math.max(0, Math.min(agents.length, Math.round((yRelCanvas - CANVAS_PAD_TOP - CANVAS_SLOT_H / 4) / CANVAS_SLOT_H)));
+    const zone = Math.max(0, Math.min(agents.length, Math.round((yRelCanvas - CANVAS_AGENTS_OFFSET - CANVAS_SLOT_H / 4) / CANVAS_SLOT_H)));
     handleDropAtZone(zone);
   };
   return (
@@ -291,6 +333,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
           <NodeCanvas
             agents={agents}
             nodes={nodes}
+            inputNode={inputNode}
             selectedNode={selectedNode}
             onSelectNode={idx => setSelectedNode(selectedNode === idx ? null : idx)}
             onNodeDragStart={handleNodeDragStart}
@@ -305,7 +348,15 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
 
         {/* Right: Connection configurator */}
         <div className="orch-config-panel">
-          {selectedNode !== null && nodes[selectedNode] ? (
+          {selectedNode === -1 ? (
+            <ConnectionConfigurator
+              node={inputNode}
+              fromAgent="Orquestador"
+              toAgent={agents[0] ?? ''}
+              onUpdate={handleUpdateNode}
+              isInputNode
+            />
+          ) : selectedNode !== null && nodes[selectedNode] ? (
             <ConnectionConfigurator
               node={nodes[selectedNode]}
               fromAgent={agents[nodes[selectedNode].from]}
@@ -326,6 +377,34 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
         <button className="btn ghost" onClick={onBack}>
           <i className="ti ti-arrow-left" /> Volver
         </button>
+
+        {/* Browser indicator + requiresBrowser toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, marginLeft: 16 }}>
+          {browserConnected !== null && (
+            <span
+              className={`badge ${browserConnected ? 'green' : 'gray'}`}
+              title={browserConnected ? 'Navegador conectado vía CDP' : 'Navegador no conectado — ve a Ajustes › Navegador'}
+            >
+              <i className={`ti ti-browser`} />
+              {browserConnected ? 'Navegador' : 'Sin navegador'}
+            </span>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={requiresBrowser}
+              onChange={e => setRequiresBrowser(e.target.checked)}
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            Requiere navegador
+          </label>
+          {requiresBrowser && !browserConnected && (
+            <span className="badge amber" style={{ fontSize: 11 }}>
+              <i className="ti ti-alert-triangle" /> Sin conexión CDP
+            </span>
+          )}
+        </div>
+
         <button
           className="btn primary"
           onClick={onExecute}

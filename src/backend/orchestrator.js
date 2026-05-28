@@ -35,9 +35,9 @@ const TEXT_EXTENSIONS = new Set([
 const MAX_FILE_SIZE_BYTES = 256 * 1024; // 256KB per file in snapshot
 const MAX_SNAPSHOT_FILES  = 500;        // Limit snapshot size
 
-// Token-efficiency limits
-const MAX_PREV_RESPONSE_CHARS = 3000;   // max chars of previous agent response passed to next
-const MAX_CONTEXT_FILE_CHARS  = 4000;   // max chars per fixed-context file
+// Token-efficiency limits (kept low for GitHub Copilot Free 8k-token window)
+const MAX_PREV_RESPONSE_CHARS = 1500;   // max chars of previous agent response passed to next
+const MAX_CONTEXT_FILE_CHARS  = 2000;   // max chars per fixed-context file
 
 // ── Filesystem helpers ────────────────────────────────────────────────────────
 
@@ -181,12 +181,16 @@ class OrchestrationExecutor extends EventEmitter {
     const agent     = this._getAgent(agentName);
     let prompt      = agent?.system || `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
 
-    // Project context file (CLAUDE.md / copilot-instructions.md / etc.):
-    // Always injected for step 0. For subsequent steps, only when the previous
-    // node enables it via dataFlow.projectContext (legacy: dataFlow.claudeMd).
-    const prevDataFlow   = this.orchestration.nodes[stepIndex - 1]?.dataFlow;
-    const includeContext = stepIndex === 0 ||
-      (prevDataFlow?.projectContext === true || prevDataFlow?.claudeMd === true);
+    // Determine which node provides context into this step:
+    // step 0 uses inputNode (Orquestador → Agent[0]), others use the previous inter-agent node.
+    const inputNode  = this.orchestration.inputNode;
+    const prevNode   = stepIndex === 0 ? inputNode : this.orchestration.nodes[stepIndex - 1];
+    const prevDF     = prevNode?.dataFlow;
+
+    // Project context: always for step 0 (unless inputNode disables it), or per dataFlow
+    const includeContext = stepIndex === 0
+      ? (prevDF ? prevDF.projectContext !== false : true)
+      : (prevDF?.projectContext === true || prevDF?.claudeMd === true);
 
     if (includeContext) {
       const contextFile = this._getContextFile();
@@ -198,28 +202,25 @@ class OrchestrationExecutor extends EventEmitter {
       }
     }
 
-    // Fixed context files from the previous node's configuration
-    if (stepIndex > 0) {
-      const prevNode = this.orchestration.nodes[stepIndex - 1];
-      const fc = prevNode?.contextExtra?.fixed;
-      if (fc) {
-        if (fc.freeText?.trim()) {
-          prompt += `\n\n# CONTEXTO ADICIONAL\n${fc.freeText.trim()}`;
-        }
-        if (fc.files?.length > 0) {
-          for (const filePath of fc.files) {
-            try {
-              const resolvedPath = require('path').isAbsolute(filePath)
-                ? filePath
-                : path.join(this.project.path, filePath);
-              const content = fs.readFileSync(resolvedPath, 'utf8');
-              const name = require('path').basename(filePath);
-              const truncated = content.length > MAX_CONTEXT_FILE_CHARS
-                ? content.slice(0, MAX_CONTEXT_FILE_CHARS) + '\n[Archivo truncado]'
-                : content;
-              prompt += `\n\n# ARCHIVO DE CONTEXTO (${name})\n${truncated}`;
-            } catch {}
-          }
+    // Fixed context from the node that feeds into this step
+    const fc = prevNode?.contextExtra?.fixed;
+    if (fc) {
+      if (fc.freeText?.trim()) {
+        prompt += `\n\n# CONTEXTO ADICIONAL\n${fc.freeText.trim()}`;
+      }
+      if (fc.files?.length > 0) {
+        for (const filePath of fc.files) {
+          try {
+            const resolvedPath = require('path').isAbsolute(filePath)
+              ? filePath
+              : path.join(this.project.path, filePath);
+            const content = fs.readFileSync(resolvedPath, 'utf8');
+            const name = require('path').basename(filePath);
+            const truncated = content.length > MAX_CONTEXT_FILE_CHARS
+              ? content.slice(0, MAX_CONTEXT_FILE_CHARS) + '\n[Archivo truncado]'
+              : content;
+            prompt += `\n\n# ARCHIVO DE CONTEXTO (${name})\n${truncated}`;
+          } catch {}
         }
       }
     }
@@ -230,7 +231,35 @@ class OrchestrationExecutor extends EventEmitter {
   _buildUserMessage(stepIndex) {
     let message = '';
 
-    if (stepIndex > 0) {
+    if (stepIndex === 0) {
+      // Step 0: use inputNode temporal contexts (user inputs at execution time)
+      const inputNode = this.orchestration.inputNode;
+      if (inputNode?.contextExtra?.temporal?.length > 0) {
+        for (const temp of inputNode.contextExtra.temporal) {
+          const tempKey   = `input-${temp.id}`;
+          const tempValue = this.temporalContextValues[tempKey];
+          if (tempValue) {
+            message += `## ${temp.label || 'Entrada'}\n\n${tempValue}\n\n`;
+          }
+        }
+      }
+
+      // If inputNode has a fixed task description, use it as the task
+      const taskText = inputNode?.contextExtra?.fixed?.freeText?.trim();
+      const agentName = this.orchestration.agents[0];
+      const isLastStep = this.orchestration.agents.length === 1;
+      const structHint = isLastStep
+        ? ''
+        : '\n\nNota: tu respuesta será la entrada del siguiente agente. Sé preciso y conciso; omite explicaciones redundantes.';
+
+      if (taskText) {
+        message += `## Tarea\n\n${taskText}${structHint}`;
+      } else {
+        message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
+          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.${structHint}`;
+      }
+
+    } else {
       const prevResult = this.results[stepIndex - 1];
       const prevNode   = this.orchestration.nodes[stepIndex - 1];
 
@@ -249,7 +278,7 @@ class OrchestrationExecutor extends EventEmitter {
         message += '\n\n';
       }
 
-      // Temporal contexts
+      // Temporal contexts from inter-agent node
       if (prevNode?.contextExtra?.temporal?.length > 0) {
         for (const temp of prevNode.contextExtra.temporal) {
           const tempKey   = `${stepIndex - 1}-${temp.id}`;
@@ -259,18 +288,18 @@ class OrchestrationExecutor extends EventEmitter {
           }
         }
       }
+
+      const agentName  = this.orchestration.agents[stepIndex];
+      const isLastStep = stepIndex === this.orchestration.agents.length - 1;
+      const structHint = isLastStep
+        ? ''
+        : '\n\nNota: tu respuesta será la entrada del siguiente agente. Sé preciso y conciso; omite explicaciones redundantes.';
+      message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
+        ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.${structHint}`;
     }
 
-    const agentName   = this.orchestration.agents[stepIndex];
-    const isLastStep  = stepIndex === this.orchestration.agents.length - 1;
-    const structHint  = isLastStep
-      ? ''
-      : '\n\nNota: tu respuesta será la entrada del siguiente agente. Sé preciso y conciso; omite explicaciones redundantes.';
-    message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
-      ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.${structHint}`;
-
     // Hard limit: use executionConfig.maxContextChars or default
-    const maxChars = this.orchestration.executionConfig?.maxContextChars || 12000;
+    const maxChars = this.orchestration.executionConfig?.maxContextChars || 4000;
     if (message.length > maxChars) {
       message = message.slice(0, maxChars) + '\n\n[Contexto truncado por límite de tokens]';
     }
@@ -493,10 +522,23 @@ class OrchestrationExecutor extends EventEmitter {
             provider:       provider === 'github' ? 'github' : 'api',
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
             timeout:        orchestration.executionConfig?.timeout   || 300000,
+            useBrowser:     orchestration.executionConfig?.requiresBrowser === true,
           });
+
+          // Surface internal failures as real errors so the catch block handles them
+          if (!cliResult.success && cliResult.error) {
+            throw new Error(cliResult.error);
+          }
+
           response     = cliResult.finalResponse || cliResult.result || '';
           inputTokens  = cliResult.tokens?.input  || 0;
           outputTokens = cliResult.tokens?.output || 0;
+
+          // If subsystem-cli ran but produced no output, warn
+          if (!response.trim()) {
+            this._log('warn', `Paso ${i + 1}: el agente no produjo respuesta`);
+          }
+
           // Estimate cost from token counts (api/github)
           stepCostUSD  = calcAnthropicCost('claude-sonnet-4-20250514', inputTokens, outputTokens);
         }

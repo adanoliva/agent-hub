@@ -997,7 +997,7 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
       body:    JSON.stringify({
         model:      cfg.githubModel || GITHUB_MODELS_DEFAULT,
         messages:   msgsToSend,
-        max_tokens: opts.maxTokens || 4096,
+        max_tokens: opts.maxTokens || 2048,  // GitHub Copilot Free: 8k total window
       }),
       signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     });
@@ -1047,6 +1047,7 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     projectContext: opts.projectContext || '',
     maxTurns:       opts.maxTurns       || 10,
     timeout:        opts.timeout        || 300_000,
+    useBrowser:     opts.useBrowser     || false,
     callAIRaw: (messages, systemPrompt) =>
       callAIChatWithTokens(messages, systemPrompt, { provider: opts.provider }),
   });

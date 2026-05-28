@@ -62,6 +62,9 @@ export interface Config {
   agentsDirectoryUrl?: string;
   agentsDirectoryEnabled?: boolean;
   dismissedDashboardNotifications?: string[];
+  // Browser automation
+  browserPreferredBrowser?: 'auto' | 'chrome' | 'edge' | 'brave' | 'firefox';
+  browserCdpPort?: number;
   categories: Category[];
   projects: Project[];
 }
@@ -95,6 +98,29 @@ export interface AgentDirectoryStatus {
 }
 
 export type View = 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings' | 'orchestrations';
+
+// ── Browser automation types ────────────────────────────────────────────────────────
+
+export interface BrowserTab {
+  id:    string;
+  url:   string;
+  title: string;
+}
+
+export interface BrowserInstalled {
+  key:    string;
+  name:   string;
+  engine: string;
+}
+
+export interface BrowserStatus {
+  connected:  boolean;
+  cdpActive:  boolean;
+  cdpPort:    number;
+  browserKey: string | null;
+  tabs:       BrowserTab[];
+  installed:  BrowserInstalled[];
+}
 
 // ── Orchestration types ───────────────────────────────────────────────────────
 
@@ -137,6 +163,7 @@ export interface ExecutionConfig {
   maxTurns:              number;
   timeout:               number;
   maxContextChars?:      number;  // max chars for user message per step (default 12 000)
+  requiresBrowser?:      boolean;
 }
 
 export interface Orchestration {
@@ -147,6 +174,7 @@ export interface Orchestration {
   enabled:              boolean;
   agents:               string[];
   nodes:                OrchestrateNode[];
+  inputNode?:           OrchestrateNode;  // Orquestador → Agent[0] connection
   executionConfig:      ExecutionConfig;
   createdAt:            string;
   updatedAt:            string;

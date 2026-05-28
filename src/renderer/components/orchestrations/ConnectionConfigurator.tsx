@@ -3,10 +3,11 @@ import type { OrchestrateNode, DataFlow, ContextExtra, TemporalContext } from '.
 import { useElectron } from '../../hooks/useElectron';
 
 interface Props {
-  node:       OrchestrateNode;
-  fromAgent:  string;
-  toAgent:    string;
-  onUpdate:   (node: OrchestrateNode) => void;
+  node:        OrchestrateNode;
+  fromAgent:   string;
+  toAgent:     string;
+  onUpdate:    (node: OrchestrateNode) => void;
+  isInputNode?: boolean;  // true = Orquestador entry node (no dataFlow, task description)
 }
 
 function generateTempId(): string {
@@ -23,7 +24,7 @@ function normalizeContextExtra(ce: ContextExtra): ContextExtra {
   };
 }
 
-export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate }: Props) {
+export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate, isInputNode = false }: Props) {
   const [dataFlow,     setDataFlow]     = useState<DataFlow>(node.dataFlow);
   const [contextExtra, setContextExtra] = useState<ContextExtra>(() => normalizeContextExtra(node.contextExtra));
   const [dirty, setDirty]              = useState(false);
@@ -96,11 +97,12 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate }: P
   return (
     <div className="orch-conn-config">
       <div className="orch-conn-config-header">
-        <i className="ti ti-arrows-exchange" />
+        <i className={isInputNode ? 'ti ti-circuit-diode' : 'ti ti-arrows-exchange'} />
         <span><strong>{fromAgent}</strong> → <strong>{toAgent}</strong></span>
       </div>
 
-      {/* Data flow */}
+      {/* Data flow — hidden for inputNode (no previous agent output) */}
+      {!isInputNode && (
       <section className="orch-config-section">
         <h4><i className="ti ti-transfer" /> Información que pasa</h4>
         <label className="orch-check-row">
@@ -141,16 +143,20 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate }: P
           </div>
         )}
       </section>
+      )}
 
       {/* Fixed context */}
       <section className="orch-config-section">
-        <h4><i className="ti ti-file-text" /> Contexto fijo</h4>
+        <h4><i className="ti ti-file-text" /> {isInputNode ? 'Descripción de la tarea' : 'Contexto fijo'}</h4>
         <div className="orch-subsection">
-          <label className="orch-label">Texto libre (incluido en todas las ejecuciones):</label>
+          <label className="orch-label">{isInputNode ? 'Tarea inicial (incluida en el primer agente):' : 'Texto libre (incluido en todas las ejecuciones):'}</label>
           <textarea
             className="orch-textarea"
-            placeholder="Instrucciones o contexto que siempre aplican a esta conexión…"
-            rows={4}
+            placeholder={isInputNode
+              ? 'Describe la tarea que deben realizar los agentes…'
+              : 'Instrucciones o contexto que siempre aplican a esta conexión…'
+            }
+            rows={isInputNode ? 5 : 4}
             value={contextExtra.fixed.freeText}
             onChange={e => patchCE({ fixed: { ...contextExtra.fixed, freeText: e.target.value } })}
           />

@@ -42,18 +42,31 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const esRef      = useRef<EventSource | null>(null);
 
-  // Collect all temporal context fields needed
-  const temporalFields = orchestration.nodes.flatMap((node, nodeIdx) =>
-    (node.contextExtra?.temporal || []).map(t => ({
-      nodeIndex: nodeIdx,
-      tempId:    t.id,
-      key:       `${nodeIdx}-${t.id}`,
-      label:     t.label,
-      type:      t.type,
+  // Collect all temporal context fields: inputNode first, then inter-agent nodes
+  const temporalFields = [
+    // inputNode fields — key prefix "input-"
+    ...(orchestration.inputNode?.contextExtra?.temporal || []).map(t => ({
+      nodeIndex:   -1,
+      tempId:      t.id,
+      key:         `input-${t.id}`,
+      label:       t.label,
+      type:        t.type,
       placeholder: t.placeholder,
-      required:  t.required,
-    }))
-  );
+      required:    t.required,
+    })),
+    // Inter-agent node fields — key prefix "{nodeIdx}-"
+    ...orchestration.nodes.flatMap((node, nodeIdx) =>
+      (node.contextExtra?.temporal || []).map(t => ({
+        nodeIndex:   nodeIdx,
+        tempId:      t.id,
+        key:         `${nodeIdx}-${t.id}`,
+        label:       t.label,
+        type:        t.type,
+        placeholder: t.placeholder,
+        required:    t.required,
+      }))
+    ),
+  ];
 
   // Auto-scroll logs
   useEffect(() => {

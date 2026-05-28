@@ -58,7 +58,7 @@ function parseAgentResponse(text) {
     if (!toolMatch) continue;
 
     const tool = toolMatch[1].toLowerCase();
-    if (!['read', 'write', 'bash', 'grep'].includes(tool)) continue;
+    if (!['read', 'write', 'bash', 'grep', 'browser_get', 'browser_action', 'browser_screenshot'].includes(tool)) continue;
 
     let toolCall = null;
 
@@ -104,6 +104,54 @@ function parseAgentResponse(text) {
         id:   crypto.randomUUID(),
         tool: 'grep',
         args: { pattern: patternMatch[1].trim(), file: fileMatch[1].trim() },
+        raw:  block.trim(),
+      };
+    }
+
+    if (tool === 'browser_get') {
+      const urlMatch      = block.match(/^URL:\s*(.+)$/m);
+      const selectorMatch = block.match(/^SELECTOR:\s*(.+)$/m);
+      const formatMatch   = block.match(/^FORMAT:\s*(.+)$/m);
+      if (!urlMatch) continue;
+      toolCall = {
+        id:   crypto.randomUUID(),
+        tool: 'browser_get',
+        args: {
+          url:      urlMatch[1].trim(),
+          selector: selectorMatch ? selectorMatch[1].trim() : undefined,
+          format:   formatMatch   ? formatMatch[1].trim()   : 'text',
+        },
+        raw: block.trim(),
+      };
+    }
+
+    if (tool === 'browser_action') {
+      const actionMatch   = block.match(/^ACTION:\s*(.+)$/m);
+      const selectorMatch = block.match(/^SELECTOR:\s*(.+)$/m);
+      const valueMatch    = block.match(/^VALUE:\s*(.+)$/m);
+      const scriptMatch   = block.match(/^SCRIPT:\s*(.+)$/m);
+      const tabMatch      = block.match(/^TAB:\s*(.+)$/m);
+      if (!actionMatch) continue;
+      toolCall = {
+        id:   crypto.randomUUID(),
+        tool: 'browser_action',
+        args: {
+          action:   actionMatch[1].trim(),
+          selector: selectorMatch ? selectorMatch[1].trim() : undefined,
+          value:    valueMatch    ? valueMatch[1].trim()    : undefined,
+          script:   scriptMatch   ? scriptMatch[1].trim()   : undefined,
+          tabIndex: tabMatch      ? Number(tabMatch[1].trim()) : undefined,
+        },
+        raw: block.trim(),
+      };
+    }
+
+    if (tool === 'browser_screenshot') {
+      const selectorMatch = block.match(/^SELECTOR:\s*(.+)$/m);
+      toolCall = {
+        id:   crypto.randomUUID(),
+        tool: 'browser_screenshot',
+        args: { selector: selectorMatch ? selectorMatch[1].trim() : undefined },
         raw:  block.trim(),
       };
     }
@@ -183,6 +231,51 @@ async function executeToolCall(toolCall, projectPath) {
       return {
         toolCall,
         success:       true,
+        data,
+        executionTime: Date.now() - start,
+      };
+    }
+
+    if (toolCall.tool === 'browser_get') {
+      if (!browser.isConnected()) {
+        return {
+          toolCall,
+          success: false,
+          error:   { code: 'BROWSER_NOT_CONNECTED', message: 'Sin conexión al navegador. Conecta primero desde Ajustes > Navegador.' },
+          executionTime: Date.now() - start,
+        };
+      }
+      const data = await browser.browserGet(toolCall.args.url, {
+        selector: toolCall.args.selector,
+        format:   toolCall.args.format || 'text',
+      });
+      return {
+        toolCall,
+        success:       true,
+        data,
+        executionTime: Date.now() - start,
+      };
+    }
+
+    if (toolCall.tool === 'browser_action' || toolCall.tool === 'browser_screenshot') {
+      if (!browser.isConnected()) {
+        return {
+          toolCall,
+          success: false,
+          error:   { code: 'BROWSER_NOT_CONNECTED', message: 'Sin conexión al navegador. Conecta primero desde Ajustes > Navegador.' },
+          executionTime: Date.now() - start,
+        };
+      }
+      const action = toolCall.tool === 'browser_screenshot' ? 'screenshot' : toolCall.args.action;
+      const data   = await browser.browserAction(action, {
+        selector: toolCall.args.selector,
+        value:    toolCall.args.value,
+        script:   toolCall.args.script,
+        tabIndex: toolCall.args.tabIndex,
+      });
+      return {
+        toolCall,
+        success:       data.ok,
         data,
         executionTime: Date.now() - start,
       };
@@ -288,7 +381,9 @@ function buildToolResultsMessage(results) {
  * @param {string} [projectContext]
  * @returns {string}
  */
-function buildSubsystemSystemPrompt(agentSystemPrompt, projectContext) {
+function buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, opts = {}) {
+  const { useBrowser = false } = opts;
+
   const toolInstructions = `HERRAMIENTAS DISPONIBLES:
 ─────────────────────────
 Para interactuar con los archivos del proyecto usa este formato exacto (cada bloque separado por ---):
@@ -316,7 +411,34 @@ COMMAND: find src -name "*.ts" -type f
 4. GREP — Buscar patrón en archivos
 TOOL: grep
 PATTERN: export const
-FILE: src/**/*.ts
+FILE: src/**/*.ts${useBrowser ? `
+
+---
+
+5. BROWSER_GET — Navegar a una URL y obtener su contenido
+TOOL: browser_get
+URL: https://jira.empresa.com/browse/PROJ-123
+[SELECTOR: #main-content]   ← opcional: esperar a que este elemento aparezca
+[FORMAT: text|html|both]    ← defecto: text
+
+---
+
+6. BROWSER_ACTION — Interactuar con la página actual del navegador
+TOOL: browser_action
+ACTION: click|fill|select|hover|screenshot|wait|evaluate|tab
+SELECTOR: #summary-field     ← requerido para click/fill/select/hover/wait
+[VALUE: "nuevo texto"]       ← requerido para fill/select; URL substring para tab
+[SCRIPT: document.title]    ← requerido para evaluate
+
+---
+
+7. BROWSER_SCREENSHOT — Capturar pantalla (página completa o elemento)
+TOOL: browser_screenshot
+[SELECTOR: #main-content]   ← opcional: sólo ese elemento
+
+NOTA NAVEGADOR: El navegador ya tiene sesiones activas (cookies, login). Úsalo
+para acceder a páginas que requieren autenticación (Jira, GitHub, Confluence, etc.).
+Siempre usa browser_get primero para ver el estado de la página antes de actuar.` : ''}
 
 REGLAS:
 - Cada herramienta va en su propia sección separada por ---
@@ -363,12 +485,13 @@ async function execute(prompt, agentSystemPrompt, config) {
     projectContext = '',
     maxTurns       = 10,
     timeout        = 300_000,
+    useBrowser     = false,
   } = config;
 
   if (!projectPath) throw new Error('projectPath is required for Subsystem CLI');
   if (typeof callAIRaw !== 'function') throw new Error('callAIRaw function is required');
 
-  const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext);
+  const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, { useBrowser });
   const messages      = [{ role: 'user', content: String(prompt) }];
 
   const allToolCalls  = [];

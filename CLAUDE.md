@@ -172,6 +172,12 @@ El wizard siempre se muestra al arrancar a menos que `localStorage.getItem('cdm-
 | POST | `/api/ai/project-suggestions/refresh` | Forzar regeneración de sugerencias de proyecto |
 | POST | `/api/chat` | Chat multi-turno |
 | GET/PUT/DELETE | `/api/chat/history` | Historial de chat por proyecto (`?projectId=`) |
+| GET | `/api/browser/status` | Estado de la conexión CDP (navegador, pestañas) |
+| POST | `/api/browser/connect` | Conectar al navegador vía CDP `{ port?, browserKey? }` |
+| POST | `/api/browser/disconnect` | Cerrar conexión CDP (el navegador permanece abierto) |
+| GET | `/api/browser/tabs` | Listar pestañas abiertas |
+| POST | `/api/browser/launch` | Relanzar navegador con `--remote-debugging-port` `{ browserKey, port? }` |
+| GET | `/api/browser/installed` | Navegadores instalados en el sistema |
 
 El helper del renderer es: `req<T>(method, path, body?)` en `src/renderer/api.ts` → hace fetch a `http://localhost:3737/api{path}`.
 
