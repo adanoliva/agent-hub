@@ -21,6 +21,7 @@
       <div class="nav-links">
         <a href="#features">Funcionalidades</a>
         <a href="#how">Cómo funciona</a>
+        <a href="#orchestrations">Orquestaciones</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#collab">Repositorio</a>
       </div>
@@ -30,14 +31,14 @@
   <!-- HERO -->
   <section class="hero">
     <div class="hero-badge">
-      <i class="ti ti-sparkles"></i> v1.8.3 disponible
+      <i class="ti ti-sparkles"></i> v1.9.0 disponible
     </div>
     <h1 class="hero-title">
       Gestiona tus agentes de IA<br />
       <span class="gradient-text">como un profesional</span>
     </h1>
     <p class="hero-sub">
-      Agent Hub centraliza, organiza y sincroniza todos tus agentes de Claude y Copilot
+      Agent Hub centraliza, organiza y sincroniza todos tus agentes de IA
       en un solo lugar. Genera prompts con IA y despliégalos a todo tu equipo automáticamente.
     </p>
     <div class="hero-actions">
@@ -170,7 +171,7 @@
         <div class="feature-card">
           <i class="ti ti-chart-bar"></i>
           <h3>Dashboard</h3>
-          <p>Vista de inicio con métricas, salud de proyectos en tiempo real, oportunidades de mejora con opción de aplazar y acciones rápidas.</p>
+          <p>Vista de inicio con métricas, salud de proyectos en tiempo real, oportunidades de mejora con opción de aplazarlas y acciones rápidas.</p>
         </div>
         <div class="feature-card">
           <i class="ti ti-chart-line"></i>
@@ -181,6 +182,16 @@
           <i class="ti ti-code"></i>
           <h3>Guías de editor</h3>
           <p>Instrucciones de integración para VS Code, IntelliJ y Eclipse.</p>
+        </div>
+        <div class="feature-card accent">
+          <i class="ti ti-circuit-diode"></i>
+          <h3>Orquestaciones multiagente</h3>
+          <p>Encadena agentes en workflows secuenciales. El output de cada agente alimenta al siguiente, con rollback granular y auditoría completa. <span style="font-size:10px;font-family:monospace;color:var(--accent);background:rgba(124,106,247,0.12);border:1px solid rgba(124,106,247,0.25);padding:1px 7px;border-radius:20px;vertical-align:middle">v1.9.0</span></p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-terminal-2"></i>
+          <h3>Subsistema CLI</h3>
+          <p>Cualquier proveedor de IA opera sobre el filesystem del proyecto con las mismas capacidades que una CLI nativa. Sin dependencias extra. <span style="font-size:10px;font-family:monospace;color:var(--accent);background:rgba(124,106,247,0.12);border:1px solid rgba(124,106,247,0.25);padding:1px 7px;border-radius:20px;vertical-align:middle">v1.9.0</span></p>
         </div>
       </div>
     </div>
@@ -205,7 +216,7 @@
           <div class="step-num">02</div>
           <div class="step-body">
             <h3>La IA genera</h3>
-            <p>Agent Hub llama a Claude y genera el system prompt completo y optimizado.</p>
+            <p>Agent Hub llama al proveedor de IA configurado y genera el system prompt completo y optimizado.</p>
           </div>
         </div>
         <div class="step-arrow"><i class="ti ti-arrow-right"></i></div>
@@ -229,7 +240,7 @@
           <div class="step-num">05</div>
           <div class="step-body">
             <h3>Usas</h3>
-            <p>El agente está disponible en Claude Code o GitHub Copilot desde tu editor.</p>
+            <p>El agente está disponible desde tu editor y asistente de IA preferido.</p>
           </div>
         </div>
       </div>
@@ -276,14 +287,14 @@
       <div class="section-label">Repositorio colaborativo</div>
       <h2>Un catálogo compartido,<br />siempre actualizado</h2>
       <p class="section-desc">
-        Agent Hub se conecta a un repositorio central en GitHub. Todos los miembros del equipo
+        Agent Hub se conecta a un repositorio Git central. Todos los miembros del equipo
         descargan automáticamente los mismos agentes, en su última versión, sin hacer nada manualmente.
       </p>
       <div class="collab-diagram">
         <div class="collab-node repo">
-          <i class="ti ti-brand-github"></i>
+          <i class="ti ti-git-branch"></i>
           <span>Repositorio central</span>
-          <small>GitHub</small>
+          <small>Git</small>
         </div>
         <div class="collab-spokes">
           <div class="spoke">
@@ -338,7 +349,7 @@
           <i class="ti ti-point-filled" style="color:var(--blue)"></i>
           <div>
             <strong>Contribución abierta</strong>
-            <p>Cualquier miembro puede proponer nuevos agentes mediante pull request en GitHub.</p>
+            <p>Cualquier miembro puede proponer nuevos agentes mediante pull request en el repositorio.</p>
           </div>
         </div>
       </div>
@@ -353,24 +364,24 @@
       <div class="compat-grid">
         <div class="compat-card">
           <i class="ti ti-terminal-2"></i>
-          <h3>Claude CLI</h3>
-          <p>Usa tu suscripción de Claude.ai. Sin coste adicional.</p>
+          <h3>CLI nativa</h3>
+          <p>Usa el asistente de IA que ya tienes instalado. Sin coste adicional.</p>
         </div>
         <div class="compat-card">
           <i class="ti ti-api"></i>
-          <h3>Anthropic API</h3>
-          <p>Acceso directo a los modelos Claude desde tu API key.</p>
+          <h3>API directa</h3>
+          <p>Acceso directo a los modelos de IA desde tu API key.</p>
         </div>
         <div class="compat-card">
-          <i class="ti ti-brand-github"></i>
-          <h3>GitHub Copilot</h3>
-          <p>Compatible con tu cuenta de GitHub. Capa gratuita disponible.</p>
+          <i class="ti ti-plug-connected"></i>
+          <h3>Servicios en la nube</h3>
+          <p>Compatible con servicios de IA en la nube. Capa gratuita disponible.</p>
         </div>
       </div>
       <div class="compat-note">
         Compatible con cualquier lenguaje o framework ·
-        Claude Code <code>.claude/agents/</code> ·
-        GitHub Copilot <code>.github/agents/</code>
+        Agentes en <code>.ai/agents/</code> ·
+        o en <code>.agents/</code>
       </div>
     </div>
   </section>
@@ -464,7 +475,7 @@
             <div class="dash-sdot crit"><i class="ti ti-alert-circle"></i></div>
             <div class="dash-sync-info">
               <span class="dash-sync-name">e-commerce-api</span>
-              <span class="dash-sync-sub crit">CLAUDE.md ausente</span>
+              <span class="dash-sync-sub crit">Archivo de contexto ausente</span>
             </div>
           </div>
         </div>
@@ -480,7 +491,7 @@
             <div class="dash-notif-body">
               <span class="dash-notif-tag coral">CRÍTICA</span>
               <span class="dash-notif-who"><i class="ti ti-layout-grid"></i> e-commerce-api</span>
-              <span class="dash-notif-msg">No tiene CLAUDE.md generado.</span>
+              <span class="dash-notif-msg">No tiene archivo de contexto generado.</span>
             </div>
             <div style="display:flex;gap:4px;flex-shrink:0">
               <div class="dash-notif-btn">Generar</div>
@@ -552,6 +563,50 @@
     </div>
   </section>
 
+  <!-- ORQUESTACIONES -->
+  <section class="how" id="orchestrations" style="background:var(--bg1)">
+    <div class="container">
+      <div class="section-label">Nuevo en v1.9.0</div>
+      <h2>Orquestaciones multiagente</h2>
+      <p class="section-desc">Encadena agentes en workflows secuenciales. El output de cada paso alimenta al siguiente — con acceso real al filesystem, rollback granular y logs en tiempo real.</p>
+
+      <!-- Mock orquestación -->
+      <div class="orch-flow">
+        <div class="orch-node step1">
+          <div class="orch-step-label">Paso 1</div>
+          <div class="orch-agent-name">code-reviewer</div>
+          <div class="orch-agent-sub">Analiza el código</div>
+        </div>
+        <div class="orch-arrow"><i class="ti ti-arrow-right"></i><span>output</span></div>
+        <div class="orch-node step2">
+          <div class="orch-step-label">Paso 2</div>
+          <div class="orch-agent-name">refactor-expert</div>
+          <div class="orch-agent-sub">Refactoriza según análisis</div>
+        </div>
+        <div class="orch-arrow"><i class="ti ti-arrow-right"></i><span>archivos + output</span></div>
+        <div class="orch-node step3">
+          <div class="orch-step-label">Paso 3</div>
+          <div class="orch-agent-name">test-writer</div>
+          <div class="orch-agent-sub">Genera tests para los cambios</div>
+        </div>
+      </div>
+
+      <div class="orch-log">
+        <div class="orch-log-head"><i class="ti ti-terminal-2"></i> Ejecución en curso &mdash; paso 2 / 3</div>
+        <div class="orch-log-line ok"><i class="ti ti-circle-check"></i> [paso 1] code-reviewer completado &mdash; 3 ficheros analizados</div>
+        <div class="orch-log-line running"><i class="ti ti-player-play"></i> [paso 2] refactor-expert ejecutando...</div>
+        <div class="orch-log-line pending"><i class="ti ti-circle-dashed"></i> [paso 3] test-writer pendiente</div>
+      </div>
+
+      <div class="orch-features">
+        <div class="orch-feat"><i class="ti ti-cpu" style="color:var(--accent)"></i><div><strong>Cualquier proveedor</strong><p>Subsistema CLI emula el CLI nativo para cualquier proveedor de IA (API, CLI o servicios en la nube).</p></div></div>
+        <div class="orch-feat"><i class="ti ti-history" style="color:var(--green)"></i><div><strong>Rollback granular</strong><p>Backup automático antes de cada paso. Revierte cualquier ejecución.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-activity" style="color:var(--blue)"></i><div><strong>Logs en tiempo real</strong><p>Stream SSE por paso. Ve exactamente qué hace cada agente.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-list-check" style="color:var(--amber)"></i><div><strong>Auditoría completa</strong><p>Historial de ejecuciones con cambios, tokens y duración.</p></div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- CLOSING -->
   <section class="download" id="closing">
     <div class="container">
@@ -572,7 +627,7 @@
       <div class="nav-logo">
         <img src="logo.png" alt="Agent Hub" style="height:22px;display:block;">
       </div>
-      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante. · v1.8.3</p>
+      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante. · v1.9.0</p>
     </div>
   </footer>
 

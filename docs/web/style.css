@@ -1125,4 +1125,124 @@ section h2 {
   .step-arrow { display: none; }
   .roadmap-cols { grid-template-columns: 1fr; }
   .collab-spokes { gap: 16px; }
+  .orch-flow { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .orch-arrow { flex-direction: row; gap: 8px; }
+  .orch-features { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Orchestrations section ─────────────────────────────────────────────── */
+
+.orch-flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 32px 0 20px;
+}
+
+.orch-node {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 160px;
+}
+.orch-node.step1 { border-color: rgba(62,207,142,.35); }
+.orch-node.step2 { border-color: rgba(59,130,246,.35); }
+.orch-node.step3 { border-color: rgba(124,106,247,.35); }
+
+.orch-step-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-family: var(--mono);
+  margin-bottom: 6px;
+}
+.orch-node.step1 .orch-step-label { color: var(--green); }
+.orch-node.step2 .orch-step-label { color: var(--blue); }
+.orch-node.step3 .orch-step-label { color: var(--accent); }
+
+.orch-agent-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text0);
+  font-family: var(--mono);
+  margin-bottom: 3px;
+}
+
+.orch-agent-sub {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.orch-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.orch-arrow span {
+  font-size: 9px;
+  color: var(--text3);
+  font-family: var(--mono);
+}
+
+.orch-log {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 32px;
+}
+.orch-log-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text0);
+  font-family: var(--mono);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.orch-log-line {
+  font-size: 11px;
+  font-family: var(--mono);
+  line-height: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.orch-log-line.ok      { color: var(--green); }
+.orch-log-line.running { color: var(--text0); }
+.orch-log-line.pending { color: var(--text3); }
+
+.orch-features {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.orch-feat {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.orch-feat i {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.orch-feat strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text0);
+  margin-bottom: 4px;
+}
+.orch-feat p {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
 }

@@ -4,7 +4,7 @@
 
 *Construida con IA. Para la IA. Con manos humanas al volante.*
 
-![Version](https://img.shields.io/badge/version-1.7.0-7c6af7)
+![Version](https://img.shields.io/badge/version-1.9.0-7c6af7)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Runtime](https://img.shields.io/badge/runtime-Electron-47848F)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -38,6 +38,8 @@ Todo en un único `.exe` portable — sin instaladores, sin Node.js requerido en
 - **Generación de contexto de proyecto** — genera `CLAUDE.md` o `copilot-instructions.md` analizando el repositorio
 - **Importar agentes externos** — introduce una URL de un `.md` con frontmatter, revisa el preview y guárdalo como agente real
 - **Gestión de proyectos** — crear nuevo (con estructura de carpetas) o importar existente
+- **Orquestaciones multiagente** *(nuevo en v1.9.0)* — crea, edita y ejecuta workflows de múltiples agentes en secuencia; el output de cada agente se inyecta como contexto al siguiente; rollback granular y auditoría completa de ejecución
+- **Subsistema CLI** *(nuevo en v1.9.0)* — capa de ejecución virtual que permite a los proveedores API/GitHub Copilot operar sobre el filesystem del proyecto con las mismas capacidades que Claude CLI nativo
 - **Guías por editor** — VS Code, IntelliJ y Eclipse, adaptadas al proveedor configurado
 - **Abrir en VS Code** o en el Explorador de Windows con un botón
 - **System tray** — vive en la bandeja del sistema, siempre disponible
@@ -299,6 +301,10 @@ src/
 │   ├── templates.js        ← plantillas CLAUDE.md / copilot-instructions.md
 │   ├── tray.js             ← icono y menú de bandeja del sistema
 │   ├── icon.js             ← generación de icono en runtime
+│   ├── orchestrator.js     ← máquina de estados para ejecución de workflows multiagente
+│   ├── workflows.js        ← CRUD de orquestaciones (definiciones)
+│   ├── subsystem-cli.js    ← CLI virtual para proveedores API/GitHub (parser + executor)
+│   ├── api-fs.js           ← API de operaciones de filesystem para el subsistema CLI
 │   └── preload.js          ← context bridge: expone window.api al renderer
 └── renderer/
     ├── index.html          ← shell HTML (punto de entrada Vite)
@@ -314,6 +320,7 @@ src/
     │   ├── Projects.tsx    ← vista de proyectos
     │   ├── Agents.tsx      ← vista de agentes
     │   ├── Chat.tsx        ← vista de chat IA
+    │   ├── Orchestrations.tsx ← vista de orquestaciones (nuevo)
     │   └── Settings.tsx    ← vista de ajustes
     ├── components/
     │   ├── layout/
@@ -333,6 +340,12 @@ src/
     │   │   ├── ImportProjectModal.tsx
     │   │   ├── ExcludeAgentModal.tsx
     │   │   └── StatusBadge.tsx
+    │   ├── orchestrations/
+    │   │   ├── OrchestrationList.tsx
+    │   │   ├── OrchestrationEditor.tsx
+    │   │   ├── NodeCanvas.tsx
+    │   │   ├── ConnectionConfigurator.tsx
+    │   │   └── ExecutionPanel.tsx
     │   └── ui/
     │       ├── Modal.tsx
     │       ├── Toast.tsx
@@ -397,6 +410,88 @@ npm run release          # Build + publicar en GitHub Releases (requiere GH_TOKE
 | POST | `/api/ai/project-suggestions/refresh` | Regenerar sugerencias de proyecto |
 | POST | `/api/chat` | Chat multi-turno |
 | GET / PUT / DELETE | `/api/chat/history` | Historial de chat por proyecto |
+| GET / POST | `/api/orchestrations` | Listar / crear orquestaciones (`?projectId=`) |
+| GET / PUT / DELETE | `/api/orchestrations/:id` | Obtener / editar / borrar orquestación |
+| POST | `/api/orchestrations/:id/execute` | Ejecutar orquestación |
+| GET | `/api/orchestrations/:id/executions` | Historial de ejecuciones |
+| GET | `/api/orchestrations/:id/executions/:execId` | Detalle de ejecución |
+| GET | `/api/orchestrations/:id/executions/:execId/logs` | Logs de ejecución |
+| POST | `/api/orchestrations/:id/executions/:execId/rollback` | Rollback de una ejecución |
+| GET (SSE) | `/api/orchestrations/:id/execute/stream` | Stream de progreso en tiempo real |
+
+---
+
+## Orquestaciones multiagente *(v1.9.0)*
+
+Las orquestaciones permiten encadenar varios agentes en un workflow secuencial donde el output de cada paso alimenta al siguiente.
+
+### Casos de uso típicos
+
+```
+Code Review → Refactor → Testing
+  [code-reviewer] analiza el código
+       ↓ output + archivos
+  [refactor-expert] refactoriza según el análisis
+       ↓ archivos modificados
+  [test-writer] genera tests para los cambios
+
+Security Audit → Fix
+  [security-checker] identifica vulnerabilidades
+       ↓ reporte + rutas
+  [security-fixer] aplica los patches
+```
+
+### Almacenamiento
+
+Las orquestaciones se persisten en el directorio del proyecto bajo `.agent-hub/`:
+
+```
+.agent-hub/
+├── orchestrations/
+│   └── orch-{id}.json      ← Definición de la orquestación
+└── executions/
+    └── exec-{timestamp}/
+        ├── metadata.json   ← Info de ejecución
+        ├── logs.jsonl      ← Logs estructurados
+        ├── changes.json    ← Cambios por paso
+        ├── agent_outputs.json
+        └── backups/        ← Snapshots de archivos (para rollback)
+```
+
+### Rollback granular
+
+Cada paso hace un backup de los archivos afectados antes de ejecutarse. Puedes revertir hasta cualquier paso de una ejecución anterior.
+
+---
+
+## Subsistema CLI *(v1.9.0)*
+
+El Subsistema CLI es una capa de abstracción que permite a los proveedores API y GitHub Copilot operar sobre el filesystem del proyecto con las mismas capacidades que el CLI nativo de Claude Code.
+
+```
+Agente (API/GitHub) → Subsistema CLI → API-FS → Filesystem del proyecto
+```
+
+El agente comunica sus intenciones usando un protocolo de herramientas:
+
+```
+TOOL: read
+PATH: src/main.ts
+
+TOOL: write
+PATH: src/components/Button.tsx
+CONTENT:
+[contenido completo]
+
+TOOL: bash
+COMMAND: npm test
+
+TOOL: grep
+PATTERN: export const
+FILE: src/**/*.ts
+```
+
+El Subsistema CLI parsea estas intenciones, las valida y las ejecuta contra la API-FS, devolviendo el resultado al agente para el siguiente turno. El dispatcher selecciona automáticamente CLI real o virtual según el proveedor configurado — la interfaz hacia el orquestador es idéntica en ambos casos.
 
 ---
 
@@ -538,25 +633,25 @@ Thumbs.db
 
 ## Preguntas frecuentes
 
-**¿Necesito tener Claude Code instalado?**  
+**¿Necesito tener Claude Code instalado?**
 Sí, Agent Hub gestiona los agentes de Claude Code. Necesitas tener la CLI de Claude Code instalada.
 
-**¿Puedo usar la app sin proveedor de IA?**  
+**¿Puedo usar la app sin proveedor de IA?**
 Sí. El modo manual para crear agentes siempre está disponible. Solo el modo asistido por IA (generación de prompts y sugerencias) requiere un proveedor configurado.
 
-**¿Los agentes se sincronizan automáticamente al modificarlos?**  
+**¿Los agentes se sincronizan automáticamente al modificarlos?**
 No. Los cambios quedan pendientes y tú decides cuándo sincronizar — por proyecto o todos a la vez. Esto evita cambios inesperados mientras trabajas.
 
-**¿Qué pasa si borro un agente del nivel global?**  
+**¿Qué pasa si borro un agente del nivel global?**
 El fichero se elimina del directorio del manager. En los proyectos que tenían ese agente, la copia existente queda intacta hasta la siguiente sincronización.
 
-**¿Puedo mover la carpeta de la app a otro lugar?**  
+**¿Puedo mover la carpeta de la app a otro lugar?**
 Sí, es completamente portable. Solo recuerda que las rutas de los proyectos registrados son absolutas — si mueves los proyectos tendrás que actualizarlas desde la app.
 
-**¿Funciona en macOS o Linux?**  
+**¿Funciona en macOS o Linux?**
 La app está desarrollada y probada en Windows. Con ajustes menores en `electron-builder.yml` podría compilarse para macOS (`.dmg`) o Linux (`.AppImage`).
 
-**¿El auto-update funciona en el `.exe` portable?**  
+**¿El auto-update funciona en el `.exe` portable?**
 Sí. `electron-updater` soporta portables. El fichero `latest.yml` publicado en GitHub Releases contiene el hash y la URL del nuevo `.exe`, y el updater lo descarga y reemplaza el ejecutable al reiniciar.
 
 ---
