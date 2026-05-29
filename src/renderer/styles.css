@@ -307,6 +307,29 @@ select option{background:var(--bg2)}
 .wiz-foot{padding:16px 28px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .wiz-skip{font-size:11px;color:var(--text2);cursor:pointer}
 .wiz-skip:hover{color:var(--text1)}
+
+/* Wizard slides */
+.wiz-welcome{display:flex;flex-direction:column;align-items:center;gap:16px;padding:8px 0}
+.wiz-hero-icon{width:72px;height:72px;border-radius:20px;background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.3);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--accent)}
+.wiz-welcome-pills{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.wiz-welcome-desc{font-size:12px;color:var(--text1);line-height:1.7;text-align:center;max-width:380px;margin:0}
+
+.wiz-feature-list{display:flex;flex-direction:column;gap:0}
+.wiz-feature-row{display:flex;align-items:center;gap:12px;padding:8px 0;position:relative}
+.wiz-feature-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.wiz-feature-text{display:flex;flex-direction:column;gap:1px;flex:1}
+.wiz-feature-label{font-size:12px;font-weight:600;color:var(--text0)}
+.wiz-feature-sub{font-size:11px;color:var(--text1)}
+.wiz-level-arrow{font-size:11px;color:var(--text2);position:absolute;left:11px;bottom:-10px;z-index:1}
+.wiz-feature-tip{margin-top:8px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text1);line-height:1.6;display:flex;gap:8px;align-items:flex-start}
+.wiz-feature-tip .ti{font-size:14px;color:var(--blue);margin-top:1px;flex-shrink:0}
+
+.wiz-feats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wiz-feat-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.wiz-feat-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.wiz-feat-title{font-size:12px;font-weight:600;color:var(--text0);margin-bottom:3px}
+.wiz-feat-sub{font-size:11px;color:var(--text1);line-height:1.5}
+
 .ai-opt{background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:8px}
 .ai-opt:hover{border-color:var(--border3);background:var(--bg4)}
 .ai-opt.on{border-color:var(--accent);background:var(--accent-dim)}

@@ -47,7 +47,9 @@
       "Bash(rtk pip *)",
       "Bash(python *)",
       "Bash(del \"c:\\\\Users\\\\folivaba\\\\Downloads\\\\cdm\\\\agent-hub\\\\src\\\\renderer\\\\components\\\\agents\\\\AgentExecutePanel.tsx\")",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "Bash(ls C:/tmp/wizard-shots/ 2>/dev/null && echo \"shots exist\" || echo \"no shots dir\")",
+      "Read(//c/tmp/**)"
     ]
   }
 }

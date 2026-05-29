@@ -317,7 +317,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="step">
         <div class="step-num green">2</div>
         <div class="step-body">
-          <div class="step-title">Conectar con Claude</div>
+          <div class="step-title">Conectar con la IA</div>
           <div class="step-desc">Elige el proveedor de IA que usará Agent Hub para generar system prompts y sugerencias de agentes.</div>
           <div class="grid3" style="margin-top:10px">
             <div class="card accent-l">
@@ -338,6 +338,13 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
             <div class="callout-body">
               <div class="callout-title">Opcional</div>
               <div class="callout-text">Si saltas este paso, Agent Hub funciona en modo manual: puedes crear y editar agentes sin IA, pero no podrás usar la generación automática de prompts ni las sugerencias contextuales hasta configurar un proveedor.</div>
+            </div>
+          </div>
+          <div class="callout tip">
+            <i class="ti ti-terminal-2" aria-hidden="true"></i>
+            <div class="callout-body">
+              <div class="callout-title">Subsistema CLI interno</div>
+              <div class="callout-text">Cuando eliges una conexión vía API (por ejemplo, Anthropic o Copilot), Agent Hub utiliza un subsistema CLI interno para comunicar los agentes con el filesystem de tu ordenador. Así, la IA puede operar sobre archivos reales y ejecutar acciones igual que con la CLI nativa, sin exponer tus datos fuera del entorno local.</div>
             </div>
           </div>
         </div>
@@ -846,7 +853,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- ══════════════════════ -->
   <!-- Vista Orquestaciones   -->
   <!-- ══════════════════════ -->
-  <div class=”section” id=”orquestaciones”>
+  <div class="section" id="orquestaciones">
     <div class=”section-badge”>La aplicación</div>
     <h2 class=”section-title”>Vista <span>Orquestaciones</span></h2>
     <p class=”section-intro”>Crea y ejecuta workflows de múltiples agentes en secuencia sobre tu proyecto. El output de cada agente se inyecta como contexto al siguiente, con control granular del flujo de datos, contexto estático y dinámico, rollback paso a paso y auditoría completa de ejecución.</p>
@@ -859,13 +866,13 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
     </div>
 
-    <div class=”screenshot”>
-      <div class=”screenshot-placeholder”>
-        <i class=”ti ti-photo” aria-hidden=”true”></i>
-        <span>screenshots/orquestaciones-lista.png</span>
-        <em>Vista principal de orquestaciones — listado de cards por proyecto</em>
-      </div>
-    </div>
+    <div class="screenshot">
+          <div class="screenshot-placeholder">
+            <i class="ti ti-photo" aria-hidden="true"></i>
+            <span>screenshots/orquestaciones-lista.png</span>
+            <em>Vista principal de orquestaciones — listado de cards por proyecto</em>
+          </div>
+        </div>
 
     <h4>Conceptos clave</h4>
     <div class=”grid2” style=”margin-bottom:16px”>
@@ -897,9 +904,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       Al entrar en la vista Orquestaciones, ves las tarjetas de todas las orquestaciones del proyecto seleccionado en el topbar. Cada tarjeta muestra: nombre, descripción, estado de la última ejecución, número total de ejecuciones y fecha de la última.
     </p>
 
-    <div class=”screenshot”>
-      <div class=”screenshot-placeholder”>
-        <i class=”ti ti-photo” aria-hidden=”true”></i>
+    <div class="screenshot">
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
         <span>screenshots/orquestaciones-cards.png</span>
         <em>Tarjetas de orquestación con estado de última ejecución y contadores</em>
       </div>
@@ -930,9 +937,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       Al crear o editar una orquestación, la vista cambia a un editor de tres paneles en paralelo.
     </p>
 
-    <div class=”screenshot”>
-      <div class=”screenshot-placeholder”>
-        <i class=”ti ti-photo” aria-hidden=”true”></i>
+    <div class="screenshot">
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
         <span>screenshots/orquestaciones-editor.png</span>
         <em>Editor visual con los tres paneles: paleta de agentes, lienzo y configurador de conexión</em>
       </div>
@@ -1103,9 +1110,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       El panel de ejecución tiene tres fases secuenciales.
     </p>
 
-    <div class=”screenshot”>
-      <div class=”screenshot-placeholder”>
-        <i class=”ti ti-photo” aria-hidden=”true”></i>
+    <div class="screenshot">
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
         <span>screenshots/orquestaciones-ejecucion.png</span>
         <em>Panel de ejecución en curso — logs SSE por paso con estados en tiempo real</em>
       </div>
