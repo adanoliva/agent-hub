@@ -101,10 +101,10 @@ export function Wizard({ onDone }: WizardProps) {
     'Conecta tu IA',
   ];
   const SUBS = [
-    'Tu centro de comando para agentes de Claude Code. Organiza, sincroniza y potencia tus proyectos.',
+    'Tu centro de comando para agentes de IA. Organiza, sincroniza y potencia tus proyectos.',
     'Crea agentes en 4 niveles de alcance y sincronízalos automáticamente a tus proyectos.',
     'Genera prompts, chatea con contexto y orquesta agentes para tareas complejas.',
-    'Elige cómo quieres que la app acceda a Claude para generar agentes y sugerencias.',
+    'Elige cómo quieres que la app acceda a la IA para generar agentes y sugerencias.',
   ];
 
   return (
@@ -183,7 +183,7 @@ function WelcomeSlide() {
         <span className="badge gray"><i className="ti ti-topology-ring-2" />Orquestaciones</span>
       </div>
       <p className="wiz-welcome-desc">
-        Agent Hub centraliza la gestión de agentes de <strong>Claude Code</strong>, los sincroniza a tus proyectos y te da acceso a IA para generar, optimizar y ejecutar agentes directamente desde la app.
+        Agent Hub centraliza la gestión de agentes de <strong>IA</strong>, los sincroniza a tus proyectos y te da acceso para generar, optimizar y ejecutar agentes directamente desde la app.
       </p>
     </div>
   );
@@ -230,7 +230,7 @@ const FEATS = [
     icon: 'ti-message-chatbot',
     color: 'var(--accent)',
     title: 'Chat con contexto',
-    sub: 'Habla con Claude usando tus agentes como system prompt. Usa @menciones para activarlos.',
+    sub: 'Habla con la IA usando tus agentes como system prompt. Usa @menciones para activarlos.',
   },
   {
     icon: 'ti-topology-ring-2',
@@ -242,7 +242,7 @@ const FEATS = [
     icon: 'ti-file-description',
     color: 'var(--green)',
     title: 'Contexto generado',
-    sub: 'Genera CLAUDE.md o copilot-instructions.md analizando tu proyecto con IA.',
+    sub: 'Genera el archivo de contexto analizando tu proyecto con IA.',
   },
   {
     icon: 'ti-sparkles',
