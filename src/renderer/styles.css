@@ -234,6 +234,9 @@ select option{background:var(--bg2)}
 .settings-section{margin-bottom:36px}
 .settings-head{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;font-family:var(--mono);margin-bottom:14px;display:flex;align-items:center;gap:10px}
 .settings-head::after{content:'';flex:1;height:1px;background:var(--border)}
+.provider-group-label{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);padding:4px 2px 8px;margin-top:12px}
+.provider-group-label i{font-size:13px}
+.provider-group-separator{height:1px;background:var(--border);margin:12px 0}
 .provider-option{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:border-color .15s;margin-bottom:8px}
 .provider-option.selected{border-color:var(--accent);background:var(--accent-dim)}
 .provider-option-head{display:flex;align-items:center;gap:10px}

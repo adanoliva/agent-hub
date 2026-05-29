@@ -54,10 +54,36 @@ const CACHE_DIR   = path.join(APP_DIR, 'cache');
 
 const DEFAULT_CONFIG = {
   version: '1.9.1',
-  aiProvider: 'cli',   // 'cli' | 'api' | 'github'
+  aiProvider: 'cli',
+
+  // Anthropic API
   apiKey: '',
+  apiModel: 'claude-sonnet-4-20250514',
+
+  // OpenAI API
+  openaiKey: '',
+  openaiModel: 'gpt-4o-mini',
+
+  // GitHub Models
   githubToken: '',
   githubModel: 'gpt-4o-mini',
+
+  // Gemini API
+  geminiApiKey: '',
+  geminiApiModel: 'gemini-2.5-flash',
+
+  // Mistral API
+  mistralKey: '',
+  mistralModel: 'mistral-small-latest',
+
+  // Grok (xAI)
+  grokKey: '',
+  grokModel: 'grok-3-mini',
+
+  // CLI models
+  geminiCliModel: 'gemini-2.5-pro',
+  codexCliModel: 'o4-mini',
+
   theme: 'dark',       // 'dark' | 'light'
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',

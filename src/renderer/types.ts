@@ -51,12 +51,50 @@ export interface Agent {
   suggested?: boolean;
 }
 
+export type AIProvider =
+  | 'cli'          // Claude Code CLI
+  | 'gemini-cli'   // Gemini CLI
+  | 'codex-cli'    // OpenAI Codex CLI
+  | 'copilot-cli'  // GitHub Copilot CLI
+  | 'api'          // Anthropic API
+  | 'openai'       // OpenAI API
+  | 'github'       // GitHub Models
+  | 'gemini-api'   // Gemini API
+  | 'mistral'      // Mistral API
+  | 'grok';        // Grok (xAI)
+
 export interface Config {
   version: string;
-  aiProvider: 'cli' | 'api' | 'github';
+  aiProvider: AIProvider;
+
+  // Anthropic API
   apiKey: string;
+  apiModel?: string;
+
+  // OpenAI API
+  openaiKey?: string;
+  openaiModel?: string;
+
+  // GitHub Models
   githubToken: string;
   githubModel: string;
+
+  // Gemini API
+  geminiApiKey?: string;
+  geminiApiModel?: string;
+
+  // Mistral API
+  mistralKey?: string;
+  mistralModel?: string;
+
+  // Grok (xAI)
+  grokKey?: string;
+  grokModel?: string;
+
+  // CLI models
+  geminiCliModel?: string;
+  codexCliModel?: string;
+
   theme: 'dark' | 'light';
   closeAction?: 'ask' | 'tray' | 'quit';
   agentsDirectoryUrl?: string;

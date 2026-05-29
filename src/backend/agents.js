@@ -23,7 +23,7 @@ const crypto = require('crypto');
 const os     = require('os');
 const { AGENTS_DIR, CACHE_DIR, getAgentDir, ensureDir } = require('./config');
 const { DEFAULT_AGENTS } = require('./defaults');
-const { adaptAgentForProvider } = require('./agent-adapters');
+const { adaptAgentForProvider, adaptFromGitHub } = require('./agent-adapters');
 const { adaptSystemPromptForProvider } = require('./ai');
 
 // ── Model name map ────────────────────────────────────────────────────────────
@@ -289,7 +289,10 @@ function listProjectAgents(projectPath, providers = ['claude']) {
     for (const agent of listAgentsInDir(dir)) {
       if (!seen.has(agent.name)) {
         seen.add(agent.name);
-        results.push({ ...agent, level: 'project' });
+        // Normalize GitHub-format tool names to Claude format so the editor
+        // always works with a single canonical tool name set.
+        const normalized = provider === 'github' ? adaptFromGitHub(agent) : agent;
+        results.push({ ...normalized, level: 'project' });
       }
     }
   }
@@ -305,9 +308,12 @@ function saveProjectAgent(projectPath, oldName, agentData, providers = ['claude'
     if (oldName !== agentData.name && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     fs.writeFileSync(newPath, serializeAgentForProvider(agentData, provider), 'utf8');
   }
-  const firstDir = getAgentsDirForProvider(projectPath, providers[0]);
-  const newPath  = path.join(firstDir, `${agentData.name}.md`);
-  return { ...parseAgentFile(newPath), level: 'project' };
+  const firstDir   = getAgentsDirForProvider(projectPath, providers[0]);
+  const newPath    = path.join(firstDir, `${agentData.name}.md`);
+  const parsed     = parseAgentFile(newPath);
+  const firstProv  = providers[0];
+  const normalized = firstProv === 'github' ? adaptFromGitHub(parsed) : parsed;
+  return { ...normalized, level: 'project' };
 }
 
 function deleteProjectAgent(projectPath, name, providers = ['claude']) {

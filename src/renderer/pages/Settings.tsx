@@ -6,9 +6,11 @@ import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
-import type { Agent, AgentDirectoryStatus, BrowserStatus, Category, Config } from '../types';
+import type { Agent, AgentDirectoryStatus, AIProvider, BrowserStatus, Category, Config } from '../types';
 
 type Tab = 'general' | 'cats' | 'ext-agents' | 'browser';
+
+type CLICheck = { found: boolean; path: string | null };
 
 // ── Modals state types ─────────────────────────────────────────────────────────
 
@@ -30,13 +32,42 @@ export function Settings() {
 
   const [tab,         setTab]         = useState<Tab>('general');
   const [editorTab,   setEditorTab]   = useState<'vscode' | 'intellij' | 'eclipse'>('vscode');
-  const [aiStatus,    setAiStatus]    = useState<{ provider: string; ready: boolean } | null>(null);
+  const [aiStatus,    setAiStatus]    = useState<{ provider: string; ready: boolean; cliChecks?: Record<string, CLICheck> } | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<AIProvider>(config?.aiProvider ?? 'cli');
+  const [saving,      setSaving]      = useState(false);
+  const [testing,     setTesting]     = useState(false);
+  const [testResult,  setTestResult]  = useState<{ ok: boolean; error?: string; latencyMs?: number } | null>(null);
   const [updateMsg,   setUpdateMsg]   = useState('');
   const [importUrl,   setImportUrl]   = useState('');
   const [importBusy,  setImportBusy]  = useState(false);
+
+  // Anthropic API
+  const [apiKey,      setApiKey]      = useState(config?.apiKey ?? '');
+  const [apiModel,    setApiModel]    = useState(config?.apiModel ?? 'claude-sonnet-4-20250514');
+
+  // OpenAI API
+  const [openaiKey,   setOpenaiKey]   = useState(config?.openaiKey ?? '');
+  const [openaiModel, setOpenaiModel] = useState(config?.openaiModel ?? 'gpt-4o-mini');
+
+  // GitHub Models
   const [ghToken,     setGhToken]     = useState(config?.githubToken ?? '');
   const [ghModel,     setGhModel]     = useState(config?.githubModel ?? 'gpt-4o-mini');
-  const [apiKey,      setApiKey]      = useState(config?.apiKey ?? '');
+
+  // Gemini API
+  const [geminiApiKey,   setGeminiApiKey]   = useState(config?.geminiApiKey ?? '');
+  const [geminiApiModel, setGeminiApiModel] = useState(config?.geminiApiModel ?? 'gemini-2.5-flash');
+
+  // Mistral API
+  const [mistralKey,   setMistralKey]   = useState(config?.mistralKey ?? '');
+  const [mistralModel, setMistralModel] = useState(config?.mistralModel ?? 'mistral-small-latest');
+
+  // Grok (xAI)
+  const [grokKey,   setGrokKey]   = useState(config?.grokKey ?? '');
+  const [grokModel, setGrokModel] = useState(config?.grokModel ?? 'grok-3-mini');
+
+  // CLI models
+  const [geminiCliModel, setGeminiCliModel] = useState(config?.geminiCliModel ?? 'gemini-2.5-pro');
+  const [codexCliModel,  setCodexCliModel]  = useState(config?.codexCliModel  ?? 'o4-mini');
 
   // Directory state
   const DEFAULT_DIR_URL = 'https://github.com/adanoliva/agents-directory';
@@ -71,7 +102,7 @@ export function Settings() {
   }
 
   async function fetchAiStatus() {
-    try { setAiStatus(await req<{ provider: string; ready: boolean }>('GET', '/ai/status')); } catch {}
+    try { setAiStatus(await req<{ provider: string; ready: boolean; cliChecks?: Record<string, CLICheck> }>('GET', '/ai/status')); } catch {}
   }
 
   // Fetch AI status once when tab is general
@@ -80,9 +111,21 @@ export function Settings() {
   // Sync local token/key/model when config changes (e.g. on mount)
   React.useEffect(() => {
     if (config) {
+      setApiKey(config.apiKey ?? '');
+      setApiModel(config.apiModel ?? 'claude-sonnet-4-20250514');
+      setOpenaiKey(config.openaiKey ?? '');
+      setOpenaiModel(config.openaiModel ?? 'gpt-4o-mini');
       setGhToken(config.githubToken ?? '');
       setGhModel(config.githubModel ?? 'gpt-4o-mini');
-      setApiKey(config.apiKey ?? '');
+      setGeminiApiKey(config.geminiApiKey ?? '');
+      setGeminiApiModel(config.geminiApiModel ?? 'gemini-2.5-flash');
+      setMistralKey(config.mistralKey ?? '');
+      setMistralModel(config.mistralModel ?? 'mistral-small-latest');
+      setGrokKey(config.grokKey ?? '');
+      setGrokModel(config.grokModel ?? 'grok-3-mini');
+      setGeminiCliModel(config.geminiCliModel ?? 'gemini-2.5-pro');
+      setCodexCliModel(config.codexCliModel ?? 'o4-mini');
+      setPendingProvider(config.aiProvider ?? 'cli');
       setDirUrl(config.agentsDirectoryUrl ?? DEFAULT_DIR_URL);
       setDirEnabled(config.agentsDirectoryEnabled ?? true);
     }
@@ -108,39 +151,63 @@ export function Settings() {
 
   // ── provider actions ─────────────────────────────────────────────────────────
 
-  async function selectProvider(p: string) {
-    await req('PUT', '/config', { aiProvider: p });
-    await refreshConfig();
-    await fetchAiStatus();
+  async function saveAll() {
+    setSaving(true);
+    setTestResult(null);
+    try {
+      await req('PUT', '/config', {
+        aiProvider: pendingProvider,
+        apiKey, apiModel,
+        openaiKey, openaiModel,
+        githubToken: ghToken, githubModel: ghModel,
+        geminiApiKey, geminiApiModel,
+        mistralKey, mistralModel,
+        grokKey, grokModel,
+        geminiCliModel, codexCliModel,
+      });
+      await refreshConfig();
+      await fetchAiStatus();
+      toast('Guardado');
+    } catch { toast('Error al guardar', 'err'); }
+    setSaving(false);
   }
 
-  async function saveAPIKey() {
-    const key = apiKey.trim();
-    if (!key) return;
-    await req('PUT', '/config', { apiKey: key });
-    await refreshConfig();
-    toast('API key guardada');
-  }
-
-  async function saveGitHubSettings() {
-    const body: Record<string, string> = { githubModel: ghModel };
-    if (ghToken.trim()) body.githubToken = ghToken.trim();
-    await req('PUT', '/config', body);
-    await refreshConfig();
-    toast(ghToken.trim() ? 'GitHub token y modelo guardados' : 'Modelo guardado');
+  async function testConn() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      await req('PUT', '/config', {
+        aiProvider: pendingProvider,
+        apiKey, apiModel,
+        openaiKey, openaiModel,
+        githubToken: ghToken, githubModel: ghModel,
+        geminiApiKey, geminiApiModel,
+        mistralKey, mistralModel,
+        grokKey, grokModel,
+        geminiCliModel, codexCliModel,
+      });
+      await refreshConfig();
+      const r = await req<{ ok: boolean; error?: string; latencyMs?: number }>('POST', '/ai/test-connection');
+      setTestResult(r);
+      if (r.ok) toast(`Conexión OK (${r.latencyMs}ms)`);
+      else toast('Error: ' + r.error, 'err');
+    } catch (e: any) {
+      setTestResult({ ok: false, error: e.message });
+      toast('Error al probar conexión', 'err');
+    }
+    setTesting(false);
   }
 
   async function recheckCLI() {
-    const r = await req<{ found: boolean }>('GET', '/detect-cli');
-    if (r.found) toast('Claude CLI detectado');
-    else toast('CLI no encontrado. Instala Claude Code.', 'err');
+    await req<{ found: boolean; checks: Record<string, CLICheck> }>('GET', '/detect-cli');
     await fetchAiStatus();
+    toast('CLIs recomprobados');
   }
 
-  function openCLIInstall() {
+  function openExternal(url: string) {
     const api = (window as any).api;
-    if (api) api.openExternal('https://claude.ai/code');
-    else window.open('https://claude.ai/code', '_blank');
+    if (api) api.openExternal(url);
+    else window.open(url, '_blank');
   }
 
   // ── theme ────────────────────────────────────────────────────────────────────
@@ -333,10 +400,10 @@ export function Settings() {
 
   // ── render ───────────────────────────────────────────────────────────────────
 
-  const cats = config?.categories ?? [];
-  const provider = config?.aiProvider ?? 'cli';
+  const cats     = config?.categories ?? [];
   const theme    = config?.theme ?? 'dark';
-  const isGitHub = provider === 'github';
+  const isGitHub = pendingProvider === 'github' || pendingProvider === 'copilot-cli';
+  const cliChecks = aiStatus?.cliChecks ?? {};
 
   // Destination options for import modal
   const destOptions: { value: string; label: string }[] = [
@@ -390,59 +457,156 @@ export function Settings() {
               <div>
                 <div className="settings-head">Proveedor de IA</div>
 
-                <ProviderOption
-                  selected={provider === 'cli'}
-                  onClick={() => selectProvider('cli')}
-                  title="Claude CLI"
-                  badge={aiStatus?.provider === 'cli' && aiStatus?.ready
-                    ? <span className="badge green"><i className="ti ti-circle-check" />detectado</span>
-                    : <span className="badge gray"><i className="ti ti-circle-x" />no detectado</span>}
-                  subtitle="Usa tu suscripción de Claude.ai. Sin coste adicional."
-                >
-                  {provider === 'cli' && aiStatus && !aiStatus.ready && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
-                      <button className="btn sm" onClick={(e) => { e.stopPropagation(); openCLIInstall(); }}>
-                        <i className="ti ti-download" /> Instalar CLI
-                      </button>
-                      <button className="btn sm" onClick={(e) => { e.stopPropagation(); recheckCLI(); }}>
-                        <i className="ti ti-refresh" /> Recomprobar
-                      </button>
+                {/* ── Two-column radio selector ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+
+                  {/* CLI column */}
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div className="provider-group-label" style={{ marginTop: 0 }}>
+                      <i className="ti ti-terminal" />CLI — Procesos nativos
+                    </div>
+                    <AIRadioRow value="cli" label="Claude Code CLI" selected={pendingProvider === 'cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    <AIRadioRow value="gemini-cli" label="Gemini CLI" selected={pendingProvider === 'gemini-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['gemini-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    <AIRadioRow value="codex-cli" label="OpenAI Codex CLI" selected={pendingProvider === 'codex-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['codex-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>}
+                      extra={<span className="badge amber"><i className="ti ti-flask" />exp</span>} />
+                    <AIRadioRow value="copilot-cli" label="Copilot CLI (gh)" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['copilot-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    <button className="btn sm ghost" onClick={recheckCLI} style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}>
+                      <i className="ti ti-radar" /> Buscar CLIs en el sistema
+                    </button>
+                  </div>
+
+                  {/* API column */}
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div className="provider-group-label" style={{ marginTop: 0 }}>
+                      <i className="ti ti-api" />API — Subsistema CLI
+                    </div>
+                    <AIRadioRow value="api"        label="Anthropic API"   selected={pendingProvider === 'api'}        onSelect={setPendingProvider} />
+                    <AIRadioRow value="openai"     label="OpenAI API"      selected={pendingProvider === 'openai'}     onSelect={setPendingProvider} />
+                    <AIRadioRow value="github"     label="GitHub Models"   selected={pendingProvider === 'github'}     onSelect={setPendingProvider}
+                      extra={<span className="badge blue"><i className="ti ti-api" />free</span>} />
+                    <AIRadioRow value="gemini-api" label="Gemini API"      selected={pendingProvider === 'gemini-api'} onSelect={setPendingProvider} />
+                    <AIRadioRow value="mistral"    label="Mistral API"     selected={pendingProvider === 'mistral'}    onSelect={setPendingProvider} />
+                    <AIRadioRow value="grok"       label="Grok (xAI)"      selected={pendingProvider === 'grok'}       onSelect={setPendingProvider} />
+                  </div>
+                </div>
+
+                {/* ── Config panel para el proveedor seleccionado ── */}
+                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+
+                  {pendingProvider === 'cli' && (
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text1)', marginBottom: 8 }}>
+                        <strong>Claude Code CLI</strong> — usa tu suscripción de Claude.ai, sin coste adicional.
+                      </div>
+                      {cliChecks['cli']?.found
+                        ? <div style={{ fontSize: 11, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <i className="ti ti-circle-check" /> Detectado en <code style={{ fontFamily: 'var(--mono)', fontSize: 10, marginLeft: 4 }}>{cliChecks['cli'].path}</code>
+                          </div>
+                        : <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, color: 'var(--text3)' }}>No detectado en PATH</span>
+                            <button className="btn sm ghost" onClick={() => openExternal('https://claude.ai/code')}><i className="ti ti-download" /> Instalar</button>
+                          </div>
+                      }
                     </div>
                   )}
-                </ProviderOption>
 
-                <ProviderOption
-                  selected={provider === 'github'}
-                  onClick={() => selectProvider('github')}
-                  title={<>GitHub Copilot <span className="badge blue"><i className="ti ti-api" />Models API</span>{aiStatus?.provider === 'github' && aiStatus?.ready && <span className="badge green"><i className="ti ti-circle-check" />listo</span>}</>}
-                  subtitle={<>Token con permiso <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>models:read</code>. Capa gratuita.</>}
-                >
-                  {provider === 'github' && (
-                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {pendingProvider === 'gemini-cli' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text1)' }}>
+                        <strong>Gemini CLI</strong> — instala con <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>npm i -g @google/generative-ai-cli</code>
+                        {cliChecks['gemini-cli']?.found
+                          ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> detectado</span>
+                          : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>no detectado</span>}
+                      </div>
                       <div className="field" style={{ marginBottom: 0 }}>
-                        <label>GitHub Personal Access Token</label>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <input
-                            type="password"
-                            value={ghToken}
-                            onChange={(e) => setGhToken(e.target.value)}
-                            placeholder="ghp_…"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ flex: 1, fontFamily: 'var(--mono)' }}
-                          />
-                          <button className="btn sm" onClick={(e) => { e.stopPropagation(); saveGitHubSettings(); }}>
-                            <i className="ti ti-device-floppy" />
-                          </button>
-                        </div>
+                        <label>Modelo</label>
+                        <select value={geminiCliModel} onChange={(e) => setGeminiCliModel(e.target.value)}>
+                          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'codex-cli' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text1)' }}>
+                        <strong>OpenAI Codex CLI</strong> (experimental) — instala con <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>npm i -g @openai/codex</code>
+                        {cliChecks['codex-cli']?.found
+                          ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> detectado</span>
+                          : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>no detectado</span>}
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={codexCliModel} onChange={(e) => setCodexCliModel(e.target.value)}>
+                          <option value="o4-mini">o4-mini</option>
+                          <option value="gpt-4o">gpt-4o</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'copilot-cli' && (
+                    <div style={{ fontSize: 12, color: 'var(--text1)' }}>
+                      <strong>GitHub Copilot CLI</strong> — requiere <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>gh</code> + extensión copilot.
+                      {cliChecks['copilot-cli']?.found
+                        ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> gh detectado en {cliChecks['copilot-cli'].path}</span>
+                        : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>gh no encontrado en PATH</span>}
+                    </div>
+                  )}
+
+                  {pendingProvider === 'api' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>console.anthropic.com</span></label>
+                        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                          placeholder="sk-ant-api03-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={apiModel} onChange={(e) => setApiModel(e.target.value)}>
+                          <option value="claude-sonnet-4-20250514">claude-sonnet-4 — equilibrado</option>
+                          <option value="claude-haiku-4-5-20251001">claude-haiku-4 — rápido</option>
+                          <option value="claude-opus-4-20250514">claude-opus-4 — máxima capacidad</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'openai' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>platform.openai.com</span></label>
+                        <input type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)}
+                          placeholder="sk-proj-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={openaiModel} onChange={(e) => setOpenaiModel(e.target.value)}>
+                          <option value="gpt-4o-mini">gpt-4o-mini — rápido</option>
+                          <option value="gpt-4o">gpt-4o — potente</option>
+                          <option value="o4-mini">o4-mini — razonamiento</option>
+                          <option value="o3">o3 — máxima capacidad</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'github' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Personal Access Token <span style={{ color: 'var(--text3)', fontWeight: 400 }}>permiso models:read</span></label>
+                        <input type="password" value={ghToken} onChange={(e) => setGhToken(e.target.value)}
+                          placeholder="ghp_…" style={{ fontFamily: 'var(--mono)' }} />
                         <div className="hint">Settings → Developer settings → PAT → Fine-grained → Models: Read</div>
                       </div>
                       <div className="field" style={{ marginBottom: 0 }}>
                         <label>Modelo</label>
-                        <select
-                          value={ghModel}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => { setGhModel(e.target.value); saveGitHubSettings(); }}
-                        >
+                        <select value={ghModel} onChange={(e) => setGhModel(e.target.value)}>
                           <option value="gpt-4o-mini">gpt-4o-mini — rápido, gratuito</option>
                           <option value="gpt-4o">gpt-4o — potente</option>
                           <option value="o1-mini">o1-mini — razonamiento</option>
@@ -450,35 +614,78 @@ export function Settings() {
                       </div>
                     </div>
                   )}
-                </ProviderOption>
 
-                <ProviderOption
-                  selected={provider === 'api'}
-                  onClick={() => selectProvider('api')}
-                  title="API key de Anthropic"
-                  subtitle="Requiere cuenta en console.anthropic.com"
-                >
-                  {provider === 'api' && (
-                    <div style={{ marginTop: 12 }}>
+                  {pendingProvider === 'gemini-api' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="field" style={{ marginBottom: 0 }}>
-                        <label>API key</label>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <input
-                            type="password"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            placeholder="sk-ant-api03-…"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ flex: 1, fontFamily: 'var(--mono)' }}
-                          />
-                          <button className="btn sm" onClick={(e) => { e.stopPropagation(); saveAPIKey(); }}>
-                            <i className="ti ti-device-floppy" />
-                          </button>
-                        </div>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>aistudio.google.com</span></label>
+                        <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)}
+                          placeholder="AIza…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={geminiApiModel} onChange={(e) => setGeminiApiModel(e.target.value)}>
+                          <option value="gemini-2.5-flash">gemini-2.5-flash — rápido</option>
+                          <option value="gemini-2.5-pro">gemini-2.5-pro — potente</option>
+                        </select>
                       </div>
                     </div>
                   )}
-                </ProviderOption>
+
+                  {pendingProvider === 'mistral' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>console.mistral.ai</span></label>
+                        <input type="password" value={mistralKey} onChange={(e) => setMistralKey(e.target.value)}
+                          placeholder="API key de Mistral" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={mistralModel} onChange={(e) => setMistralModel(e.target.value)}>
+                          <option value="mistral-small-latest">mistral-small — rápido</option>
+                          <option value="mistral-medium-latest">mistral-medium</option>
+                          <option value="mistral-large-latest">mistral-large — potente</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'grok' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>console.x.ai</span></label>
+                        <input type="password" value={grokKey} onChange={(e) => setGrokKey(e.target.value)}
+                          placeholder="xai-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={grokModel} onChange={(e) => setGrokModel(e.target.value)}>
+                          <option value="grok-3-mini">grok-3-mini — rápido</option>
+                          <option value="grok-3">grok-3 — potente</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Action bar ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {testResult && (
+                    <span style={{ flex: 1, fontSize: 11, color: testResult.ok ? 'var(--green)' : 'var(--coral)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <i className={`ti ${testResult.ok ? 'ti-circle-check' : 'ti-alert-circle'}`} />
+                      {testResult.ok ? `Conexión OK (${testResult.latencyMs}ms)` : testResult.error}
+                    </span>
+                  )}
+                  {!testResult && <span style={{ flex: 1 }} />}
+                  {['api','openai','github','gemini-api','mistral','grok'].includes(pendingProvider) && (
+                    <button className="btn sm ghost" onClick={testConn} disabled={testing || saving}>
+                      {testing ? <><i className="ti ti-loader-2" /> Probando…</> : <><i className="ti ti-plug" /> Probar conexión</>}
+                    </button>
+                  )}
+                  <button className="btn primary sm" onClick={saveAll} disabled={saving || testing}>
+                    {saving ? <><i className="ti ti-loader-2" /> Guardando…</> : <><i className="ti ti-device-floppy" /> Guardar</>}
+                  </button>
+                </div>
               </div>
 
               {/* Right: How to use */}
@@ -964,6 +1171,53 @@ export function Settings() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ── AIRadioRow ─────────────────────────────────────────────────────────────────
+
+interface AIRadioRowProps {
+  value: AIProvider;
+  label: string;
+  selected: boolean;
+  onSelect: (p: AIProvider) => void;
+  badge?: React.ReactNode;
+  extra?: React.ReactNode;
+}
+
+function AIRadioRow({ value, label, selected, onSelect, badge, extra }: AIRadioRowProps) {
+  return (
+    <div
+      onClick={() => onSelect(value)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px',
+        borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+        background: selected ? 'var(--bg3)' : 'transparent',
+        border: `1px solid ${selected ? 'var(--accent)' : 'transparent'}`,
+        transition: 'all .12s',
+      }}
+    >
+      <div className={`provider-radio${selected ? ' on' : ''}`} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, fontSize: 12, fontWeight: selected ? 600 : 400, color: selected ? 'var(--text0)' : 'var(--text1)' }}>
+        {label}
+      </span>
+      {extra}
+      {badge}
+    </div>
+  );
+}
+
+// ── ProviderGroup ──────────────────────────────────────────────────────────────
+
+function ProviderGroup({ label, icon, children }: { label: string; icon: string; children?: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 4 }}>
+      <div className="provider-group-label">
+        <i className={`ti ${icon}`} />
+        {label}
+      </div>
+      {children}
     </div>
   );
 }

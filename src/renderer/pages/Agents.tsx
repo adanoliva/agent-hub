@@ -318,6 +318,7 @@ export function Agents() {
   function handleCloseEditor()                { setEditorAgent(null); setSelectedAgent(null); }
 
   async function handleSaved(saved: Agent) {
+    setEditorAgent({ ...saved });
     setEditorIsNew(false);
     setSelectedAgent(saved.name);
     setSuggestions((prev) => {
@@ -454,7 +455,7 @@ export function Agents() {
       </div>
 
       {editorAgent && (
-        <div className="overlay" onClick={(e) => e.target === e.currentTarget && handleCloseEditor()}>
+        <div className="overlay">
           <div className="modal agent-editor-modal" onClick={(e) => e.stopPropagation()}>
             <AgentEditor
               agent={editorAgent}

@@ -25,13 +25,28 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const [optBusy, setOptBusy] = useState(false);
   const [saveBusy,setSaveBusy]= useState(false);
 
-  useEffect(() => { setA({ ...initial }); }, [initial]);
+  // Always-fresh ref — avoids stale closure in async save().
+  const aRef = React.useRef<Agent>(a);
+  useEffect(() => { aRef.current = a; });
+
+  // Only reset editor when the agent identity changes (different agent or new agent),
+  // not on every re-render — prevents tools from being wiped during async operations.
+  const prevKeyRef = React.useRef<string>(`${initial.name}::${isNew}`);
+  useEffect(() => {
+    const key = `${initial.name}::${isNew}`;
+    if (key !== prevKeyRef.current) {
+      prevKeyRef.current = key;
+      setA({ ...initial });
+    }
+  }, [initial, isNew]);
 
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
 
   function toggleTool(tool: string, checked: boolean) {
-    const tools = a.tools ?? [];
-    update({ tools: checked ? [...tools, tool] : tools.filter((t) => t !== tool) });
+    setA((prev) => {
+      const tools = prev.tools ?? [];
+      return { ...prev, tools: checked ? [...tools, tool] : tools.filter((t) => t !== tool) };
+    });
   }
 
   const levelPath = (() => {
@@ -80,20 +95,21 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   }
 
   async function save() {
-    if (!a.name?.trim()) { toast('El agente necesita un nombre', 'err'); return; }
+    const agentToSave = aRef.current;
+    if (!agentToSave.name?.trim()) { toast('El agente necesita un nombre', 'err'); return; }
     setSaveBusy(true);
     try {
       if (node.level === 'project') {
         await req(isNew ? 'POST' : 'PUT', `/projects/${node.projectId}/agents`,
-          isNew ? { agent: a } : { oldName: initial.name, agent: a });
+          isNew ? { agent: agentToSave } : { oldName: initial.name, agent: agentToSave });
       } else {
         await req(isNew ? 'POST' : 'PUT', '/agents',
           isNew
-            ? { level: node.level, categoryId: node.categoryId, techId: node.techId, agent: a }
-            : { level: node.level, categoryId: node.categoryId, techId: node.techId, oldName: initial.name, agent: a });
+            ? { level: node.level, categoryId: node.categoryId, techId: node.techId, agent: agentToSave }
+            : { level: node.level, categoryId: node.categoryId, techId: node.techId, oldName: initial.name, agent: agentToSave });
       }
-      toast(`Agente "${a.name}" guardado`);
-      onSaved(a);
+      toast(`Agente "${agentToSave.name}" guardado`);
+      onSaved(agentToSave);
     } catch (e: any) { toast(e.message, 'err'); }
     setSaveBusy(false);
   }
@@ -173,13 +189,12 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
               const active = group.tools.every(t => (a.tools ?? []).includes(t));
               const partial = !active && group.tools.some(t => (a.tools ?? []).includes(t));
               const toggle = () => {
-                const current = a.tools ?? [];
-                if (active) {
-                  update({ tools: current.filter(t => !group.tools.includes(t)) });
-                } else {
-                  const merged = [...current, ...group.tools.filter(t => !current.includes(t))];
-                  update({ tools: merged });
-                }
+                setA((prev) => {
+                  const current = prev.tools ?? [];
+                  const isActive = group.tools.every(t => current.includes(t));
+                  if (isActive) return { ...prev, tools: current.filter(t => !group.tools.includes(t)) };
+                  return { ...prev, tools: [...current, ...group.tools.filter(t => !current.includes(t))] };
+                });
               };
               return (
                 <button

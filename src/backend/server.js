@@ -62,34 +62,67 @@ app.get('/api/config', (req, res) => {
   res.json(readConfig());
 });
 
+const CONFIG_ALLOWED_FIELDS = [
+  'apiKey', 'apiModel',
+  'openaiKey', 'openaiModel',
+  'githubToken', 'githubModel',
+  'geminiApiKey', 'geminiApiModel',
+  'mistralKey', 'mistralModel',
+  'grokKey', 'grokModel',
+  'geminiCliModel', 'codexCliModel',
+  'theme', 'closeAction',
+  'agentsDirectoryUrl', 'agentsDirectoryEnabled',
+];
+
 app.put('/api/config', (req, res) => {
-  const cfg = readConfig();
-  const { apiKey, aiProvider, githubToken, githubModel, theme, closeAction,
-          agentsDirectoryUrl, agentsDirectoryEnabled } = req.body;
-  if (apiKey                !== undefined) cfg.apiKey                = apiKey;
-  if (aiProvider            !== undefined) {
-    if (aiProvider !== cfg.aiProvider) resetAllUsage();
-    cfg.aiProvider = aiProvider;
+  const cfg  = readConfig();
+  const body = req.body;
+
+  if (body.aiProvider !== undefined) {
+    if (body.aiProvider !== cfg.aiProvider) resetAllUsage();
+    cfg.aiProvider = body.aiProvider;
   }
-  if (githubToken           !== undefined) cfg.githubToken           = githubToken;
-  if (githubModel           !== undefined) cfg.githubModel           = githubModel;
-  if (theme                 !== undefined) cfg.theme                 = theme;
-  if (closeAction           !== undefined && ['ask','tray','quit'].includes(closeAction)) cfg.closeAction = closeAction;
-  if (agentsDirectoryUrl    !== undefined) cfg.agentsDirectoryUrl    = agentsDirectoryUrl;
-  if (agentsDirectoryEnabled !== undefined) cfg.agentsDirectoryEnabled = Boolean(agentsDirectoryEnabled);
+
+  for (const field of CONFIG_ALLOWED_FIELDS) {
+    if (body[field] === undefined) continue;
+    if (field === 'closeAction' && !['ask','tray','quit'].includes(body[field])) continue;
+    if (field === 'agentsDirectoryEnabled') { cfg[field] = Boolean(body[field]); continue; }
+    cfg[field] = body[field];
+  }
+
   writeConfig(cfg);
   res.json({ ok: true });
 });
 
-// ── Claude CLI detection ──────────────────────────────────────────────────────
+// ── CLI detection ─────────────────────────────────────────────────────────────
 
-app.get('/api/detect-cli', (req, res) => {
+function whichCLI(bin) {
   const { exec } = require('child_process');
-  const cmd = process.platform === 'win32' ? 'where claude' : 'which claude';
-  exec(cmd, (err, stdout) => {
-    const found = !err && stdout.trim().length > 0;
-    res.json({ found, path: found ? stdout.trim().split('\n')[0] : null });
+  const isWin = process.platform === 'win32';
+  const cmd = isWin ? `where ${bin}` : `which ${bin}`;
+  return new Promise((resolve) => {
+    exec(cmd, (err, stdout) => {
+      const found = !err && stdout.trim().length > 0;
+      resolve({ found, path: found ? stdout.trim().split('\n')[0] : null });
+    });
   });
+}
+
+app.get('/api/detect-cli', async (req, res) => {
+  const [claude, gemini, codex, gh] = await Promise.all([
+    whichCLI('claude'),
+    whichCLI('gemini'),
+    whichCLI('codex'),
+    whichCLI('gh'),
+  ]);
+  const checks = {
+    'cli':         claude,
+    'gemini-cli':  gemini,
+    'codex-cli':   codex,
+    'copilot-cli': gh,
+  };
+  const provider = readConfig().aiProvider;
+  res.json({ found: !!(checks[provider]?.found), checks });
 });
 
 // ── Wizard setup ──────────────────────────────────────────────────────────────
@@ -1129,6 +1162,7 @@ app.post('/api/dashboard/notifications/restore', (req, res) => {
 
 const {
   getProviderStatus,
+  testConnection,
   generateAgentPrompt,
   getSuggestions,
   generateProjectSuggestions,
@@ -1154,6 +1188,15 @@ app.post('/api/ai/usage/reset', (req, res) => {
 app.post('/api/ai/usage/reset-all', (req, res) => {
   resetAllUsage();
   res.json(getSessionUsage());
+});
+
+// POST /api/ai/test-connection — probe current provider credentials
+app.post('/api/ai/test-connection', async (req, res) => {
+  try {
+    res.json(await testConnection());
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // GET /api/ai/status — check which provider is configured and ready

@@ -31,16 +31,29 @@ const CLAUDE_TO_GITHUB_MODEL = {
 
 // Claude tool → GitHub Copilot tool (null = no equivalent, dropped)
 const CLAUDE_TO_GITHUB_TOOL = {
-  Bash:       'terminalLastCommand',
-  Read:       'codebase',
-  Write:      null,
-  Grep:       'codebase',
-  Edit:       null,
-  MultiEdit:  null,
-  WebFetch:   'fetch',
-  WebSearch:  'fetch',
-  TodoRead:   null,
-  TodoWrite:  null,
+  Bash:             'terminalLastCommand',
+  Read:             'codebase',
+  Write:            null,
+  Grep:             'codebase',
+  Edit:             null,
+  MultiEdit:        null,
+  WebFetch:         'fetch',
+  WebSearch:        'fetch',
+  TodoRead:         null,
+  TodoWrite:        null,
+  // Browser tools have no GitHub Copilot equivalent — pass through as-is
+  browser_open:     'browser_open',
+  browser_navigate: 'browser_navigate',
+  browser_extract:  'browser_extract',
+  browser_close:    'browser_close',
+};
+
+// GitHub Copilot tool → Claude tool (for reading back GitHub-format agents)
+const GITHUB_TO_CLAUDE_TOOL = {
+  terminalLastCommand: 'Bash',
+  codebase:            'Read',
+  fetch:               'WebFetch',
+  // browser tools are already in Claude format
 };
 
 // Friendly replacements used in system prompt text
@@ -69,11 +82,19 @@ function adaptSystemForGitHub(system) {
 function adaptForGitHub(agent) {
   const fullModel = resolveClaudeModel(agent.model);
   const model     = CLAUDE_TO_GITHUB_MODEL[fullModel] || 'gpt-4o';
-  const tools     = [...new Set(
-    (agent.tools || []).map(t => CLAUDE_TO_GITHUB_TOOL[t]).filter(Boolean),
-  )];
+  // Tools are kept in Claude format on disk — no conversion at storage time.
+  // CLAUDE_TO_GITHUB_TOOL is reserved for runtime API call adaptation.
+  const tools  = agent.tools || [];
   const system = adaptSystemForGitHub(agent.system);
   return { ...agent, model, tools, system };
+}
+
+// Reverse adapter: converts a GitHub-format agent back to Claude format for editing
+function adaptFromGitHub(agent) {
+  const tools = [...new Set(
+    (agent.tools || []).map(t => GITHUB_TO_CLAUDE_TOOL[t] || t),
+  )];
+  return { ...agent, tools };
 }
 
 // ── Provider adapter registry ─────────────────────────────────────────────────
@@ -92,4 +113,4 @@ function adaptAgentForProvider(agent, targetProvider) {
   return adapter ? adapter(agent) : agent;
 }
 
-module.exports = { adaptAgentForProvider };
+module.exports = { adaptAgentForProvider, adaptFromGitHub };

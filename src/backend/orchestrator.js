@@ -160,7 +160,8 @@ class OrchestrationExecutor extends EventEmitter {
   _getContextFile() {
     const cfg      = readConfig();
     const provider = this.project.aiProvider || cfg.aiProvider || 'cli';
-    const paths    = provider === 'github'
+    const GITHUB_PROVIDERS = new Set(['github', 'copilot-cli']);
+    const paths    = GITHUB_PROVIDERS.has(provider)
       ? [path.join(this.project.path, '.github', 'copilot-instructions.md')]
       : [
           path.join(this.project.path, 'CLAUDE.md'),
@@ -506,11 +507,15 @@ class OrchestrationExecutor extends EventEmitter {
         let outputTokens = 0;
         let stepCostUSD  = 0;
 
-        if (provider === 'cli') {
+        const CLI_PROVIDERS = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli'];
+
+        if (CLI_PROVIDERS.includes(provider)) {
           const fullPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
           const rich = await callAIRich(fullPrompt, {
             timeout:   orchestration.executionConfig?.timeout || 300000,
-            extraArgs: ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)],
+            extraArgs: provider === 'cli'
+              ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
+              : [],
             cwd:       this.project.path,
           });
           response     = rich.text;
@@ -523,7 +528,7 @@ class OrchestrationExecutor extends EventEmitter {
           const cliResult   = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
             projectPath:    this.project.path,
             projectContext: contextFile,
-            provider:       provider === 'github' ? 'github' : 'api',
+            provider,
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
             timeout:        orchestration.executionConfig?.timeout   || 300000,
           });

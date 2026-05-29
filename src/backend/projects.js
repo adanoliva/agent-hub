@@ -626,10 +626,16 @@ function listProjectsWithStatus() {
 
 // ── Smart context detection ───────────────────────────────────────────────────
 
+const GITHUB_GROUP_PROVIDERS = new Set(['github', 'copilot-cli']);
+
+function providerGroup(provider) {
+  return GITHUB_GROUP_PROVIDERS.has(provider) ? 'github' : 'claude';
+}
+
 function getContextAuto(project, appAiProvider) {
   const projectProvider = project.aiProvider || appAiProvider || 'cli';
-  const appGroup     = appAiProvider === 'github' ? 'github' : 'claude';
-  const projectGroup = projectProvider === 'github' ? 'github' : 'claude';
+  const appGroup     = providerGroup(appAiProvider || 'cli');
+  const projectGroup = providerGroup(projectProvider);
   const mismatch     = appGroup !== projectGroup;
   const useType      = projectGroup;
 

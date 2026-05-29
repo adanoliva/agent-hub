@@ -87,43 +87,48 @@ function calcAnthropicCost(model, inputTokens, outputTokens) {
 
 // ── Provider detection ────────────────────────────────────────────────────────
 
-/**
- * Returns the configured AI provider and validates it's usable.
- * @returns {{ provider: 'cli'|'api', ready: boolean, reason?: string }}
- */
+const CLI_PROVIDERS = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli'];
+const API_PROVIDERS = ['api', 'openai', 'github', 'gemini-api', 'mistral', 'grok'];
+
+function whichBin(bin) {
+  return new Promise((resolve) => {
+    const cmd = process.platform === 'win32' ? `where ${bin}` : `which ${bin}`;
+    exec(cmd, (err, stdout) => {
+      const found = !err && stdout.trim().length > 0;
+      resolve({ found, path: found ? stdout.trim().split('\n')[0] : null });
+    });
+  });
+}
+
+async function checkAllCLIs() {
+  const [claude, gemini, codex, gh] = await Promise.all([
+    whichBin('claude'), whichBin('gemini'), whichBin('codex'), whichBin('gh'),
+  ]);
+  return { 'cli': claude, 'gemini-cli': gemini, 'codex-cli': codex, 'copilot-cli': gh };
+}
+
 async function getProviderStatus() {
-  const cfg = readConfig();
+  const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
+  const cliChecks = await checkAllCLIs();
 
-  if (provider === 'cli') {
-    const available = await isCLIAvailable();
-    return {
-      provider: 'cli',
-      ready: available,
-      reason: available ? null : 'Claude CLI not found in PATH. Install from claude.ai/code',
-    };
+  if (CLI_PROVIDERS.includes(provider)) {
+    const check = cliChecks[provider] || { found: false };
+    return { provider, ready: check.found, cliChecks };
   }
 
-  if (provider === 'api') {
-    const hasKey = Boolean(cfg.apiKey && cfg.apiKey.trim());
-    return {
-      provider: 'api',
-      ready: hasKey,
-      reason: hasKey ? null : 'No API key configured. Add it in Settings.',
-    };
-  }
-
-  if (provider === 'github') {
-    const hasToken = Boolean(cfg.githubToken && cfg.githubToken.trim());
-    return {
-      provider: 'github',
-      ready: hasToken,
-      model: cfg.githubModel || GITHUB_MODELS_DEFAULT,
-      reason: hasToken ? null : 'No GitHub token configured. Add it in Settings.',
-    };
-  }
-
-  return { provider, ready: false, reason: 'Unknown provider' };
+  // API providers — check credential
+  const credMap = {
+    'api':        cfg.apiKey,
+    'openai':     cfg.openaiKey,
+    'github':     cfg.githubToken,
+    'gemini-api': cfg.geminiApiKey,
+    'mistral':    cfg.mistralKey,
+    'grok':       cfg.grokKey,
+  };
+  const cred  = credMap[provider] ?? '';
+  const ready = Boolean(cred && cred.trim());
+  return { provider, ready, cliChecks };
 }
 
 function isCLIAvailable() {
@@ -147,13 +152,42 @@ function isCLIAvailable() {
  * @returns {Promise<string>}
  */
 async function callAI(prompt, opts = {}) {
-  const cfg = readConfig();
+  const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
 
-  if (provider === 'cli')    return callCLI(prompt, opts);
-  if (provider === 'api')    return callAPI(prompt, cfg.apiKey, opts);
-  if (provider === 'github') return callGitHub(prompt, cfg.githubToken, cfg.githubModel, opts);
-  throw new Error(`Unknown AI provider: ${provider}`);
+  switch (provider) {
+    case 'cli':         return callCLI(prompt, opts);
+    case 'gemini-cli':  return callGeminiCLI(prompt, opts);
+    case 'codex-cli':   return callCodexCLI(prompt, opts);
+    case 'copilot-cli': return callCopilotCLI(prompt, opts);
+    case 'api':         return callAPI(prompt, cfg.apiKey, opts);
+    case 'openai':      return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://api.openai.com/v1',
+                          key:     cfg.openaiKey,
+                          model:   cfg.openaiModel ?? 'gpt-4o-mini',
+                        }, opts);
+    case 'github':      return callOpenAICompat(prompt, null, {
+                          baseUrl: GITHUB_MODELS_URL.replace('/chat/completions', ''),
+                          key:     cfg.githubToken,
+                          model:   cfg.githubModel ?? GITHUB_MODELS_DEFAULT,
+                        }, opts);
+    case 'gemini-api':  return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+                          key:     cfg.geminiApiKey,
+                          model:   cfg.geminiApiModel ?? 'gemini-2.5-flash',
+                        }, opts);
+    case 'mistral':     return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://api.mistral.ai/v1',
+                          key:     cfg.mistralKey,
+                          model:   cfg.mistralModel ?? 'mistral-small-latest',
+                        }, opts);
+    case 'grok':        return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://api.x.ai/v1',
+                          key:     cfg.grokKey,
+                          model:   cfg.grokModel ?? 'grok-3-mini',
+                        }, opts);
+    default: throw new Error(`Unknown AI provider: ${provider}`);
+  }
 }
 
 // ── CLI backend ───────────────────────────────────────────────────────────────
@@ -340,6 +374,132 @@ async function callGitHub(prompt, githubToken, model, opts = {}) {
     outputTokens: usage.completion_tokens || 0,
   });
   return data.choices?.[0]?.message?.content || '';
+}
+
+// ── OpenAI-compatible backend (OpenAI, Gemini, Mistral, Grok, GitHub) ────────
+
+async function callOpenAICompat(prompt, systemPrompt, { baseUrl, key, model }, opts = {}) {
+  if (!key) throw new Error(`No API key configured for this provider`);
+
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
+  const res  = await fetch(url, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ model, messages, max_tokens: opts.maxTokens || 4096 }),
+    signal:  AbortSignal.timeout(opts.timeout || CALL_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err.error?.message || err.message || res.statusText;
+    if (res.status === 401) throw new Error('API key invalida o sin permisos. Verifica el token en Ajustes.');
+    if (res.status === 429) throw new Error('Limite de peticiones alcanzado. Intentalo en unos minutos.');
+    if (isGitHubContentFilterMessage(msg)) throw new Error(mapGitHubModelsError(res.status, msg));
+    throw new Error(`API error ${res.status}: ${msg}`);
+  }
+
+  const data             = await res.json();
+  const text             = data.choices?.[0]?.message?.content || '';
+  const { prompt_tokens: pt = 0, completion_tokens: ct = 0 } = data.usage ?? {};
+  trackUsage({ inputTokens: pt, outputTokens: ct });
+  return text;
+}
+
+async function callOpenAICompatChat(messages, systemPrompt, { baseUrl, key, model }, opts = {}) {
+  if (!key) throw new Error(`No API key configured for this provider`);
+
+  const allMessages = systemPrompt
+    ? [{ role: 'system', content: systemPrompt }, ...messages]
+    : messages;
+
+  const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
+  const res  = await fetch(url, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ model, messages: allMessages, max_tokens: opts.maxTokens || 4096 }),
+    signal:  AbortSignal.timeout(opts.timeout || CALL_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err.error?.message || err.message || res.statusText;
+    if (res.status === 401) throw new Error('API key invalida o sin permisos. Verifica el token en Ajustes.');
+    if (res.status === 429) throw new Error('Limite de peticiones alcanzado. Intentalo en unos minutos.');
+    if (isGitHubContentFilterMessage(msg)) throw new Error(mapGitHubModelsError(res.status, msg));
+    throw new Error(`API error ${res.status}: ${msg}`);
+  }
+
+  const data  = await res.json();
+  const text  = data.choices?.[0]?.message?.content || '';
+  const { prompt_tokens: pt = 0, completion_tokens: ct = 0 } = data.usage ?? {};
+  trackUsage({ inputTokens: pt, outputTokens: ct });
+  return { text, inputTokens: pt, outputTokens: ct };
+}
+
+// ── New CLI backends ──────────────────────────────────────────────────────────
+
+function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const timeout   = opts.timeout || CALL_TIMEOUT_MS;
+    const args      = [...extraArgs];
+    if (opts.extraArgs) args.push(...opts.extraArgs);
+
+    const spawnOpts = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    };
+    if (opts.cwd) spawnOpts.cwd = opts.cwd;
+
+    const child = spawn(bin, args, spawnOpts);
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+    child.stdin.write(prompt, 'utf8');
+    child.stdin.end();
+
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`${bin} timed out after ${Math.round(timeout / 1000)}s`));
+    }, timeout);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`${bin} exited with code ${code}: ${(stderr || stdout).trim()}`));
+        return;
+      }
+      trackUsage({});
+      resolve(stdout.trim());
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      if (err.code === 'ENOENT') reject(new Error(`${bin} not found in PATH`));
+      else reject(err);
+    });
+  });
+}
+
+function callGeminiCLI(prompt, opts = {}) {
+  const cfg   = readConfig();
+  const model = cfg.geminiCliModel ?? 'gemini-2.5-pro';
+  return callGenericCLI('gemini', ['--model', model, '--yolo'], prompt, opts);
+}
+
+function callCodexCLI(prompt, opts = {}) {
+  const cfg   = readConfig();
+  const model = cfg.codexCliModel ?? 'o4-mini';
+  return callGenericCLI('codex', ['--model', model, '--quiet'], prompt, opts);
+}
+
+function callCopilotCLI(prompt, opts = {}) {
+  return callGenericCLI('gh', ['copilot', 'suggest', '-t', 'shell'], prompt, opts);
 }
 
 // ── Agent system prompt generation ───────────────────────────────────────────
@@ -875,6 +1035,17 @@ function parseJSONObjectSafely(raw) {
  * @param {number} [opts.maxTokens]
  * @returns {Promise<string>}
  */
+function _openAICompatConfigForProvider(cfg, provider) {
+  switch (provider) {
+    case 'openai':      return { baseUrl: 'https://api.openai.com/v1', key: cfg.openaiKey, model: cfg.openaiModel ?? 'gpt-4o-mini' };
+    case 'github':      return { baseUrl: 'https://models.inference.ai.azure.com', key: cfg.githubToken, model: cfg.githubModel ?? GITHUB_MODELS_DEFAULT };
+    case 'gemini-api':  return { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', key: cfg.geminiApiKey, model: cfg.geminiApiModel ?? 'gemini-2.5-flash' };
+    case 'mistral':     return { baseUrl: 'https://api.mistral.ai/v1', key: cfg.mistralKey, model: cfg.mistralModel ?? 'mistral-small-latest' };
+    case 'grok':        return { baseUrl: 'https://api.x.ai/v1', key: cfg.grokKey, model: cfg.grokModel ?? 'grok-3-mini' };
+    default: return null;
+  }
+}
+
 async function callAIChat(messages, opts = {}) {
   const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
@@ -887,7 +1058,7 @@ async function callAIChat(messages, opts = {}) {
 
     const client  = new Anthropic.default({ apiKey: cfg.apiKey });
     const params  = {
-      model:      MODEL,
+      model:      cfg.apiModel || MODEL,
       max_tokens: opts.maxTokens || 1024,
       messages,
     };
@@ -902,40 +1073,26 @@ async function callAIChat(messages, opts = {}) {
     return result.content.filter(b => b.type === 'text').map(b => b.text).join('');
   }
 
-  if (provider === 'github') {
-    if (!cfg.githubToken) throw new Error('No GitHub token configured');
-    const body = {
-      model:      cfg.githubModel || GITHUB_MODELS_DEFAULT,
-      messages:   opts.systemPrompt ? [{ role: 'system', content: opts.systemPrompt }, ...messages] : messages,
-      max_tokens: opts.maxTokens || 1024,
-    };
-    const response = await fetch(GITHUB_MODELS_URL, {
-      method:  'POST',
-      headers: { 'Authorization': `Bearer ${cfg.githubToken}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-      signal:  AbortSignal.timeout(CALL_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      const msg = err.error?.message || err.message || response.statusText;
-      throw new Error(mapGitHubModelsError(response.status, msg));
-    }
-    const data  = await response.json();
-    const usage = data.usage || {};
-    trackUsage({
-      inputTokens:  usage.prompt_tokens     || 0,
-      outputTokens: usage.completion_tokens || 0,
-    });
-    return data.choices?.[0]?.message?.content || '';
+  // OpenAI-compatible providers
+  const oaConfig = _openAICompatConfigForProvider(cfg, provider);
+  if (oaConfig) {
+    const { text } = await callOpenAICompatChat(messages, opts.systemPrompt || null, oaConfig, opts);
+    return text;
   }
 
-  // CLI: flatten conversation into a single prompt
+  // CLI providers: flatten conversation into a single prompt
   const lines = [];
   if (opts.systemPrompt) lines.push(`[System]: ${opts.systemPrompt}\n`);
   for (const m of messages) {
     lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
   }
-  return callCLI(lines.join('\n\n'), opts);
+  const flatPrompt = lines.join('\n\n');
+  switch (provider) {
+    case 'gemini-cli':  return callGeminiCLI(flatPrompt, opts);
+    case 'codex-cli':   return callCodexCLI(flatPrompt, opts);
+    case 'copilot-cli': return callCopilotCLI(flatPrompt, opts);
+    default:            return callCLI(flatPrompt, opts);
+  }
 }
 
 // ── Low-level chat with token tracking (for Subsystem CLI) ───────────────────
@@ -963,7 +1120,7 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
 
     const client = new Anthropic.default({ apiKey: cfg.apiKey });
     const params = {
-      model:      MODEL,
+      model:      cfg.apiModel || MODEL,
       max_tokens: opts.maxTokens || 4096,
       messages,
     };
@@ -985,42 +1142,13 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     };
   }
 
-  if (provider === 'github') {
-    if (!cfg.githubToken) throw new Error('No GitHub token configured');
-    const msgsToSend = systemPrompt
-      ? [{ role: 'system', content: systemPrompt }, ...messages]
-      : messages;
-
-    const response = await fetch(GITHUB_MODELS_URL, {
-      method:  'POST',
-      headers: { 'Authorization': `Bearer ${cfg.githubToken}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        model:      cfg.githubModel || GITHUB_MODELS_DEFAULT,
-        messages:   msgsToSend,
-        max_tokens: opts.maxTokens || 2048,  // GitHub Copilot Free: 8k total window
-      }),
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      const msg = err.error?.message || err.message || response.statusText;
-      throw new Error(mapGitHubModelsError(response.status, msg));
-    }
-
-    const data  = await response.json();
-    const usage = data.usage || {};
-    const inputTokens  = usage.prompt_tokens     || 0;
-    const outputTokens = usage.completion_tokens || 0;
-    trackUsage({ inputTokens, outputTokens });
-    return {
-      text: data.choices?.[0]?.message?.content || '',
-      inputTokens,
-      outputTokens,
-    };
+  // OpenAI-compatible providers
+  const oaConfig = _openAICompatConfigForProvider(cfg, provider);
+  if (oaConfig) {
+    return callOpenAICompatChat(messages, systemPrompt || null, oaConfig, opts);
   }
 
-  throw new Error('Subsystem CLI is only available for api and github providers');
+  throw new Error('Subsystem CLI solo disponible para providers API');
 }
 
 // ── Subsystem CLI integration ─────────────────────────────────────────────────
@@ -1040,6 +1168,11 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
  * @returns {Promise<SubsystemCLIResult>}
  */
 async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
+  const provider = opts.provider || readConfig().aiProvider || 'cli';
+  if (!API_PROVIDERS.includes(provider)) {
+    throw new Error('Subsystem CLI solo disponible para providers API');
+  }
+
   const { execute } = require('./subsystem-cli');
 
   const result = await execute(prompt, agentSystemPrompt || '', {
@@ -1049,7 +1182,7 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     timeout:        opts.timeout        || 300_000,
     useBrowser:     opts.useBrowser     || false,
     callAIRaw: (messages, systemPrompt) =>
-      callAIChatWithTokens(messages, systemPrompt, { provider: opts.provider }),
+      callAIChatWithTokens(messages, systemPrompt, { provider }),
   });
 
   return result;
@@ -1096,6 +1229,60 @@ async function adaptSystemPromptForProvider(agent, targetProvider) {
   return result.trim();
 }
 
+// ── Test connection ───────────────────────────────────────────────────────────
+
+async function testConnection() {
+  const cfg      = readConfig();
+  const provider = cfg.aiProvider || 'cli';
+  const start    = Date.now();
+
+  if (CLI_PROVIDERS.includes(provider)) {
+    const binMap = { 'cli': 'claude', 'gemini-cli': 'gemini', 'codex-cli': 'codex', 'copilot-cli': 'gh' };
+    const bin    = binMap[provider] || provider;
+    const check  = await whichBin(bin);
+    return {
+      ok:        check.found,
+      error:     check.found ? undefined : `${bin} no encontrado en PATH`,
+      latencyMs: Date.now() - start,
+    };
+  }
+
+  try {
+    if (provider === 'api') {
+      if (!cfg.apiKey) throw new Error('API key no configurada');
+      let Anthropic;
+      try { Anthropic = require('@anthropic-ai/sdk'); }
+      catch { throw new Error('@anthropic-ai/sdk no instalado'); }
+      const client = new Anthropic.default({ apiKey: cfg.apiKey });
+      await client.messages.create({
+        model: cfg.apiModel || 'claude-haiku-4-5-20251001',
+        max_tokens: 5,
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
+    } else {
+      const oaConfig = _openAICompatConfigForProvider(cfg, provider);
+      if (!oaConfig) throw new Error('Provider no reconocido');
+      if (!oaConfig.key) throw new Error('API key no configurada');
+      const url  = oaConfig.baseUrl.endsWith('/chat/completions')
+        ? oaConfig.baseUrl
+        : `${oaConfig.baseUrl}/chat/completions`;
+      const resp = await fetch(url, {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${oaConfig.key}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ model: oaConfig.model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 5 }),
+        signal:  AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${resp.status}`);
+      }
+    }
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (e) {
+    return { ok: false, error: e.message, latencyMs: Date.now() - start };
+  }
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -1113,6 +1300,7 @@ module.exports = {
   getCachedSuggestions,
   clearSuggestionsCache,
   getProviderStatus,
+  testConnection,
   isCLIAvailable,
   getSessionUsage,
   resetSessionUsage,
