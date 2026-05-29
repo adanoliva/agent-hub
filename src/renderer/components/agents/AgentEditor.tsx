@@ -264,6 +264,15 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
               {a.system.trim().split(/\s+/).length} palabras
             </div>
           )}
+          <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.6, marginTop: 8, padding: '7px 9px', background: 'var(--bg2)', borderRadius: 6, borderLeft: '2px solid var(--accent)' }}>
+            <i className="ti ti-topology-ring-2" style={{ marginRight: 5, color: 'var(--accent)' }} />
+            <strong style={{ color: 'var(--text2)' }}>Si usarás este agente en una orquestación</strong>, el prompt debe indicar explícitamente:<br />
+            <span style={{ paddingLeft: 14, display: 'block', marginTop: 3 }}>
+              · que lea el contexto del proyecto (<code style={{ fontSize: 9 }}>CLAUDE.md</code>)<br />
+              · qué información recibe del paso anterior<br />
+              · qué produce y entrega al siguiente agente
+            </span>
+          </div>
         </div>
       </div>
 

@@ -418,6 +418,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
               node={inputNode}
               fromAgent="Orquestador"
               toAgent={agents[0] ?? ''}
+              isInputNode
               onUpdate={handleUpdateNode}
             />
           ) : selectedNode !== null && nodes[selectedNode] ? (

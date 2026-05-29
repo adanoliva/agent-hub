@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-29 · Versión: 1.9.2
+> Última actualización: 2026-05-29 · Versión: 1.9.2 — Añadidos: `prompts.js` (prompts centralizados), protocolo HANDOFF en orchestrator
 
 ---
 
@@ -15,6 +15,7 @@
 6. [Sincronización del directorio de agentes (`agents-sync.js`)](#6-sincronización-del-directorio-de-agentes-agents-syncjs)
 7. [Gestión de proyectos (`projects.js`)](#7-gestión-de-proyectos-projectsjs)
 8. [Integración IA (`ai.js`)](#8-integración-ia-aijs)
+8b. [Prompts centralizados (`prompts.js`)](#8b-prompts-centralizados-promptsjs)
 9. [Servicio de filesystem (`api-fs.js`)](#9-servicio-de-filesystem-api-fsjs)
 10. [Subsistema CLI (`subsystem-cli.js`)](#10-subsistema-cli-subsystem-clijs)
 11. [Orquestaciones — CRUD (`workflows.js`)](#11-orquestaciones--crud-workflowsjs)
@@ -48,6 +49,7 @@ Electron main process (Node.js)
   ├── ai.js            ← llamadas a IA (CLI / Anthropic API / GitHub)
   ├── api-fs.js        ← operaciones de filesystem para el Subsistema CLI
   ├── subsystem-cli.js ← CLI virtual multi-turno para providers API/GitHub
+  ├── prompts.js       ← prompts centralizados para todas las operaciones IA
   ├── workflows.js     ← CRUD de orquestaciones (JSON en .agent-hub/)
   ├── orchestrator.js  ← motor de ejecución de orquestaciones + SSE streaming
   ├── tray.js          ← icono en la bandeja del sistema
@@ -708,10 +710,12 @@ Devuelve `SubsystemCLIResult`:
 
 ### Funciones de generación
 
-- `generateAgentPrompt({ description, level, tools, lang })` — genera un system prompt desde descripción informal.
-- `generateSuggestions({ level, categoryId, techId, existingNames, alreadySuggested? })` — 3 agentes sugeridos en JSON. `alreadySuggested` se fusiona con `existingNames` para garantizar que las sugerencias nuevas no repitan ni lo guardado en disco ni lo ya visible en la UI.
-- `generateProjectSuggestions({ project, contextContent, existingNames, alreadySuggested? })` — sugerencias contextualizadas con el CLAUDE.md del proyecto. Mismo patrón de deduplicación.
-- `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Devuelve `{ description, system }`.
+Todas delegan la construcción del prompt en `prompts.js` (ver sección 8b). `ai.js` solo aporta la lógica de llamada al proveedor, extracción de tokens y respuesta final.
+
+- `generateAgentPrompt({ description, level, tools, lang })` — genera un system prompt desde descripción informal. Usa `prompts.agentPrompt()`.
+- `generateSuggestions({ level, categoryId, techId, existingNames, alreadySuggested? })` — 3 agentes sugeridos en JSON. `alreadySuggested` se fusiona con `existingNames` para garantizar que las sugerencias nuevas no repitan ni lo guardado en disco ni lo ya visible en la UI. Usa `prompts.agentSuggestions()`.
+- `generateProjectSuggestions({ project, contextContent, existingNames, alreadySuggested? })` — sugerencias contextualizadas con el CLAUDE.md del proyecto. Mismo patrón de deduplicación. Usa `prompts.projectSuggestions()`.
+- `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Devuelve `{ description, system }`. Usa `prompts.optimizeAgent()`.
 
 ### Seguimiento de uso de tokens
 
@@ -748,6 +752,34 @@ Fichero `cache/suggestions.json`. Clave de caché:
 key = `${level}::${categoryId ?? ''}::${techId ?? ''}`  // niveles 1-3
 key = `project::${projectId}`                            // nivel proyecto
 ```
+
+---
+
+## 8b. Prompts centralizados (`prompts.js`)
+
+Módulo de solo lectura que centraliza todos los prompts que la app envía a la IA. **No expone ningún endpoint HTTP ni IPC** — es un módulo interno requerido por `ai.js`, `server.js` y `orchestrator.js`.
+
+La razón de existir: antes los prompts estaban dispersos como template literals inline en esos tres ficheros. Ahora para ajustar el comportamiento de cualquier botón "Generar con IA" u "Optimizar con IA" basta con editar `prompts.js` y hacer build.
+
+### Funciones exportadas
+
+| Función | Usada por | Descripción |
+|---|---|---|
+| `agentPrompt({ name, description, level, toolsNote, existingNote, langInstr })` | `ai.js` · `generateAgentPrompt` | Genera el system prompt de un agente desde una descripción informal. Devuelve un JSON con campos `role`, `objective`, `responsibilities`, `boundaries`, `outputFormat` |
+| `optimizeAgent({ name, model, toolList, description, system, langTarget })` | `server.js` · `POST /ai/optimize-agent` | Reescribe el system prompt del agente para ser token-eficiente (objetivo: 50-100 palabras). Devuelve `{ description, system }` |
+| `agentSuggestions({ context, existing })` | `ai.js` · `generateSuggestions` | Pide 3 sugerencias de agentes para un nivel dado. JSON array con `name`, `description`, `tools`, `model`, `system` |
+| `projectSuggestions({ project, contextSection, existing, categoryName, techName })` | `ai.js` · `generateProjectSuggestions` | Igual que `agentSuggestions` pero contextualizado al CLAUDE.md del proyecto |
+| `generateContext({ fileLabel, projectInfo, existingContext, structure, dependencies, existingReadme })` | `server.js` · `POST /projects/:id/generate-context` | Dos ramas: si `existingContext` existe → reescribe y reduce a máx. 100 líneas; si no existe → genera desde cero con la misma restricción |
+| `adaptForProvider({ agent, targetProvider })` | `ai.js` · `ADAPTATION_PROMPTS` | Reescribe el system prompt del agente para el proveedor destino (actualmente solo `'github'`). Devuelve `null` si el proveedor no requiere adaptación |
+| `agentHandoffInstruction()` | `orchestrator.js` · `_buildSystemPrompt` | Devuelve el bloque de texto que se inyecta al final del system prompt de cada agente no-final en una orquestación. Define el protocolo HANDOFF (ver sección 12) |
+| `formatHandoffAsInput(handoff, fromAgent)` | `orchestrator.js` · `_buildUserMessage` | Formatea el handoff extraído del paso anterior como mensaje de usuario compacto para el siguiente agente |
+
+### Reglas de diseño de los prompts
+
+- **Sin tutoriales básicos**: los prompts no explican al modelo cómo funciona JSON, markdown, etc.
+- **Siempre con restricción de formato**: cada prompt termina con una instrucción de respuesta exacta (solo JSON, sin explicaciones, etc.).
+- **Idioma adaptativo**: las funciones que lo necesitan reciben `lang` o `langTarget` para emitir el prompt final en español o inglés según el contexto.
+- **Token-eficientes**: los prompts de generación apuntan a respuestas de 40-120 palabras para system prompts de agentes.
 
 ---
 
@@ -971,15 +1003,38 @@ executor.execute()
   └── emit 'complete' con ExecutionResult
 ```
 
+### Protocolo HANDOFF entre agentes
+
+Para minimizar los tokens de contexto entre pasos, el orquestador usa un protocolo estructurado de salida. Cada agente no-final recibe al final de su system prompt (inyectado por `prompts.agentHandoffInstruction()`) la instrucción de terminar su respuesta con una línea JSON:
+
+```
+HANDOFF: {"done":"<qué lograste, máx 15 palabras>","changed":["<ruta/relativa.ext>"],"issues":["<problema crítico>"],"next":"<instrucción concreta para el siguiente agente, máx 20 palabras>"}
+```
+
+**Funciones de soporte en `orchestrator.js`:**
+
+- `extractHandoff(response)` — busca la línea con `/^HANDOFF:\s*(\{.+\})\s*$/m`, parsea el JSON y devuelve `{ done, changed, issues, next }` o `null` si el agente no emitió handoff.
+- `stripHandoff(response)` — elimina la línea `HANDOFF:` del texto almacenado para que la UI muestre respuestas limpias sin ruido de protocolo.
+
+**Almacenamiento por paso:** `agentOutputs[i]` guarda `{ response: cleanResponse, handoff, filesModified }`. El `stepResult.output` incluye `{ response: cleanResponse, handoff: handoff || undefined }`.
+
 ### Construcción del prompt del paso (`_buildUserMessage`)
 
-Para cada paso `i` (salvo el primero), el mensaje de usuario incluye:
+Para el paso 0 solo se incluye el mensaje original del usuario.
 
-1. **Salida del agente anterior** — si `dataFlow.agentOutput === true`.
+Para cada paso `i > 0`:
+
+1. **Handoff del agente anterior** — si el agente anterior emitió un `HANDOFF` válido, se formatea con `prompts.formatHandoffAsInput(handoff, fromAgent)`. Resultado: ~4 líneas, ~200 chars. Si no hay handoff (fallback), se pasan los primeros 400 chars del prose en lugar del handoff estructurado.
 2. **Ficheros modificados** — si `dataFlow.filesModified === true`, lista de paths + contenido.
 3. **CLAUDE.md del proyecto** — si `dataFlow.claudeMd === true`.
 4. **Texto libre de contexto fijo** — si `node.contextExtra.fixed.freeText` no está vacío.
 5. **Archivos de contexto fijo** — para cada path en `node.contextExtra.fixed.files`, se lee el fichero (ruta absoluta o relativa al proyecto).
+
+El formato del handoff es ~7-10x más compacto que pasar el prose completo del paso anterior (200 chars vs. 1500 chars anteriores).
+
+### Construcción del system prompt (`_buildSystemPrompt`)
+
+Para agentes no-finales (`stepIndex < agents.length - 1`), se añade al final del system prompt el bloque devuelto por `prompts.agentHandoffInstruction()`. El último agente no recibe esta instrucción — su respuesta es la respuesta final de la orquestación.
 
 ### Snapshot y rollback
 

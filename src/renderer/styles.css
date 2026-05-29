@@ -663,6 +663,7 @@ body.light .theme-option.selected{border-color:rgba(108,92,231,0.3)}
 .orch-check-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text1);cursor:pointer;padding:3px 0}
 .orch-check-row input{accent-color:var(--accent)}
 .orch-check-row.sm{font-size:11px}
+.orch-check-row.disabled{opacity:0.35;cursor:not-allowed;pointer-events:none}
 .orch-subsection{padding-left:12px;display:flex;flex-direction:column;gap:5px}
 .orch-label{font-size:11px;color:var(--text2)}
 .orch-textarea{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-size:11px;color:var(--text0);font-family:var(--mono);resize:vertical;min-height:64px;transition:border-color .1s}
@@ -693,6 +694,8 @@ body.light .theme-option.selected{border-color:rgba(108,92,231,0.3)}
 .orch-exec-section h4{margin:0;font-size:12px;font-weight:700;color:var(--text1)}
 .orch-exec-field{display:flex;flex-direction:column;gap:5px}
 .orch-exec-field label{font-size:12px;color:var(--text1)}
+.orch-exec-node-label{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--accent);padding:8px 0 4px;margin-top:4px;border-top:1px solid var(--border)}
+.orch-exec-node-label:first-child{margin-top:0;border-top:none;padding-top:0}
 .orch-required{color:#fb7185;margin-left:3px}
 .orch-exec-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding-top:4px}
 .orch-exec-browser{padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px}

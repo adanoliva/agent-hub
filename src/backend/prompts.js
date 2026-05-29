@@ -198,6 +198,36 @@ Output ONLY the rewritten system prompt. No preamble, no explanation, no code fe
   return null;
 }
 
+// ── Protocolo de handoff entre agentes de orquestación ───────────────────────
+// Inyectado al final del system prompt de cada agente no-final.
+// El extractor en orchestrator.js busca la línea HANDOFF: para construir
+// el mensaje de entrada del siguiente agente sin pasar prose completo.
+
+function agentHandoffInstruction() {
+  return `
+# PROTOCOLO DE SALIDA
+
+Al terminar tu tarea escribe como última línea de tu respuesta, sin nada después:
+HANDOFF: {"done":"<una frase: qué lograste>","changed":["<ruta/relativa.ext>"],"issues":["<problema crítico si hay alguno>"],"next":"<instrucción concreta para el siguiente agente>"}
+
+Reglas del HANDOFF:
+- "done": máximo 15 palabras, qué fue completado
+- "changed": solo rutas relativas al proyecto; array vacío si no tocaste archivos
+- "issues": array vacío si no hay problemas; solo incluye lo que el siguiente agente debe saber
+- "next": una instrucción accionable específica, máximo 20 palabras
+- JSON en una sola línea, sin saltos de línea dentro`;
+}
+
+// Formatea el handoff extraído como bloque de entrada para el siguiente agente.
+// Mucho más compacto que pasar el prose completo del paso anterior.
+function formatHandoffAsInput(handoff, fromAgent) {
+  const lines = [`## Paso anterior: ${fromAgent}`, `✓ ${handoff.done}`];
+  if (handoff.changed?.length > 0) lines.push(`Archivos: ${handoff.changed.join(', ')}`);
+  if (handoff.issues?.length > 0)  lines.push(`Issues: ${handoff.issues.join(' · ')}`);
+  if (handoff.next)                lines.push(`Acción solicitada: ${handoff.next}`);
+  return lines.join('\n');
+}
+
 module.exports = {
   agentPrompt,
   optimizeAgent,
@@ -205,4 +235,6 @@ module.exports = {
   projectSuggestions,
   generateContext,
   adaptForProvider,
+  agentHandoffInstruction,
+  formatHandoffAsInput,
 };

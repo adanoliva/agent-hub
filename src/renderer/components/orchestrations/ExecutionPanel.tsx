@@ -294,39 +294,60 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             )}
           </div>
 
-          {temporalFields.length > 0 && (
-            <section className="orch-exec-section">
-              <h4><i className="ti ti-input-check" /> Contexto adicional</h4>
-              {temporalFields.map(f => (
-                <div key={f.key} className="orch-exec-field">
-                  <label>
-                    {f.label || f.key}
-                    {f.required && <span className="orch-required">*</span>}
-                  </label>
-                  {f.type === 'file' ? (
-                    <input
-                      type="file"
-                      className="input"
-                      onChange={async e => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const text = await file.text();
-                        setTemporalValues(v => ({ ...v, [f.key]: text }));
-                      }}
-                    />
-                  ) : (
-                    <textarea
-                      className="input"
-                      rows={3}
-                      placeholder={f.placeholder || ''}
-                      value={temporalValues[f.key] || ''}
-                      onChange={e => setTemporalValues(v => ({ ...v, [f.key]: e.target.value }))}
-                    />
-                  )}
-                </div>
-              ))}
-            </section>
-          )}
+          {temporalFields.length > 0 && (() => {
+            const getNodeLabel = (nodeIndex: number) => {
+              if (nodeIndex === -1) return `Orquestador → ${orchestration.agents[0] ?? ''}`;
+              const n = orchestration.nodes[nodeIndex];
+              if (!n) return `Conexión ${nodeIndex + 1}`;
+              return `${orchestration.agents[n.from]} → ${orchestration.agents[n.to]}`;
+            };
+            const groups = temporalFields.reduce((acc, f) => {
+              (acc[f.nodeIndex] ??= []).push(f);
+              return acc;
+            }, {} as Record<number, typeof temporalFields>);
+            const sortedIndices = Object.keys(groups).map(Number).sort((a, b) => a - b);
+            return (
+              <section className="orch-exec-section">
+                <h4><i className="ti ti-input-check" /> Contexto adicional</h4>
+                {sortedIndices.map(nodeIdx => (
+                  <div key={nodeIdx}>
+                    <div className="orch-exec-node-label">
+                      <i className="ti ti-arrows-exchange" />
+                      {getNodeLabel(nodeIdx)}
+                    </div>
+                    {groups[nodeIdx].map(f => (
+                      <div key={f.key} className="orch-exec-field">
+                        <label>
+                          {f.label || f.key}
+                          {f.required && <span className="orch-required">*</span>}
+                        </label>
+                        {f.type === 'file' ? (
+                          <input
+                            type="file"
+                            className="input"
+                            onChange={async e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const text = await file.text();
+                              setTemporalValues(v => ({ ...v, [f.key]: text }));
+                            }}
+                          />
+                        ) : (
+                          <textarea
+                            className="input"
+                            rows={3}
+                            placeholder={f.placeholder || ''}
+                            value={temporalValues[f.key] || ''}
+                            onChange={e => setTemporalValues(v => ({ ...v, [f.key]: e.target.value }))}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </section>
+            );
+          })()}
 
           {needsBrowser && (
             <section className="orch-exec-section orch-exec-browser">

@@ -6,6 +6,7 @@ interface Props {
   node:        OrchestrateNode;
   fromAgent:   string;
   toAgent:     string;
+  isInputNode?: boolean;
   onUpdate:    (node: OrchestrateNode) => void;
 }
 
@@ -23,8 +24,7 @@ function normalizeContextExtra(ce: ContextExtra): ContextExtra {
   };
 }
 
-export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate }: Props) {
-  const isInputNode = false;
+export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode = false, onUpdate }: Props) {
   const [dataFlow,     setDataFlow]     = useState<DataFlow>(node.dataFlow);
   const [contextExtra, setContextExtra] = useState<ContextExtra>(() => normalizeContextExtra(node.contextExtra));
   const [dirty, setDirty]              = useState(false);
@@ -101,37 +101,28 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, onUpdate }: P
         <span><strong>{fromAgent}</strong> → <strong>{toAgent}</strong></span>
       </div>
 
-      {/* Data flow — hidden for inputNode (no previous agent output) */}
-      {!isInputNode && (
+      {/* Data flow */}
       <section className="orch-config-section">
         <h4><i className="ti ti-transfer" /> Información que pasa</h4>
-        <label className="orch-check-row">
+        <label className={`orch-check-row${isInputNode ? ' disabled' : ''}`}>
           <input
             type="checkbox"
-            checked={dataFlow.agentOutput}
+            checked={isInputNode ? false : dataFlow.agentOutput}
+            disabled={isInputNode}
             onChange={e => patchDF({ agentOutput: e.target.checked })}
           />
           <span>Respuesta del agente anterior</span>
         </label>
-        <label className="orch-check-row">
+        <label className={`orch-check-row${isInputNode ? ' disabled' : ''}`}>
           <input
             type="checkbox"
-            checked={dataFlow.filesModified}
+            checked={isInputNode ? false : dataFlow.filesModified}
+            disabled={isInputNode}
             onChange={e => patchDF({ filesModified: e.target.checked })}
           />
           <span>Lista de archivos modificados</span>
         </label>
-        <label className="orch-check-row">
-          <input
-            type="checkbox"
-            checked={dataFlow.projectContext}
-            onChange={e => patchDF({ projectContext: e.target.checked })}
-          />
-          <span>Contexto del proyecto (CLAUDE.md / copilot-instructions.md)</span>
-        </label>
-
       </section>
-      )}
 
       {/* Fixed context */}
       <section className="orch-config-section">
@@ -247,3 +238,4 @@ function FilePicker({ onPick }: { onPick: (path: string) => void }) {
     </button>
   );
 }
+

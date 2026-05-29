@@ -14,6 +14,7 @@ const { EventEmitter } = require('events');
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
 const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost } = require('./ai');
+const prompts = require('./prompts');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,6 @@ const MAX_FILE_SIZE_BYTES = 256 * 1024; // 256KB per file in snapshot
 const MAX_SNAPSHOT_FILES  = 500;        // Limit snapshot size
 
 // Token-efficiency limits (kept low for GitHub Copilot Free 8k-token window)
-const MAX_PREV_RESPONSE_CHARS = 1500;   // max chars of previous agent response passed to next
 const MAX_CONTEXT_FILE_CHARS  = 2000;   // max chars per fixed-context file
 
 // ── Filesystem helpers ────────────────────────────────────────────────────────
@@ -76,6 +76,30 @@ function categorizeError(err) {
   if (msg.includes('validation') || msg.includes('invalid')) return 'validation';
   if (msg.includes('cli') || msg.includes('claude cli')) return 'cli';
   return 'ai_error';
+}
+
+// ── Handoff parser ────────────────────────────────────────────────────────────
+// Busca la línea "HANDOFF: {...}" al final de la respuesta del agente.
+// Si el agente no la emite, devuelve null y el orquestador usa el fallback.
+
+function extractHandoff(response) {
+  const match = (response || '').match(/^HANDOFF:\s*(\{.+\})\s*$/m);
+  if (!match) return null;
+  try {
+    const h = JSON.parse(match[1]);
+    return {
+      done:    typeof h.done    === 'string'  ? h.done    : '',
+      changed: Array.isArray(h.changed)       ? h.changed : [],
+      issues:  Array.isArray(h.issues)        ? h.issues  : [],
+      next:    typeof h.next    === 'string'  ? h.next    : '',
+    };
+  } catch { return null; }
+}
+
+// Elimina la línea HANDOFF del texto que se guarda en el resultado
+// para no contaminar el output visible con metadatos internos.
+function stripHandoff(response) {
+  return (response || '').replace(/^HANDOFF:\s*\{.+\}\s*$/m, '').trimEnd();
 }
 
 // ── OrchestrationExecutor ─────────────────────────────────────────────────────
@@ -178,9 +202,10 @@ class OrchestrationExecutor extends EventEmitter {
   // ── Prompt building ───────────────────────────────────────────────────────
 
   _buildSystemPrompt(stepIndex) {
-    const agentName = this.orchestration.agents[stepIndex];
-    const agent     = this._getAgent(agentName);
-    let prompt      = agent?.system || `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
+    const agentName  = this.orchestration.agents[stepIndex];
+    const agent      = this._getAgent(agentName);
+    const isLastStep = stepIndex === this.orchestration.agents.length - 1;
+    let prompt       = agent?.system || `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
 
     // Determine which node provides context into this step:
     // step 0 uses inputNode (Orquestador → Agent[0]), others use the previous inter-agent node.
@@ -226,6 +251,8 @@ class OrchestrationExecutor extends EventEmitter {
       }
     }
 
+    if (!isLastStep) prompt += prompts.agentHandoffInstruction();
+
     return prompt;
   }
 
@@ -245,19 +272,14 @@ class OrchestrationExecutor extends EventEmitter {
         }
       }
 
-      // If inputNode has a fixed task description, use it as the task
-      const taskText = inputNode?.contextExtra?.fixed?.freeText?.trim();
+      const taskText  = inputNode?.contextExtra?.fixed?.freeText?.trim();
       const agentName = this.orchestration.agents[0];
-      const isLastStep = this.orchestration.agents.length === 1;
-      const structHint = isLastStep
-        ? ''
-        : '\n\nNota: tu respuesta será la entrada del siguiente agente. Sé preciso y conciso; omite explicaciones redundantes.';
 
       if (taskText) {
-        message += `## Tarea\n\n${taskText}${structHint}`;
+        message += `## Tarea\n\n${taskText}`;
       } else {
         message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
-          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.${structHint}`;
+          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.`;
       }
 
     } else {
@@ -265,12 +287,16 @@ class OrchestrationExecutor extends EventEmitter {
       const prevNode   = this.orchestration.nodes[stepIndex - 1];
 
       if (prevNode?.dataFlow?.agentOutput && prevResult?.output?.response) {
-        const raw = prevResult.output.response;
-        const truncated = raw.length > MAX_PREV_RESPONSE_CHARS
-          ? raw.slice(0, MAX_PREV_RESPONSE_CHARS) +
-            `\n\n[...respuesta truncada a ${MAX_PREV_RESPONSE_CHARS} caracteres. Continúa desde aquí.]`
-          : raw;
-        message += `## Salida del paso anterior (${this.orchestration.agents[stepIndex - 1]})\n\n${truncated}\n\n`;
+        const fromAgent = this.orchestration.agents[stepIndex - 1];
+        const handoff   = extractHandoff(prevResult.output.response);
+        if (handoff) {
+          message += prompts.formatHandoffAsInput(handoff, fromAgent) + '\n\n';
+        } else {
+          // Fallback: prose truncado mucho más corto que el límite anterior
+          const raw = prevResult.output.response;
+          const snippet = raw.length > 400 ? raw.slice(0, 400) + '\n[...]' : raw;
+          message += `## Paso anterior: ${fromAgent}\n\n${snippet}\n\n`;
+        }
       }
 
       if (prevNode?.dataFlow?.filesModified && prevResult?.filesModified?.length > 0) {
@@ -290,13 +316,9 @@ class OrchestrationExecutor extends EventEmitter {
         }
       }
 
-      const agentName  = this.orchestration.agents[stepIndex];
-      const isLastStep = stepIndex === this.orchestration.agents.length - 1;
-      const structHint = isLastStep
-        ? ''
-        : '\n\nNota: tu respuesta será la entrada del siguiente agente. Sé preciso y conciso; omite explicaciones redundantes.';
+      const agentName = this.orchestration.agents[stepIndex];
       message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
-        ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.${structHint}`;
+        ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.`;
     }
 
     // Hard limit: use executionConfig.maxContextChars or default
@@ -562,11 +584,19 @@ class OrchestrationExecutor extends EventEmitter {
           this._log('info', `Paso ${i + 1}: ${filesModified.length} archivo(s) modificado(s)`);
         }
 
+        // Guardar el handoff extraído en agentOutputs para trazabilidad,
+        // pero limpiar la línea del response visible.
+        const handoff = extractHandoff(response);
+        if (handoff) {
+          this._log('info', `Paso ${i + 1}: handoff → ${handoff.done}`);
+        }
+        const cleanResponse = stripHandoff(response);
+
         stepResult = {
           stepIndex:    i,
           agentName,
           input:        { systemPrompt: '', userMessage: '' }, // Don't store full prompts
-          output:       { response },
+          output:       { response: cleanResponse, handoff: handoff || undefined },
           filesModified,
           tokensUsed:   { input: inputTokens, output: outputTokens },
           estimatedCost: stepCostUSD,
@@ -575,7 +605,7 @@ class OrchestrationExecutor extends EventEmitter {
           backupPath:   snapshot?.snapshotPath || null,
         };
 
-        agentOutputs[i] = { response, filesModified };
+        agentOutputs[i] = { response: cleanResponse, handoff, filesModified };
         this.results.push(stepResult);
         stepsCompleted++;
         this._log('info', `Paso ${i + 1}: Completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
