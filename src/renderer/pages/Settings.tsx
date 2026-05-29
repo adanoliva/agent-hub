@@ -6,7 +6,7 @@ import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
-import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config } from '../types';
+import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomAIProvider } from '../types';
 
 type Tab = 'general' | 'cats' | 'ext-agents';
 
@@ -41,6 +41,13 @@ export function Settings() {
   const [importUrl,   setImportUrl]   = useState('');
   const [importBusy,  setImportBusy]  = useState(false);
 
+  // Custom Providers
+  const [customProviders, setCustomProviders] = useState<CustomAIProvider[]>(config?.customProviders ?? []);
+  const [editingCustom,   setEditingCustom]   = useState<Partial<CustomAIProvider> | null>(null);
+  const [showCustomChoice, setShowCustomChoice] = useState(false);
+  const [customHeadersRaw, setCustomHeadersRaw] = useState('');
+  const [customArgsRaw,    setCustomArgsRaw]    = useState('');
+
   // Anthropic API
   const [apiKey,      setApiKey]      = useState(config?.apiKey ?? '');
   const [apiModel,    setApiModel]    = useState(config?.apiModel ?? 'claude-sonnet-4-20250514');
@@ -68,6 +75,22 @@ export function Settings() {
   // CLI models
   const [geminiCliModel, setGeminiCliModel] = useState(config?.geminiCliModel ?? 'gemini-2.5-pro');
   const [codexCliModel,  setCodexCliModel]  = useState(config?.codexCliModel  ?? 'o4-mini');
+
+  // DeepSeek API
+  const [deepseekKey,   setDeepseekKey]   = useState(config?.deepseekKey ?? '');
+  const [deepseekModel, setDeepseekModel] = useState(config?.deepseekModel ?? 'deepseek-chat');
+
+  // Groq API
+  const [groqKey,   setGroqKey]   = useState(config?.groqKey ?? '');
+  const [groqModel, setGroqModel] = useState(config?.groqModel ?? 'llama-3.3-70b-versatile');
+
+  // OpenRouter API
+  const [openrouterKey,   setOpenrouterKey]   = useState(config?.openrouterKey ?? '');
+  const [openrouterModel, setOpenrouterModel] = useState(config?.openrouterModel ?? 'anthropic/claude-3.5-sonnet');
+
+  // Perplexity API
+  const [perplexityKey,   setPerplexityKey]   = useState(config?.perplexityKey ?? '');
+  const [perplexityModel, setPerplexityModel] = useState(config?.perplexityModel ?? 'sonar-reasoning-pro');
 
   // Directory state
   const DEFAULT_DIR_URL = 'https://github.com/adanoliva/agents-directory';
@@ -118,6 +141,14 @@ export function Settings() {
       setMistralModel(config.mistralModel ?? 'mistral-small-latest');
       setGrokKey(config.grokKey ?? '');
       setGrokModel(config.grokModel ?? 'grok-3-mini');
+      setDeepseekKey(config.deepseekKey ?? '');
+      setDeepseekModel(config.deepseekModel ?? 'deepseek-chat');
+      setGroqKey(config.groqKey ?? '');
+      setGroqModel(config.groqModel ?? 'llama-3.3-70b-versatile');
+      setOpenrouterKey(config.openrouterKey ?? '');
+      setOpenrouterModel(config.openrouterModel ?? 'anthropic/claude-3.5-sonnet');
+      setPerplexityKey(config.perplexityKey ?? '');
+      setPerplexityModel(config.perplexityModel ?? 'sonar-reasoning-pro');
       setGeminiCliModel(config.geminiCliModel ?? 'gemini-2.5-pro');
       setCodexCliModel(config.codexCliModel ?? 'o4-mini');
       setPendingProvider(config.aiProvider ?? 'cli');
@@ -149,6 +180,10 @@ export function Settings() {
         geminiApiKey, geminiApiModel,
         mistralKey, mistralModel,
         grokKey, grokModel,
+        deepseekKey, deepseekModel,
+        groqKey, groqModel,
+        openrouterKey, openrouterModel,
+        perplexityKey, perplexityModel,
         geminiCliModel, codexCliModel,
       });
       await refreshConfig();
@@ -170,6 +205,10 @@ export function Settings() {
         geminiApiKey, geminiApiModel,
         mistralKey, mistralModel,
         grokKey, grokModel,
+        deepseekKey, deepseekModel,
+        groqKey, groqModel,
+        openrouterKey, openrouterModel,
+        perplexityKey, perplexityModel,
         geminiCliModel, codexCliModel,
       });
       await refreshConfig();
@@ -325,6 +364,73 @@ export function Settings() {
     setImportUrl('');
   }
 
+  // ── custom provider actions ──────────────────────────────────────────────────
+
+  async function handleSaveCustom() {
+    if (!editingCustom?.name || !editingCustom?.id) { toast('ID y Nombre son obligatorios', 'err'); throw new Error('validation'); }
+    
+    let headers: Record<string, string> = {};
+    try { if (customHeadersRaw.trim()) headers = JSON.parse(customHeadersRaw); }
+    catch { toast('JSON de Headers inválido', 'err'); throw new Error('validation'); }
+
+    let args: string[] = [];
+    try { if (customArgsRaw.trim()) args = JSON.parse(customArgsRaw); }
+    catch { toast('JSON de Argumentos inválido (debe ser un array)', 'err'); throw new Error('validation'); }
+
+    const newProvider: CustomAIProvider = {
+      ...editingCustom as CustomAIProvider,
+      headers,
+      cliArgs: args,
+    };
+
+    const updated = editingCustom.id && customProviders.some(p => p.id === editingCustom.id)
+      ? customProviders.map(p => p.id === editingCustom.id ? newProvider : p)
+      : [...customProviders, { ...newProvider, id: newProvider.id || `custom-${Date.now()}` }];
+
+    setCustomProviders(updated);
+    await req('PUT', '/config', { customProviders: updated });
+    await refreshConfig();
+    setEditingCustom(null);
+    toast('Proveedor guardado');
+  }
+
+  async function deleteCustom(id: string) {
+    if (!confirm('¿Eliminar este proveedor personalizado?')) return;
+    const updated = customProviders.filter(p => p.id !== id);
+    setCustomProviders(updated);
+    await req('PUT', '/config', { customProviders: updated });
+    if (pendingProvider === id) setPendingProvider('cli');
+    await refreshConfig();
+    toast('Proveedor eliminado');
+  }
+
+  function startEditCustom(p: Partial<CustomAIProvider>) {
+    setEditingCustom(p);
+    setCustomHeadersRaw(JSON.stringify(p.headers || {}, null, 2));
+    setCustomArgsRaw(JSON.stringify(p.cliArgs || (p.type === 'cli' ? ['--prompt'] : []), null, 2));
+  }
+
+  async function importCustomFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const data = JSON.parse(event.target?.result as string);
+          if (!data.name || !data.type) throw new Error('Formato inválido');
+          startEditCustom({ ...data, id: data.id || `custom-${Date.now()}` });
+          setShowCustomChoice(false); // Cerrar solo si es válido
+        } catch { toast('Archivo JSON inválido', 'err'); }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+
   // ── render ───────────────────────────────────────────────────────────────────
 
   const cats     = config?.categories ?? [];
@@ -373,14 +479,12 @@ export function Settings() {
         {/* ── Tab: General ── */}
         {tab === 'general' && (
           <>
-            {/* Row 1: Provider (left) + How to use (right) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 36 }}>
-              {/* Left: Provider */}
-              <div>
-                <div className="settings-head">Proveedor de IA</div>
+            {/* Provider Section (Full Width) */}
+            <div style={{ marginBottom: 36 }}>
+              <div className="settings-head">Proveedor de IA</div>
 
-                {/* ── Two-column radio selector ── */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              {/* ── Two-column radio selector ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
 
                   {/* CLI column */}
                   <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
@@ -396,6 +500,24 @@ export function Settings() {
                       extra={<span className="badge amber"><i className="ti ti-flask" />exp</span>} />
                     <AIRadioRow value="copilot-cli" label="Copilot CLI (gh)" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['copilot-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    
+                    <AIRadioRow value="aider-cli" label="Aider CLI" selected={pendingProvider === 'aider-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['aider-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    
+                    <AIRadioRow value="cline-cli" label="Cline CLI" selected={pendingProvider === 'cline-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['cline-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    
+                    <AIRadioRow value="goose-cli" label="Goose CLI" selected={pendingProvider === 'goose-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['goose-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+
+                    {/* Custom CLI Providers */}
+                    {customProviders.filter(p => p.type === 'cli').map(p => (
+                      <AIRadioRow 
+                        key={p.id} value={p.id} label={p.name} selected={pendingProvider === p.id} onSelect={setPendingProvider}
+                        onEdit={() => startEditCustom(p)} onDelete={() => deleteCustom(p.id)}
+                      />
+                    ))}
+
                     <button className="btn sm ghost" onClick={recheckCLI} style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}>
                       <i className="ti ti-radar" /> Buscar CLIs en el sistema
                     </button>
@@ -413,12 +535,25 @@ export function Settings() {
                     <AIRadioRow value="gemini-api" label="Gemini API"      selected={pendingProvider === 'gemini-api'} onSelect={setPendingProvider} />
                     <AIRadioRow value="mistral"    label="Mistral API"     selected={pendingProvider === 'mistral'}    onSelect={setPendingProvider} />
                     <AIRadioRow value="grok"       label="Grok (xAI)"      selected={pendingProvider === 'grok'}       onSelect={setPendingProvider} />
+                    <AIRadioRow value="deepseek"   label="DeepSeek API"    selected={pendingProvider === 'deepseek'}   onSelect={setPendingProvider} />
+                    <AIRadioRow value="groq"       label="Groq API"        selected={pendingProvider === 'groq'}       onSelect={setPendingProvider} />
+                    <AIRadioRow value="openrouter" label="OpenRouter API"  selected={pendingProvider === 'openrouter'} onSelect={setPendingProvider} />
+                    <AIRadioRow value="perplexity" label="Perplexity API"  selected={pendingProvider === 'perplexity'} onSelect={setPendingProvider} />
+
+                    {/* Custom API Providers */}
+                    {customProviders.filter(p => p.type === 'api').map(p => (
+                      <AIRadioRow 
+                        key={p.id} value={p.id} label={p.name} selected={pendingProvider === p.id} onSelect={setPendingProvider}
+                        onEdit={() => startEditCustom(p)} onDelete={() => deleteCustom(p.id)}
+                      />
+                    ))}
                   </div>
                 </div>
 
                 {/* ── Config panel para el proveedor seleccionado ── */}
                 <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
 
+                  {/* Built-in logic ... */}
                   {pendingProvider === 'cli' && (
                     <div>
                       <div style={{ fontSize: 12, color: 'var(--text1)', marginBottom: 8 }}>
@@ -588,100 +723,129 @@ export function Settings() {
                       </div>
                     </div>
                   )}
+
+                  {pendingProvider === 'deepseek' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>platform.deepseek.com</span></label>
+                        <input type="password" value={deepseekKey} onChange={(e) => setDeepseekKey(e.target.value)}
+                          placeholder="sk-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={deepseekModel} onChange={(e) => setDeepseekModel(e.target.value)}>
+                          <option value="deepseek-chat">DeepSeek-V3 (Chat)</option>
+                          <option value="deepseek-reasoner">DeepSeek-R1 (Reasoner)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'groq' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>console.groq.com</span></label>
+                        <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)}
+                          placeholder="gsk-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={groqModel} onChange={(e) => setGroqModel(e.target.value)}>
+                          <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Versatile)</option>
+                          <option value="llama-3.1-8b-instant">Llama 3.1 8B (Instant)</option>
+                          <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'openrouter' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>openrouter.ai</span></label>
+                        <input type="password" value={openrouterKey} onChange={(e) => setOpenrouterKey(e.target.value)}
+                          placeholder="sk-or-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <input value={openrouterModel} onChange={(e) => setOpenrouterModel(e.target.value)}
+                          placeholder="anthropic/claude-3.5-sonnet" />
+                        <div className="hint">Ej: anthropic/claude-3.5-sonnet, google/gemini-pro-1.5, etc.</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingProvider === 'perplexity' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>API Key <span style={{ color: 'var(--text3)', fontWeight: 400 }}>www.perplexity.ai/settings/api</span></label>
+                        <input type="password" value={perplexityKey} onChange={(e) => setPerplexityKey(e.target.value)}
+                          placeholder="pplx-…" style={{ fontFamily: 'var(--mono)' }} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Modelo</label>
+                        <select value={perplexityModel} onChange={(e) => setPerplexityModel(e.target.value)}>
+                          <option value="sonar-reasoning-pro">Sonar Reasoning Pro</option>
+                          <option value="sonar-reasoning">Sonar Reasoning</option>
+                          <option value="sonar">Sonar (Fast)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Action bar ── */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                  <button className="btn sm" onClick={() => setShowCustomChoice(true)}>
+                    <i className="ti ti-plus" /> Proveedor personalizado
+                  </button>
+
+                  <div style={{ flex: 1 }} />
+
                   {testResult && (
-                    <span style={{ flex: 1, fontSize: 11, color: testResult.ok ? 'var(--green)' : 'var(--coral)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 11, color: testResult.ok ? 'var(--green)' : 'var(--coral)', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <i className={`ti ${testResult.ok ? 'ti-circle-check' : 'ti-alert-circle'}`} />
                       {testResult.ok ? `Conexión OK (${testResult.latencyMs}ms)` : testResult.error}
                     </span>
                   )}
-                  {!testResult && <span style={{ flex: 1 }} />}
-                  {['api','openai','github','gemini-api','mistral','grok'].includes(pendingProvider) && (
+                  
+                  {['api','openai','github','gemini-api','mistral','grok', 'deepseek', 'groq', 'openrouter', 'perplexity'].includes(pendingProvider) || customProviders.some(p => p.id === pendingProvider) ? (
                     <button className="btn sm ghost" onClick={testConn} disabled={testing || saving}>
                       {testing ? <><i className="ti ti-loader-2" /> Probando…</> : <><i className="ti ti-plug" /> Probar conexión</>}
                     </button>
-                  )}
+                  ) : null}
+                  
                   <button className="btn primary sm" onClick={saveAll} disabled={saving || testing}>
                     {saving ? <><i className="ti ti-loader-2" /> Guardando…</> : <><i className="ti ti-device-floppy" /> Guardar</>}
                   </button>
                 </div>
               </div>
 
-              {/* Right: How to use */}
-              <div>
-                <div className="settings-head">Cómo usar los agentes</div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                  {(['vscode', 'intellij', 'eclipse'] as const).map((e) => (
-                    <button
-                      key={e}
-                      className={`btn sm${editorTab === e ? ' primary' : ' ghost'}`}
-                      onClick={() => setEditorTab(e)}
-                    >
-                      <i className={`ti ${e === 'vscode' ? 'ti-brand-vscode' : e === 'intellij' ? 'ti-brand-kotlin' : 'ti-eclipse'}`} />
-                      {e === 'vscode' ? 'VS Code' : e === 'intellij' ? 'IntelliJ' : 'Eclipse'}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {editorTab === 'vscode'   && (isGitHub ? <GitHubUsageCards /> : <CLIUsageCards />)}
-                  {editorTab === 'intellij' && <IntelliJUsageCards isGitHub={isGitHub} />}
-                  {editorTab === 'eclipse'  && <EclipseUsageCards  isGitHub={isGitHub} />}
-                </div>
-              </div>
-            </div>
-
-            {/* Row 2: Close behavior */}
-            <div className="settings-section">
-              <div className="settings-head">Al cerrar la ventana</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(['ask', 'tray', 'quit'] as const).map((val) => {
-                  const active = (config?.closeAction ?? 'ask') === val;
-                  return (
-                    <div
-                      key={val}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                               background: 'var(--bg2)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                               borderRadius: 8, padding: '10px 14px', transition: 'border-color .15s' }}
-                      onClick={async () => { await req('PUT', '/config', { closeAction: val }); await refreshConfig(); }}
-                    >
-                      <div style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0, position: 'relative',
-                                    border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border3)'}`,
-                                    background: active ? 'var(--accent)' : 'transparent', transition: 'all .15s' }}>
-                        {active && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-                                                  width: 5, height: 5, borderRadius: '50%', background: '#fff' }} />}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text0)' }}>
-                          {val === 'ask' && 'Preguntar siempre'}
-                          {val === 'tray' && 'Minimizar al tray'}
-                          {val === 'quit' && 'Salir completamente'}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text2)' }}>
-                          {val === 'ask'  && 'Muestra un diálogo al cerrar'}
-                          {val === 'tray' && 'Sigue corriendo en segundo plano'}
-                          {val === 'quit' && 'Cierra la app por completo'}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Row 3: Updates + wizard (compact row) */}
+            {/* Row 2: Application (Compact: Close behavior + Updates + Wizard on the right) */}
             <div className="settings-section">
               <div className="settings-head">Aplicación</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12, color: 'var(--text2)', flex: 1 }}>
-                  {updateMsg || `v${version ?? '—'}`}
-                </span>
-                <button className="btn sm" onClick={checkUpdate}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1 }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text1)' }}>Al cerrar:</span>
+                  <select 
+                    style={{ padding: '4px 8px', fontSize: 12, width: 'auto' }}
+                    value={config?.closeAction ?? 'ask'}
+                    onChange={async (e) => { await req('PUT', '/config', { closeAction: e.target.value }); await refreshConfig(); }}
+                  >
+                    <option value="ask">Preguntar siempre</option>
+                    <option value="tray">Minimizar al tray</option>
+                    <option value="quit">Salir completamente</option>
+                  </select>
+                </div>
+
+                <div style={{ height: 16, width: 1, background: 'var(--border2)' }} />
+
+                <button className="btn sm ghost" onClick={checkUpdate}>
                   <i className="ti ti-refresh" /> Buscar actualizaciones
                 </button>
-                <button className="btn sm" onClick={() => setShowWizardFromSettings(true)}>
+                <button className="btn sm ghost" onClick={() => setShowWizardFromSettings(true)}>
                   <i className="ti ti-wand" /> Ver wizard
                 </button>
               </div>
@@ -942,6 +1106,142 @@ export function Settings() {
           </div>
         </Modal>
       )}
+
+      {/* ── Modal: Elección de proveedor custom ── */}
+      {showCustomChoice && (
+        <Modal title="Añadir proveedor personalizado" onClose={() => setShowCustomChoice(false)} hideFooter>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div 
+              className="choice-card"
+              onClick={() => { setShowCustomChoice(false); startEditCustom({ type: 'api', isOpenAICompatible: true }); }}
+              style={{ padding: 20, borderRadius: 12, background: 'var(--bg2)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'center', transition: 'all .2s' }}
+            >
+              <i className="ti ti-settings" style={{ fontSize: 32, color: 'var(--accent)', marginBottom: 12, display: 'block' }} />
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Configurar a mano</div>
+              <div style={{ fontSize: 11, color: 'var(--text2)' }}>Define URL, claves y cabeceras manualmente</div>
+            </div>
+            <div 
+              className="choice-card"
+              onClick={() => { setShowCustomChoice(false); importCustomFile(); }}
+              style={{ padding: 20, borderRadius: 12, background: 'var(--bg2)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'center', transition: 'all .2s' }}
+            >
+              <i className="ti ti-file-import" style={{ fontSize: 32, color: 'var(--green)', marginBottom: 12, display: 'block' }} />
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Importar JSON</div>
+              <div style={{ fontSize: 11, color: 'var(--text2)' }}>Carga un archivo de configuración compartido</div>
+            </div>
+          </div>
+
+          <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <InfoCard title="GUÍA: INTEGRACIÓN CORPORATIVA (AZURE / OPENAI)">
+              <div style={{ fontSize: 12, color: 'var(--text1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ margin: 0 }}>Para conectar sistemas de IA empresariales o proxies internos:</p>
+                <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <li>Crea un <strong>Nuevo Proveedor</strong> de tipo API.</li>
+                  <li>Selecciona <strong>"Azure / Enterprise"</strong> si usas Azure API Management o gateways con seguridad especial.</li>
+                  <li>Añade en <strong>Headers</strong> las claves requeridas (ej: <code>Ocp-Apim-Subscription-Key</code>).</li>
+                  <li>Pega la <strong>Base URL</strong> del endpoint corporativo.</li>
+                </ol>
+              </div>
+            </InfoCard>
+
+            <InfoCard title="CONSEJO: COMPARTIR CONFIGURACIÓN">
+              <div style={{ fontSize: 12, color: 'var(--text1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ margin: 0 }}>Puedes exportar tus proveedores configurados a un archivo <strong>.json</strong> para que otros compañeros lo importen al instante.</p>
+                <div style={{ background: 'var(--bg1)', padding: 8, borderRadius: 6, fontSize: 11, border: '1px solid var(--border)' }}>
+                  El archivo incluirá la URL, el modelo y los headers, permitiendo que el equipo use la misma infraestructura con sus propias credenciales.
+                </div>
+              </div>
+            </InfoCard>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal: Proveedor IA Custom ── */}
+      {editingCustom && (
+        <Modal 
+          title={editingCustom.id ? 'Editar Proveedor' : 'Nuevo Proveedor Personalizado'} 
+          confirmLabel="Guardar" 
+          onConfirm={handleSaveCustom} 
+          onClose={() => setEditingCustom(null)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                <label>Nombre</label>
+                <input value={editingCustom.name || ''} onChange={(e) => setEditingCustom({ ...editingCustom, name: e.target.value })} placeholder="Ej: Mi Empresa IA" />
+              </div>
+              <div className="field" style={{ width: 120, marginBottom: 0 }}>
+                <label>Tipo</label>
+                <select value={editingCustom.type || 'api'} onChange={(e) => setEditingCustom({ ...editingCustom, type: e.target.value as any })}>
+                  <option value="api">API (HTTP)</option>
+                  <option value="cli">CLI (Nativo)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>ID Único (interno)</label>
+              <input value={editingCustom.id || ''} onChange={(e) => setEditingCustom({ ...editingCustom, id: e.target.value })} placeholder="empresa-prod" disabled={!!editingCustom.id && customProviders.some(p => p.id === editingCustom.id)} />
+            </div>
+
+            {editingCustom.type === 'api' && (
+              <>
+                <div style={{ display: 'flex', gap: 10, background: 'var(--bg2)', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                    <input type="radio" checked={editingCustom.isOpenAICompatible ?? true} onChange={() => setEditingCustom({ ...editingCustom, isOpenAICompatible: true })} />
+                    OpenAI Standard
+                  </label>
+                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                    <input type="radio" checked={!(editingCustom.isOpenAICompatible ?? true)} onChange={() => setEditingCustom({ ...editingCustom, isOpenAICompatible: false })} />
+                    Azure / Enterprise
+                  </label>
+                </div>
+
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Base URL</label>
+                  <input value={editingCustom.baseUrl || ''} onChange={(e) => setEditingCustom({ ...editingCustom, baseUrl: e.target.value })} placeholder="https://..." style={{ fontFamily: 'var(--mono)' }} />
+                </div>
+
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>API Key</label>
+                  <input type="password" value={editingCustom.apiKey || ''} onChange={(e) => setEditingCustom({ ...editingCustom, apiKey: e.target.value })} placeholder="sk-..." style={{ fontFamily: 'var(--mono)' }} />
+                </div>
+
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Modelo por defecto</label>
+                  <input value={editingCustom.model || ''} onChange={(e) => setEditingCustom({ ...editingCustom, model: e.target.value })} placeholder="gpt-4o" />
+                </div>
+
+                {!editingCustom.isOpenAICompatible && (
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label>Headers Adicionales (JSON)</label>
+                    <textarea 
+                      rows={4} value={customHeadersRaw} onChange={(e) => setCustomHeadersRaw(e.target.value)}
+                      placeholder='{ "Ocp-Apim-Subscription-Key": "..." }'
+                      style={{ fontFamily: 'var(--mono)', fontSize: 11 }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {editingCustom.type === 'cli' && (
+              <>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Binario / Comando</label>
+                  <input value={editingCustom.cliBin || ''} onChange={(e) => setEditingCustom({ ...editingCustom, cliBin: e.target.value })} placeholder="my-ai-cli" style={{ fontFamily: 'var(--mono)' }} />
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Argumentos (JSON Array)</label>
+                  <input value={customArgsRaw} onChange={(e) => setCustomArgsRaw(e.target.value)} placeholder='["--prompt"]' style={{ fontFamily: 'var(--mono)' }} />
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -955,14 +1255,16 @@ interface AIRadioRowProps {
   onSelect: (p: AIProvider) => void;
   badge?: React.ReactNode;
   extra?: React.ReactNode;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-function AIRadioRow({ value, label, selected, onSelect, badge, extra }: AIRadioRowProps) {
+function AIRadioRow({ value, label, selected, onSelect, badge, extra, onEdit, onDelete }: AIRadioRowProps) {
   return (
     <div
       onClick={() => onSelect(value)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
         borderRadius: 6, cursor: 'pointer', marginBottom: 2,
         background: selected ? 'var(--bg3)' : 'transparent',
         border: `1px solid ${selected ? 'var(--accent)' : 'transparent'}`,
@@ -970,11 +1272,17 @@ function AIRadioRow({ value, label, selected, onSelect, badge, extra }: AIRadioR
       }}
     >
       <div className={`provider-radio${selected ? ' on' : ''}`} style={{ flexShrink: 0 }} />
-      <span style={{ flex: 1, fontSize: 12, fontWeight: selected ? 600 : 400, color: selected ? 'var(--text0)' : 'var(--text1)' }}>
+      <span style={{ flex: 1, fontSize: 12, fontWeight: selected ? 600 : 400, color: selected ? 'var(--text0)' : 'var(--text1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {label}
       </span>
       {extra}
       {badge}
+      {(onEdit || onDelete) && (
+        <div style={{ display: 'flex', gap: 4, marginLeft: 4 }} onClick={e => e.stopPropagation()}>
+          {onEdit && <button className="btn icon sm ghost" onClick={onEdit} title="Editar"><i className="ti ti-edit" style={{ fontSize: 13 }} /></button>}
+          {onDelete && <button className="btn icon sm ghost danger" onClick={onDelete} title="Eliminar"><i className="ti ti-trash" style={{ fontSize: 13 }} /></button>}
+        </div>
+      )}
     </div>
   );
 }

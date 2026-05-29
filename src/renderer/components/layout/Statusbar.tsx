@@ -4,9 +4,23 @@ import { req } from '../../api';
 import type { AIUsage } from '../../types';
 
 const PROVIDER_LABEL: Record<string, string> = {
-  cli:    'Claude CLI',
-  api:    'Anthropic API',
-  github: 'GitHub Copilot',
+  cli:           'Claude Code CLI',
+  'gemini-cli':  'Gemini CLI',
+  'codex-cli':   'OpenAI Codex CLI',
+  'copilot-cli': 'Copilot CLI (gh)',
+  'aider-cli':   'Aider CLI',
+  'cline-cli':   'Cline CLI',
+  'goose-cli':   'Goose CLI',
+  api:           'Anthropic API',
+  openai:        'OpenAI API',
+  github:        'GitHub Models',
+  'gemini-api':  'Gemini API',
+  mistral:       'Mistral API',
+  grok:          'Grok (xAI)',
+  deepseek:      'DeepSeek API',
+  groq:          'Groq API',
+  openrouter:    'OpenRouter API',
+  perplexity:    'Perplexity API',
 };
 
 function fmtTokens(n: number): string {
@@ -39,8 +53,25 @@ export function Statusbar() {
       .then((s) => setAiReady(s.ready)).catch(() => setAiReady(false));
   }, [config?.aiProvider]);
 
-  const provider      = config?.aiProvider ?? 'cli';
-  const providerLabel = PROVIDER_LABEL[provider] ?? provider;
+  const provider = config?.aiProvider ?? 'cli';
+  let providerLabel = PROVIDER_LABEL[provider];
+
+  // Si no está en el mapa, buscar en customProviders
+  const custom = (config?.customProviders || []).find(p => p.id === provider);
+  if (!providerLabel && custom) {
+    providerLabel = custom.name;
+  }
+  if (!providerLabel) providerLabel = provider;
+
+  // Asegurar sufijo CLI o API
+  let isCli = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'].includes(provider);
+  if (custom && custom.type === 'cli') isCli = true;
+
+  if (isCli) {
+    if (!providerLabel.toLowerCase().includes('cli')) providerLabel += ' CLI';
+  } else {
+    if (!providerLabel.toLowerCase().includes('api')) providerLabel += ' API';
+  }
   const sess          = usage?.session;
 
   return (

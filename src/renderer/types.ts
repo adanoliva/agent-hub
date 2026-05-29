@@ -56,16 +56,39 @@ export type AIProvider =
   | 'gemini-cli'   // Gemini CLI
   | 'codex-cli'    // OpenAI Codex CLI
   | 'copilot-cli'  // GitHub Copilot CLI
+  | 'aider-cli'    // Aider CLI
+  | 'cline-cli'    // Cline CLI
+  | 'goose-cli'    // Goose CLI
   | 'api'          // Anthropic API
   | 'openai'       // OpenAI API
   | 'github'       // GitHub Models
   | 'gemini-api'   // Gemini API
   | 'mistral'      // Mistral API
-  | 'grok';        // Grok (xAI)
+  | 'grok'         // Grok (xAI)
+  | 'deepseek'     // DeepSeek API
+  | 'groq'         // Groq API
+  | 'openrouter'   // OpenRouter API
+  | 'perplexity'   // Perplexity API
+  | string;         // Dynamic custom providers
+
+export interface CustomAIProvider {
+  id: string;
+  name: string;
+  type: 'api' | 'cli';
+  isOpenAICompatible?: boolean;
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  headers?: Record<string, string>;
+  cliBin?: string;
+  cliArgs?: string[];
+  icon?: string;
+}
 
 export interface Config {
   version: string;
   aiProvider: AIProvider;
+  customProviders?: CustomAIProvider[];
 
   // Anthropic API
   apiKey: string;
@@ -90,6 +113,22 @@ export interface Config {
   // Grok (xAI)
   grokKey?: string;
   grokModel?: string;
+
+  // DeepSeek API
+  deepseekKey?: string;
+  deepseekModel?: string;
+
+  // Groq API
+  groqKey?: string;
+  groqModel?: string;
+
+  // OpenRouter API
+  openrouterKey?: string;
+  openrouterModel?: string;
+
+  // Perplexity API
+  perplexityKey?: string;
+  perplexityModel?: string;
 
   // CLI models
   geminiCliModel?: string;

@@ -80,6 +80,25 @@ const DEFAULT_CONFIG = {
   grokKey: '',
   grokModel: 'grok-3-mini',
 
+  // DeepSeek API
+  deepseekKey: '',
+  deepseekModel: 'deepseek-chat',
+
+  // Groq API
+  groqKey: '',
+  groqModel: 'llama-3.3-70b-versatile',
+
+  // OpenRouter API
+  openrouterKey: '',
+  openrouterModel: 'anthropic/claude-3.5-sonnet',
+
+  // Perplexity API
+  perplexityKey: '',
+  perplexityModel: 'sonar-reasoning-pro',
+
+  // Custom Providers
+  customProviders: [],
+
   // CLI models
   geminiCliModel: 'gemini-2.5-pro',
   codexCliModel: 'o4-mini',

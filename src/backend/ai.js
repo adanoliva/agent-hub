@@ -88,8 +88,8 @@ function calcAnthropicCost(model, inputTokens, outputTokens) {
 
 // ── Provider detection ────────────────────────────────────────────────────────
 
-const CLI_PROVIDERS = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli'];
-const API_PROVIDERS = ['api', 'openai', 'github', 'gemini-api', 'mistral', 'grok'];
+const CLI_PROVIDERS = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+const API_PROVIDERS = ['api', 'openai', 'github', 'gemini-api', 'mistral', 'grok', 'deepseek', 'groq', 'openrouter', 'perplexity'];
 
 function whichBin(bin) {
   return new Promise((resolve) => {
@@ -102,10 +102,19 @@ function whichBin(bin) {
 }
 
 async function checkAllCLIs() {
-  const [claude, gemini, codex, gh] = await Promise.all([
+  const [claude, gemini, codex, gh, aider, cline, goose] = await Promise.all([
     whichBin('claude'), whichBin('gemini'), whichBin('codex'), whichBin('gh'),
+    whichBin('aider'), whichBin('cline'), whichBin('goose'),
   ]);
-  return { 'cli': claude, 'gemini-cli': gemini, 'codex-cli': codex, 'copilot-cli': gh };
+  return { 
+    'cli': claude, 
+    'gemini-cli': gemini, 
+    'codex-cli': codex, 
+    'copilot-cli': gh,
+    'aider-cli': aider,
+    'cline-cli': cline,
+    'goose-cli': goose,
+  };
 }
 
 async function getProviderStatus() {
@@ -118,7 +127,7 @@ async function getProviderStatus() {
     return { provider, ready: check.found, cliChecks };
   }
 
-  // API providers — check credential
+  // Built-in API providers — check credential
   const credMap = {
     'api':        cfg.apiKey,
     'openai':     cfg.openaiKey,
@@ -126,10 +135,31 @@ async function getProviderStatus() {
     'gemini-api': cfg.geminiApiKey,
     'mistral':    cfg.mistralKey,
     'grok':       cfg.grokKey,
+    'deepseek':   cfg.deepseekKey,
+    'groq':       cfg.groqKey,
+    'openrouter': cfg.openrouterKey,
+    'perplexity': cfg.perplexityKey,
   };
-  const cred  = credMap[provider] ?? '';
-  const ready = Boolean(cred && cred.trim());
-  return { provider, ready, cliChecks };
+
+  if (credMap[provider] !== undefined) {
+    const cred  = credMap[provider] ?? '';
+    const ready = Boolean(cred && cred.trim());
+    return { provider, ready, cliChecks };
+  }
+
+  // Custom providers
+  const custom = (cfg.customProviders || []).find(p => p.id === provider);
+  if (custom) {
+    if (custom.type === 'api') {
+      const ready = Boolean(custom.apiKey && custom.apiKey.trim());
+      return { provider, ready, cliChecks };
+    } else {
+      const check = await whichBin(custom.cliBin);
+      return { provider, ready: check.found, cliChecks };
+    }
+  }
+
+  return { provider, ready: false, cliChecks };
 }
 
 function isCLIAvailable() {
@@ -152,9 +182,33 @@ function isCLIAvailable() {
  * @param {number} [opts.maxTokens]
  * @returns {Promise<string>}
  */
+function _getCustomProviderConfig(cfg, provider) {
+  const custom = (cfg.customProviders || []).find(p => p.id === provider);
+  if (!custom || custom.type !== 'api') return null;
+  return {
+    baseUrl: custom.baseUrl,
+    key:     custom.apiKey,
+    model:   custom.model,
+    headers: custom.headers || {},
+  };
+}
+
 async function callAI(prompt, opts = {}) {
   const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
+
+  // Check custom providers first
+  const customCfg = _getCustomProviderConfig(cfg, provider);
+  if (customCfg) {
+    return callOpenAICompat(prompt, null, customCfg, opts);
+  }
+
+  // Check if it's a custom CLI provider
+  const customCLI = (cfg.customProviders || []).find(p => p.id === provider && p.type === 'cli');
+  if (customCLI) {
+    const args = customCLI.cliArgs || [];
+    return callGenericCLI(customCLI.cliBin, args, prompt, opts);
+  }
 
   switch (provider) {
     case 'cli':         return callCLI(prompt, opts);
@@ -187,6 +241,29 @@ async function callAI(prompt, opts = {}) {
                           key:     cfg.grokKey,
                           model:   cfg.grokModel ?? 'grok-3-mini',
                         }, opts);
+    case 'deepseek':    return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://api.deepseek.com',
+                          key:     cfg.deepseekKey,
+                          model:   cfg.deepseekModel ?? 'deepseek-chat',
+                        }, opts);
+    case 'groq':        return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://api.groq.com/openai/v1',
+                          key:     cfg.groqKey,
+                          model:   cfg.groqModel ?? 'llama-3.3-70b-versatile',
+                        }, opts);
+    case 'openrouter':  return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://openrouter.ai/api/v1',
+                          key:     cfg.openrouterKey,
+                          model:   cfg.openrouterModel ?? 'anthropic/claude-3.5-sonnet',
+                        }, opts);
+    case 'perplexity':  return callOpenAICompat(prompt, null, {
+                          baseUrl: 'https://api.perplexity.ai',
+                          key:     cfg.perplexityKey,
+                          model:   cfg.perplexityModel ?? 'sonar-reasoning-pro',
+                        }, opts);
+    case 'aider-cli':   return callGenericCLI('aider', ['--message', prompt], prompt, opts);
+    case 'cline-cli':   return callGenericCLI('cline', ['--prompt', prompt], prompt, opts);
+    case 'goose-cli':   return callGenericCLI('goose', ['--prompt', prompt], prompt, opts);
     default: throw new Error(`Unknown AI provider: ${provider}`);
   }
 }
@@ -379,17 +456,20 @@ async function callGitHub(prompt, githubToken, model, opts = {}) {
 
 // ── OpenAI-compatible backend (OpenAI, Gemini, Mistral, Grok, GitHub) ────────
 
-async function callOpenAICompat(prompt, systemPrompt, { baseUrl, key, model }, opts = {}) {
-  if (!key) throw new Error(`No API key configured for this provider`);
-
+async function callOpenAICompat(prompt, systemPrompt, { baseUrl, key, model, headers = {} }, opts = {}) {
   const messages = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   messages.push({ role: 'user', content: prompt });
 
+  const finalHeaders = { 'Content-Type': 'application/json', ...headers };
+  if (!finalHeaders.Authorization && !finalHeaders['Ocp-Apim-Subscription-Key'] && key) {
+    finalHeaders.Authorization = `Bearer ${key}`;
+  }
+
   const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
   const res  = await fetch(url, {
     method:  'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    headers: finalHeaders,
     body:    JSON.stringify({ model, messages, max_tokens: opts.maxTokens || 4096 }),
     signal:  AbortSignal.timeout(opts.timeout || CALL_TIMEOUT_MS),
   });
@@ -410,17 +490,20 @@ async function callOpenAICompat(prompt, systemPrompt, { baseUrl, key, model }, o
   return text;
 }
 
-async function callOpenAICompatChat(messages, systemPrompt, { baseUrl, key, model }, opts = {}) {
-  if (!key) throw new Error(`No API key configured for this provider`);
-
+async function callOpenAICompatChat(messages, systemPrompt, { baseUrl, key, model, headers = {} }, opts = {}) {
   const allMessages = systemPrompt
     ? [{ role: 'system', content: systemPrompt }, ...messages]
     : messages;
 
+  const finalHeaders = { 'Content-Type': 'application/json', ...headers };
+  if (!finalHeaders.Authorization && !finalHeaders['Ocp-Apim-Subscription-Key'] && key) {
+    finalHeaders.Authorization = `Bearer ${key}`;
+  }
+
   const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
   const res  = await fetch(url, {
     method:  'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    headers: finalHeaders,
     body:    JSON.stringify({ model, messages: allMessages, max_tokens: opts.maxTokens || 4096 }),
     signal:  AbortSignal.timeout(opts.timeout || CALL_TIMEOUT_MS),
   });
@@ -972,6 +1055,10 @@ function _openAICompatConfigForProvider(cfg, provider) {
     case 'gemini-api':  return { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', key: cfg.geminiApiKey, model: cfg.geminiApiModel ?? 'gemini-2.5-flash' };
     case 'mistral':     return { baseUrl: 'https://api.mistral.ai/v1', key: cfg.mistralKey, model: cfg.mistralModel ?? 'mistral-small-latest' };
     case 'grok':        return { baseUrl: 'https://api.x.ai/v1', key: cfg.grokKey, model: cfg.grokModel ?? 'grok-3-mini' };
+    case 'deepseek':    return { baseUrl: 'https://api.deepseek.com', key: cfg.deepseekKey, model: cfg.deepseekModel ?? 'deepseek-chat' };
+    case 'groq':        return { baseUrl: 'https://api.groq.com/openai/v1', key: cfg.groqKey, model: cfg.groqModel ?? 'llama-3.3-70b-versatile' };
+    case 'openrouter':  return { baseUrl: 'https://openrouter.ai/api/v1', key: cfg.openrouterKey, model: cfg.openrouterModel ?? 'anthropic/claude-3.5-sonnet' };
+    case 'perplexity':  return { baseUrl: 'https://api.perplexity.ai', key: cfg.perplexityKey, model: cfg.perplexityModel ?? 'sonar-reasoning-pro' };
     default: return null;
   }
 }
@@ -979,6 +1066,13 @@ function _openAICompatConfigForProvider(cfg, provider) {
 async function callAIChat(messages, opts = {}) {
   const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
+
+  // Check custom providers first
+  const customCfg = _getCustomProviderConfig(cfg, provider);
+  if (customCfg) {
+    const { text } = await callOpenAICompatChat(messages, opts.systemPrompt || null, customCfg, opts);
+    return text;
+  }
 
   if (provider === 'api') {
     if (!cfg.apiKey) throw new Error('No API key configured');
@@ -1041,6 +1135,12 @@ async function callAIChat(messages, opts = {}) {
 async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
   const cfg      = readConfig();
   const provider = opts.provider || cfg.aiProvider || 'cli';
+
+  // Check custom providers
+  const customCfg = _getCustomProviderConfig(cfg, provider);
+  if (customCfg) {
+    return callOpenAICompatChat(messages, systemPrompt || null, customCfg, opts);
+  }
 
   if (provider === 'api') {
     if (!cfg.apiKey) throw new Error('No API key configured');
@@ -1147,8 +1247,52 @@ async function testConnection() {
   const provider = cfg.aiProvider || 'cli';
   const start    = Date.now();
 
+  // Check custom providers first
+  const custom = (cfg.customProviders || []).find(p => p.id === provider);
+  if (custom) {
+    if (custom.type === 'cli') {
+      const check = await whichBin(custom.cliBin);
+      return {
+        ok:        check.found,
+        error:     check.found ? undefined : `${custom.cliBin} no encontrado en PATH`,
+        latencyMs: Date.now() - start,
+      };
+    } else {
+      const customCfg = _getCustomProviderConfig(cfg, provider);
+      if (!customCfg.baseUrl) return { ok: false, error: 'Base URL no configurada', latencyMs: 0 };
+      const url  = customCfg.baseUrl.endsWith('/chat/completions')
+        ? customCfg.baseUrl
+        : `${customCfg.baseUrl}/chat/completions`;
+      
+      const finalHeaders = { 'Content-Type': 'application/json', ...customCfg.headers };
+      if (!finalHeaders.Authorization && !finalHeaders['Ocp-Apim-Subscription-Key'] && customCfg.key) {
+        finalHeaders.Authorization = `Bearer ${customCfg.key}`;
+      }
+
+      const resp = await fetch(url, {
+        method:  'POST',
+        headers: finalHeaders,
+        body:    JSON.stringify({ model: customCfg.model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 5 }),
+        signal:  AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${resp.status}`);
+      }
+      return { ok: true, latencyMs: Date.now() - start };
+    }
+  }
+
   if (CLI_PROVIDERS.includes(provider)) {
-    const binMap = { 'cli': 'claude', 'gemini-cli': 'gemini', 'codex-cli': 'codex', 'copilot-cli': 'gh' };
+    const binMap = { 
+      'cli': 'claude', 
+      'gemini-cli': 'gemini', 
+      'codex-cli': 'codex', 
+      'copilot-cli': 'gh',
+      'aider-cli': 'aider',
+      'cline-cli': 'cline',
+      'goose-cli': 'goose',
+    };
     const bin    = binMap[provider] || provider;
     const check  = await whichBin(bin);
     return {
