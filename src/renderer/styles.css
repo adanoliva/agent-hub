@@ -695,6 +695,8 @@ body.light .theme-option.selected{border-color:rgba(108,92,231,0.3)}
 .orch-exec-field label{font-size:12px;color:var(--text1)}
 .orch-required{color:#fb7185;margin-left:3px}
 .orch-exec-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding-top:4px}
+.orch-exec-browser{padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px}
+.orch-exec-browser-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 
 /* Running state */
 .orch-exec-running-header{display:flex;align-items:center;gap:12px}

@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-28 · Versión: 1.8.3
+> Última actualización: 2026-05-29 · Versión: 1.9.2
 
 ---
 
@@ -154,6 +154,27 @@ interface DashboardNotification {
   message: string;
   action: 'open-agent' | 'open-project' | 'sync-project' | 'generate-context' | 'optimize-agent';
 }
+
+// Browser CDP
+interface BrowserTab {
+  id:    string;
+  url:   string;
+  title: string;
+}
+interface BrowserInstalled {
+  key:    string;
+  name:   string;
+  engine: string;
+}
+interface BrowserStatus {
+  connected:  boolean;
+  cdpActive:  boolean;
+  cdpPort:    number;
+  browserKey: string | null;
+  tabs:       BrowserTab[];
+  installed:  BrowserInstalled[];
+}
+
 interface DashboardData {
   agents: { total: number; global: number; section: number; tech: number; uncategorized: number };
   projects: { total: number; active: number; paused: number; archived: number; totalPending: number; withPending: number };
@@ -524,9 +545,36 @@ Panel de configuración para la conexión entre dos agentes. Auto-guarda al camb
 
 Panel de ejecución de una orquestación. Tres estados internos:
 
-1. **Formulario previo:** muestra la configuración de ejecución y los campos de contexto temporal pendientes de rellenar. Botón "Ejecutar" llama `POST /orchestrations/:id/execute { projectId, temporalContextValues }` y almacena el `executionId` devuelto.
+1. **Formulario previo:** muestra la configuración de ejecución, los campos de contexto temporal pendientes de rellenar y (condicionalmente) la sección de navegador CDP. Botón "Comenzar ejecución" llama `POST /orchestrations/:id/execute { projectId, temporalContextValues }` y almacena el `executionId` devuelto.
 2. **Corriendo (SSE):** abre `EventSource` apuntando a `GET /orchestrations/:id/execute/stream?executionId=`. Recibe eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error`. Los logs se muestran en `.orch-exec-log` con clase según nivel. Botón "Rollback" por paso completado llama `POST /orchestrations/:id/executions/:execId/rollback { stepIndex }`.
 3. **Resultado:** muestra resumen (`ExecutionResult`), tarjetas por paso con estado, ficheros modificados, tokens y botones de rollback.
+
+**Detección de herramientas browser (`needsBrowser`):**
+
+Al montar, el panel carga los objetos de agente completos desde las mismas fuentes que usa la paleta del editor:
+
+```
+GET /agents/applicable?projectId=   ← agentes global + section + tech aplicables
+GET /projects/:id/agents            ← agentes propios del proyecto
+```
+
+Ambas listas se fusionan (deduplicadas por nombre) y se filtran por `orchestration.agents` para obtener solo los que pertenecen a esta orquestación. Si alguno de ellos tiene una herramienta cuyo nombre empieza por `browser_`, se activa `needsBrowser = true`.
+
+**Sección CDP (solo visible si `needsBrowser`):**
+
+Muestra el estado de la conexión (`GET /api/browser/status`) con un badge verde/coral. Incluye el botón **"Reiniciar con CDP"** que llama `POST /api/browser/launch { browserKey, port }` con un selector del navegador instalado. Tras el lanzamiento sondea el estado hasta que `connected = true`.
+
+**Gate de ejecución (`canExecute`):**
+
+El botón "Comenzar ejecución" se desactiva hasta que se cumplen todas estas condiciones:
+
+| Condición | Descripción |
+|---|---|
+| `missingFields.length === 0` | Todos los campos temporales requeridos están rellenos |
+| `!browserBlocked` | Si `needsBrowser`: el navegador está conectado por CDP |
+| `!browserLoading` | Si `needsBrowser`: el estado del navegador ya se ha cargado |
+
+El atributo `title` del botón explica el motivo de bloqueo al pasar el cursor.
 
 ---
 

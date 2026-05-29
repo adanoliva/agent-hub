@@ -608,48 +608,55 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
     const tech = (cat?.technologies || []).find(t => t.id === project.techId);
     const fileLabel = ctxType === 'github' ? 'copilot-instructions.md (GitHub Copilot)' : 'CLAUDE.md (Claude Code)';
 
-    const analysisPrompt = `Analiza este proyecto de desarrollo y genera un ${fileLabel} optimizado para agentes de IA.
+    const contextFilePath = ctxType === 'github'
+      ? path.join(project.path, '.github', 'copilot-instructions.md')
+      : path.join(project.path, 'CLAUDE.md');
+    const existingContext = safeRead(contextFilePath, 8000);
+
+    const projectInfo = `**Nombre:** ${project.name}
+**Categoría:** ${cat?.name || project.categoryId || 'N/A'}
+**Tecnología:** ${tech?.name || project.techId || 'N/A'}
+**Lenguajes:** ${detectedLanguages.join(', ')}
+**Librerías:** ${mainLibraries.slice(0, 8).join(', ') || 'No detectadas'}
+**Testing:** ${testingFramework} · **Build:** ${buildTool} · **Lint:** ${lintingTool}
+**Package manager:** ${packageManager} · **CI/CD:** ${cicdPipeline || 'No'} · **Docker:** ${hasDocker ? 'Sí' : 'No'}`;
+
+    const analysisPrompt = existingContext
+      ? `Tienes el ${fileLabel} actual de un proyecto. Debes reescribirlo aplicando estas reglas:
+
+1. **Menos es más**: elimina cualquier sección obvia, repetitiva o que un agente de IA pueda inferir del código.
+2. **Máximo 100 líneas**: si el original supera ese límite, sintetiza sin perder información esencial.
+3. **Solo lo no deducible**: arquitectura, decisiones de diseño, convenciones propias, comandos clave, qué evitar. Nada de tutoriales básicos.
+4. **Conserva el conocimiento real**: no elimines detalles únicos del proyecto que no están en el código.
+
+## Contexto detectado del proyecto
+
+${projectInfo}
+
+## Contenido actual del archivo
+
+${existingContext}
+
+Devuelve únicamente el contenido reescrito del archivo. Sin explicaciones, sin bloques de código envolventes.`
+      : `Genera un ${fileLabel} para este proyecto. Reglas:
+
+1. **Máximo 100 líneas**.
+2. **Solo lo esencial para un agente de IA**: stack, comandos clave, convenciones propias, estructura relevante, qué evitar. Sin tutoriales básicos.
+3. **Markdown limpio**. Solo el contenido del archivo, sin explicaciones adicionales.
 
 ## Información del proyecto
 
-**Nombre:** ${project.name}
-**Descripción:** ${project.description || 'No especificada'}
-**Categoría:** ${cat?.name || project.categoryId || 'No especificada'}
-**Tecnología:** ${tech?.name || project.techId || 'No especificada'}
-**Lenguajes:** ${detectedLanguages.join(', ')}
-**Frameworks/Librerías principales:** ${mainLibraries.slice(0, 8).join(', ') || 'No detectados'}
+${projectInfo}
 
-## Estructura del proyecto
+## Estructura
 
 ${structure}
 
-## Dependencias principales
+## Dependencias
 
 ${dependencies}
 
-## Configuración detectada
-
-- Testing: ${testingFramework}
-- Linting: ${lintingTool}
-- Build tool: ${buildTool}
-- Package manager: ${packageManager}
-- CI/CD: ${cicdPipeline || 'No detectado'}
-- Containerización: ${hasDocker ? 'Sí (Docker)' : 'No'}
-
-${existingReadme ? '## README existente:\n' + existingReadme : ''}
-
----
-
-Basándote en esto, genera un ${fileLabel} que incluya:
-
-1. **Descripción del proyecto**: Resumen claro de qué es y qué hace
-2. **Stack tecnológico**: Lista de tecnologías principales
-3. **Estructura del código**: Explicación de carpetas clave
-4. **Cómo ejecutar localmente**: Instrucciones básicas
-5. **Instrucciones para agentes**: Reglas específicas (convenciones, patrones, qué evitar)
-6. **Quick wins**: Tareas de mejora identificables rápidamente
-
-Formato: Markdown limpio y profesional, máximo 1000 palabras. Solo devuelve el contenido del archivo, sin explicaciones adicionales.`;
+${existingReadme ? '## README\n' + existingReadme : ''}`;
 
     const { callAI } = require('./ai');
     const content = await callAI(analysisPrompt);
@@ -1487,6 +1494,7 @@ app.get('/api/agents/flat', (req, res) => {
     try { all.push(...listAgentsByLevel(level, catId, techId)); } catch {}
   };
   collect('global');
+  collect('uncategorized');
   for (const cat of (cfg.categories || [])) {
     collect('section', cat.id);
     for (const tech of (cat.technologies || [])) collect('tech', cat.id, tech.id);
@@ -1595,7 +1603,7 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
     return res.status(400).json({ error: 'Subsystem CLI is only for api and github providers. Use the CLI provider natively.' });
   }
 
-  const { prompt, agentSystemPrompt, projectContext, maxTurns, timeout } = req.body;
+  const { prompt, agentSystemPrompt, projectContext, maxTurns, timeout, useBrowser } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
 
   try {
@@ -1605,6 +1613,7 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
       provider,
       maxTurns:       maxTurns  || 10,
       timeout:        timeout   || 300_000,
+      useBrowser:     useBrowser || false,
     });
     res.json(result);
   } catch (e) {

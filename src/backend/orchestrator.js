@@ -525,12 +525,15 @@ class OrchestrationExecutor extends EventEmitter {
         } else {
           const agent       = this._getAgent(agentName);
           const contextFile = this._getContextFile();
+          const agentUsesBrowser = Array.isArray(agent?.tools) &&
+            agent.tools.some(t => t.startsWith('browser_'));
           const cliResult   = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
             projectPath:    this.project.path,
             projectContext: contextFile,
             provider,
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
             timeout:        orchestration.executionConfig?.timeout   || 300000,
+            useBrowser:     orchestration.executionConfig?.requiresBrowser || agentUsesBrowser || false,
           });
 
           // Surface internal failures as real errors so the catch block handles them

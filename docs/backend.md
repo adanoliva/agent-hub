@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-28 · Versión: 1.8.3
+> Última actualización: 2026-05-29 · Versión: 1.9.2
 
 ---
 
@@ -20,6 +20,7 @@
 11. [Orquestaciones — CRUD (`workflows.js`)](#11-orquestaciones--crud-workflowsjs)
 12. [Orquestaciones — Motor de ejecución (`orchestrator.js`)](#12-orquestaciones--motor-de-ejecución-orchestratorjs)
 13. [Bandeja del sistema (`tray.js`)](#13-bandeja-del-sistema-trayjs)
+13b. [Automatización de navegador vía CDP (`browser.js`)](#13b-automatización-de-navegador-vía-cdp-browserjs)
 14. [Bridge IPC (`preload.js`)](#14-bridge-ipc-preloadjs)
 15. [Agentes por defecto (`defaults.js`)](#15-agentes-por-defecto-defaultsjs)
 16. [Plantillas de contexto (`templates.js`)](#16-plantillas-de-contexto-templatesjs)
@@ -254,7 +255,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/agents?level=&categoryId=&techId=` | Lista agentes de un nivel (incluye `level=uncategorized`) |
-| GET | `/api/agents/flat` | Todos los agentes de todos los niveles (para @mention) |
+| GET | `/api/agents/flat` | Todos los agentes de todos los niveles incluido `uncategorized` (para @mention y detección de herramientas) |
 | GET | `/api/agents/applicable?projectId=` | Global + section + tech aplicables al proyecto |
 | POST | `/api/agents` | Crea agente `{ level, categoryId?, techId?, agent }` |
 | PUT | `/api/agents` | Actualiza agente existente (mismo payload) |
@@ -1009,6 +1010,87 @@ Comprueba:
 ---
 
 Icono en la bandeja de Windows. Click izquierdo muestra la ventana; click derecho abre menú con "Abrir", "Reiniciar" y "Salir". `destroyTray()` se llama desde `app.on('before-quit')`.
+
+---
+
+## 13b. Automatización de navegador vía CDP (`browser.js`)
+
+Gestiona la conexión Playwright a un navegador con `--remote-debugging-port` activo. Proporciona las operaciones `browser_get`, `browser_action` y `browser_screenshot` que el Subsistema CLI traduce a acciones sobre el DOM.
+
+### Navegadores soportados
+
+| Clave | Nombre | Motor |
+|---|---|---|
+| `chrome` | Google Chrome | Chromium (CDP completo) |
+| `edge` | Microsoft Edge | Chromium (CDP completo) |
+| `brave` | Brave Browser | Chromium (CDP completo) |
+| `firefox` | Mozilla Firefox | Protocolo propio (parcial) |
+
+`findBrowserExecutable(key)` recorre las rutas estándar de cada navegador y devuelve el primer ejecutable encontrado.
+
+### Estado en memoria
+
+```js
+let _browser      = null;   // instancia Playwright Browser
+let _page         = null;   // Page activa
+let _connected    = false;
+let _launchedPid  = null;   // PID del proceso lanzado por launchBrowserWithCdp
+```
+
+### Conexión manual (`connectCdp`)
+
+`connectCdp(port?, browserKey?)` usa `playwright.chromium.connectOverCDP('http://localhost:{port}')`. Si la conexión tiene éxito, guarda `_browser` y `_page` y marca `_connected = true`.
+
+### Lanzamiento con perfil CDP dedicado (`launchBrowserWithCdp`)
+
+Para garantizar que el navegador abre con `--remote-debugging-port` activo (Chrome/Edge usan modelo single-instance y ignorarían el flag si ya están corriendo), `launchBrowserWithCdp` usa un perfil de usuario independiente:
+
+```
+~/.agent-hub-cdp-profile/   ← perfil separado del navegador personal del usuario
+```
+
+Secuencia:
+
+1. Cierra la conexión Playwright existente (`_browser.close()`).
+2. Mata el PID anterior lanzado por la app (`_launchedPid`) y espera 800 ms.
+3. Lanza el ejecutable con `--remote-debugging-port={port} --user-data-dir=~/.agent-hub-cdp-profile` (más flags para suprimir diálogos de primera vez en Chrome/Edge).
+4. Sondea el puerto CDP hasta 10 veces (1 s entre intentos) hasta confirmar que responde.
+5. Devuelve `{ launched, exe, pid, warning? }` — si tras 10 s el puerto aún no responde, incluye `warning` pero no lanza error.
+
+Firefox usa `--no-remote --profile` en lugar de `--user-data-dir`.
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `getBrowserStatus()` | Snapshot del estado en memoria para `GET /api/browser/status` |
+| `getInstalledBrowsers()` | Lista los navegadores encontrados en el sistema |
+| `connectCdp(port?, browserKey?)` | Conecta Playwright al puerto CDP indicado |
+| `disconnectCdp()` | Cierra la conexión (navegador permanece abierto) |
+| `launchBrowserWithCdp(browserKey, port?)` | Lanza navegador con perfil dedicado y puerto CDP |
+| `getBrowserTabs()` | Lista pestañas abiertas (título + URL) |
+| `getActivePage()` | Devuelve `_page` o lanza error si no hay conexión |
+| `browserGet(url, selector?, format?)` | Navega a URL y extrae texto/HTML |
+| `browserAction(action, selector?, value?, script?)` | Interactúa con el DOM (click, fill, evaluate…) |
+| `browserScreenshot(selector?)` | Captura de pantalla (base64 PNG) |
+
+### Protocolo de herramientas (para `subsystem-cli.js`)
+
+```
+TOOL: browser_get
+URL: https://example.com/page
+[SELECTOR: #content]        ← opcional: esperar elemento
+[FORMAT: text|html|both]    ← defecto: text
+
+TOOL: browser_action
+ACTION: click|fill|select|hover|screenshot|wait|evaluate
+SELECTOR: #btn-submit
+[VALUE: "texto"]
+[SCRIPT: document.title]    ← solo para evaluate
+
+TOOL: browser_screenshot
+[SELECTOR: #panel]          ← opcional: recorte de elemento
+```
 
 ---
 

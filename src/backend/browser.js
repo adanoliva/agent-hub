@@ -222,39 +222,67 @@ function listCdpTabs(port) {
 
 /**
  * Relaunches the preferred browser with the CDP flag.
- * Preserves user profile (session/cookies).
+ *
+ * Uses a dedicated --user-data-dir so the new instance is always independent
+ * from any already-running browser. Chrome/Edge use a single-instance model:
+ * without a separate profile they ignore the --remote-debugging-port flag and
+ * the new process just opens a window in the existing instance.
  *
  * @param {string} browserKey  — 'chrome' | 'edge' | 'brave' | 'firefox'
  * @param {number} port
- * @returns {Promise<{ launched: boolean, exe: string, pid?: number }>}
+ * @returns {Promise<{ launched: boolean, exe: string, pid?: number, warning?: string }>}
  */
 async function launchBrowserWithCdp(browserKey, port = DEFAULT_CDP_PORT) {
   const exe = findBrowserExecutable(browserKey);
   if (!exe) throw new Error(`Navegador '${browserKey}' no encontrado en el sistema`);
 
+  // Disconnect Playwright and kill any CDP browser we previously launched
+  if (_browser) {
+    try { await _browser.close(); } catch {}
+    _browser = null; _page = null; _connected = false;
+  }
+  if (_launchedPid) {
+    try { process.kill(_launchedPid); } catch {}
+    _launchedPid = null;
+    // Give OS time to release the port
+    await new Promise(r => setTimeout(r, 800));
+  }
+
   const def = BROWSER_DEFINITIONS[browserKey];
+
+  // Dedicated profile dir — ensures a truly independent instance every time
+  const cdpProfileDir = path.join(os.homedir(), '.agent-hub-cdp-profile');
+
   const args = def.engine === 'firefox'
-    ? [`--remote-debugging-port=${port}`, '--no-remote']
+    ? [`--remote-debugging-port=${port}`, '--no-remote', '--profile', cdpProfileDir]
     : [
         `--remote-debugging-port=${port}`,
-        '--restore-last-session',
+        `--user-data-dir=${cdpProfileDir}`,
         '--no-first-run',
         '--no-default-browser-check',
+        '--disable-background-networking',
+        '--disable-sync',
       ];
 
   return new Promise((resolve, reject) => {
     const proc = execFile(exe, args, { detached: true, stdio: 'ignore' });
     proc.unref();
     _launchedPid = proc.pid;
-    // Give the browser 2 s to start the debug port
-    setTimeout(async () => {
+
+    // Poll for CDP port — up to 10 s (some machines are slow)
+    let attempts = 0;
+    const check = async () => {
+      attempts++;
       const probe = await probeCdpPort(port);
       if (probe.active) {
         resolve({ launched: true, exe, pid: proc.pid });
+      } else if (attempts < 10) {
+        setTimeout(check, 1000);
       } else {
-        resolve({ launched: true, exe, pid: proc.pid, warning: 'Puerto CDP aún no responde — puede necesitar unos segundos más' });
+        resolve({ launched: true, exe, pid: proc.pid, warning: 'Puerto CDP aún no responde tras 10s' });
       }
-    }, 2000);
+    };
+    setTimeout(check, 1500);
     proc.on('error', reject);
   });
 }
@@ -323,7 +351,7 @@ async function disconnectBrowser() {
 
 async function getActivePage() {
   if (!_connected || !_browser) {
-    throw new Error('Sin conexión al navegador. Usa el panel de Ajustes > Navegador para conectar primero.');
+    throw new Error('Sin conexión al navegador. Usa el botón "Reiniciar con CDP" en el panel de ejecución.');
   }
   // Refresh page reference if needed
   const contexts = _browser.contexts();

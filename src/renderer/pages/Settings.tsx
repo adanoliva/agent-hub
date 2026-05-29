@@ -6,9 +6,9 @@ import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
-import type { Agent, AgentDirectoryStatus, AIProvider, BrowserStatus, Category, Config } from '../types';
+import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config } from '../types';
 
-type Tab = 'general' | 'cats' | 'ext-agents' | 'browser';
+type Tab = 'general' | 'cats' | 'ext-agents';
 
 type CLICheck = { found: boolean; path: string | null };
 
@@ -76,11 +76,6 @@ export function Settings() {
   const [dirStatus,   setDirStatus]   = useState<AgentDirectoryStatus | null>(null);
   const [dirSyncing,  setDirSyncing]  = useState(false);
 
-  // Browser state
-  const [browserStatus,   setBrowserStatus]   = useState<BrowserStatus | null>(null);
-  const [browserLoading,  setBrowserLoading]  = useState(false);
-  const [browserMsg,      setBrowserMsg]      = useState('');
-
   // modals
   const [addCat,      setAddCat]      = useState<AddCatForm | null>(null);
   const [addTech,     setAddTech]     = useState<AddTechForm | null>(null);
@@ -136,15 +131,6 @@ export function Settings() {
     if (tab === 'ext-agents') {
       req<AgentDirectoryStatus>('GET', '/agents-directory/status')
         .then(setDirStatus)
-        .catch(() => {});
-    }
-  }, [tab]);
-
-  // Load browser status when tab is open
-  React.useEffect(() => {
-    if (tab === 'browser') {
-      req<BrowserStatus>('GET', '/browser/status')
-        .then(setBrowserStatus)
         .catch(() => {});
     }
   }, [tab]);
@@ -339,65 +325,6 @@ export function Settings() {
     setImportUrl('');
   }
 
-  // ── browser actions ──────────────────────────────────────────────────────────
-
-  async function refreshBrowserStatus() {
-    try {
-      const s = await req<BrowserStatus>('GET', '/browser/status');
-      setBrowserStatus(s);
-    } catch {}
-  }
-
-  async function connectBrowser() {
-    setBrowserLoading(true);
-    setBrowserMsg('');
-    try {
-      const port = config?.browserCdpPort ?? 9222;
-      const r = await req<any>('POST', '/browser/connect', {
-        port,
-        browserKey: config?.browserPreferredBrowser === 'auto' ? undefined : config?.browserPreferredBrowser,
-      });
-      setBrowserStatus(r);
-      toast('Navegador conectado');
-    } catch (e: any) {
-      setBrowserMsg(e.message || 'Error al conectar');
-      toast('No se pudo conectar al navegador', 'err');
-    }
-    setBrowserLoading(false);
-  }
-
-  async function disconnectBrowser() {
-    setBrowserLoading(true);
-    try {
-      await req('POST', '/browser/disconnect');
-      await refreshBrowserStatus();
-      toast('Navegador desconectado');
-    } catch {}
-    setBrowserLoading(false);
-  }
-
-  async function launchBrowser(key: string) {
-    setBrowserLoading(true);
-    setBrowserMsg('');
-    try {
-      await req('POST', '/browser/launch', { browserKey: key, port: config?.browserCdpPort ?? 9222 });
-      setBrowserMsg('Navegador relanzado. Conectando en unos segundos…');
-      setTimeout(async () => {
-        await refreshBrowserStatus();
-        setBrowserMsg('');
-        setBrowserLoading(false);
-      }, 4000);
-    } catch (e: any) {
-      setBrowserMsg(e.message || 'Error al relanzar');
-      setBrowserLoading(false);
-    }
-  }
-
-  async function saveBrowserConfig(patch: Record<string, unknown>) {
-    await req('PUT', '/config', patch);
-    await refreshConfig();
-  }
-
   // ── render ───────────────────────────────────────────────────────────────────
 
   const cats     = config?.categories ?? [];
@@ -436,14 +363,9 @@ export function Settings() {
       <div className="settings-view">
         {/* Tabs */}
         <div className="drawer-tabs" style={{ margin: '-32px -32px 24px', paddingLeft: 32 }}>
-          {(['general', 'cats', 'ext-agents', 'browser'] as Tab[]).map((t) => (
+          {(['general', 'cats', 'ext-agents'] as Tab[]).map((t) => (
             <div key={t} className={`drawer-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : t === 'ext-agents' ? 'Directorio de Agentes' : (
-                <>
-                  Navegador
-                  {browserStatus?.connected && <span className="badge green" style={{ marginLeft: 6 }}><i className="ti ti-circle-check" />conectado</span>}
-                </>
-              )}
+              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : 'Directorio de Agentes'}
             </div>
           ))}
         </div>
@@ -933,157 +855,6 @@ export function Settings() {
           </>
         )}
 
-        {/* ── Tab: Navegador ── */}
-        {tab === 'browser' && (
-          <>
-            {/* Connection status */}
-            <div className="settings-section">
-              <div className="settings-head" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <i className="ti ti-browser" style={{ fontSize: 16 }} />
-                Estado de la conexión
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                  <button className="btn sm" onClick={refreshBrowserStatus} disabled={browserLoading}>
-                    <i className="ti ti-refresh" /> Actualizar
-                  </button>
-                  {browserStatus?.connected
-                    ? <button className="btn sm danger" onClick={disconnectBrowser} disabled={browserLoading}><i className="ti ti-unlink" /> Desconectar</button>
-                    : <button className="btn sm primary" onClick={connectBrowser} disabled={browserLoading}><i className="ti ti-link" /> Conectar</button>
-                  }
-                </div>
-              </div>
-
-              {browserMsg && (
-                <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12, padding: '8px 10px', background: 'var(--bg3)', borderRadius: 6 }}>
-                  <i className="ti ti-info-circle" style={{ marginRight: 6 }} />{browserMsg}
-                </div>
-              )}
-
-              {browserStatus ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '12px 14px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                    <i className={`ti ti-browser`} style={{ fontSize: 20, color: 'var(--text3)' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text0)' }}>
-                        {browserStatus.connected ? 'Navegador conectado' : browserStatus.cdpActive ? 'CDP activo (no conectado)' : 'Sin conexión'}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text2)' }}>
-                        Puerto CDP: {browserStatus.cdpPort}
-                        {browserStatus.browserKey && <> · {browserStatus.browserKey}</>}
-                      </div>
-                    </div>
-                    {browserStatus.connected
-                      ? <span className="badge green"><i className="ti ti-circle-check" />conectado</span>
-                      : browserStatus.cdpActive
-                        ? <span className="badge amber"><i className="ti ti-bolt" />CDP activo</span>
-                        : <span className="badge gray"><i className="ti ti-circle-x" />desconectado</span>
-                    }
-                  </div>
-
-                  {/* Open tabs */}
-                  {browserStatus.tabs.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Pestañas abiertas ({browserStatus.tabs.length})
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
-                        {browserStatus.tabs.map((tab) => (
-                          <div key={tab.id} style={{ fontSize: 11, color: 'var(--text2)', padding: '5px 8px', background: 'var(--bg3)', borderRadius: 5, display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <i className="ti ti-world" style={{ flexShrink: 0 }} />
-                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tab.title || tab.url}</span>
-                            <span style={{ color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{tab.url}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--text3)', padding: '12px 0' }}>Cargando estado…</div>
-              )}
-            </div>
-
-            {/* Browser config */}
-            <div className="settings-section">
-              <div className="settings-head">Configuración</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label>Navegador preferido</label>
-                  <select
-                    value={config?.browserPreferredBrowser ?? 'auto'}
-                    onChange={(e) => saveBrowserConfig({ browserPreferredBrowser: e.target.value })}
-                  >
-                    <option value="auto">Auto-detectar</option>
-                    <option value="chrome">Google Chrome</option>
-                    <option value="edge">Microsoft Edge</option>
-                    <option value="brave">Brave Browser</option>
-                    <option value="firefox">Mozilla Firefox (parcial)</option>
-                  </select>
-                </div>
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label>Puerto CDP</label>
-                  <input
-                    type="number"
-                    value={config?.browserCdpPort ?? 9222}
-                    onChange={(e) => saveBrowserConfig({ browserCdpPort: Number(e.target.value) })}
-                    min={1024}
-                    max={65535}
-                    style={{ fontFamily: 'var(--mono)' }}
-                  />
-                  <div className="hint">Por defecto 9222. Cambia solo si hay conflicto.</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Installed browsers */}
-            {browserStatus && (
-              <div className="settings-section">
-                <div className="settings-head">Navegadores instalados</div>
-                {browserStatus.installed.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>No se encontraron navegadores compatibles.</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {browserStatus.installed.map((b) => (
-                      <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                        <i className="ti ti-browser" style={{ fontSize: 18, color: 'var(--text3)' }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text0)' }}>{b.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text3)' }}>{b.engine === 'chromium' ? 'Chromium — soporte completo CDP' : 'Firefox — soporte parcial'}</div>
-                        </div>
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => launchBrowser(b.key)}
-                          disabled={browserLoading}
-                          title="Relanzar con remote debugging activo"
-                        >
-                          <i className="ti ti-player-play" /> Relanzar con CDP
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* How to use */}
-            <div className="settings-section">
-              <div className="settings-head">Cómo usar el navegador en orquestaciones</div>
-              <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ padding: '10px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 7 }}>
-                  <strong>1.</strong> Abre Chrome/Edge con la sesión activa (Jira, GitHub, etc.)
-                </div>
-                <div style={{ padding: '10px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 7 }}>
-                  <strong>2.</strong> Haz clic en <strong>Relanzar con CDP</strong> o en <strong>Conectar</strong> si ya tienes el puerto activo.
-                </div>
-                <div style={{ padding: '10px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 7 }}>
-                  <strong>3.</strong> En el editor de orquestaciones, activa <i className="ti ti-toggle-right" style={{ verticalAlign: 'middle' }} /> <strong>Requiere navegador</strong> en la configuración de ejecución.
-                </div>
-                <div style={{ padding: '10px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 7 }}>
-                  <strong>4.</strong> Los agentes podrán usar <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>TOOL: browser_get</code> y <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>TOOL: browser_action</code> para interactuar con la página.
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
       {/* ── Modal: Nueva categoría ── */}

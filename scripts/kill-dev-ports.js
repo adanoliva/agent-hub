@@ -17,14 +17,20 @@ function safeExec(command) {
 }
 
 function getWindowsPidsByPort(port) {
-  const out = safeExec(`netstat -ano -p tcp | findstr :${port}`);
+  // Avoid -p tcp: it can be unreliable across Windows versions/locales.
+  // Use plain netstat -ano and filter manually; handles both IPv4 and IPv6.
+  const out = safeExec(`netstat -ano`);
   const pids = new Set();
   out.split(/\r?\n/).forEach((line) => {
     const parts = line.trim().split(/\s+/);
     if (parts.length < 5) return;
+    // columns: Proto  Local  Foreign  State  PID
+    const proto = parts[0].toUpperCase();
+    if (proto !== 'TCP') return;
     const local = parts[1] || '';
     const state = parts[3] || '';
-    const pid = parts[4];
+    const pid   = parts[4];
+    // match :PORT at end of local address (IPv4 and IPv6)
     if (!local.endsWith(`:${port}`)) return;
     if (state !== 'LISTENING') return;
     if (!/^\d+$/.test(pid)) return;
@@ -72,8 +78,14 @@ function isSafeDevProcess(name) {
   return name.includes('node') || name.includes('electron');
 }
 
-function freePorts() {
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function freePorts() {
   console.log('[predev] Checking stale dev ports...');
+
+  let killed = false;
 
   for (const port of PORTS) {
     if (process.platform === 'win32') {
@@ -91,6 +103,7 @@ function freePorts() {
         }
         console.log(`[predev] Releasing port ${port} (PID ${pid}, ${image})...`);
         killWindowsPid(pid);
+        killed = true;
       }
       continue;
     }
@@ -109,7 +122,14 @@ function freePorts() {
       }
       console.log(`[predev] Releasing port ${port} (PID ${pid}, ${cmd})...`);
       killUnixPid(pid);
+      killed = true;
     }
+  }
+
+  // Give the OS time to release TCP sockets before Vite tries to bind
+  if (killed) {
+    await sleep(600);
+    console.log('[predev] Ports released.');
   }
 }
 

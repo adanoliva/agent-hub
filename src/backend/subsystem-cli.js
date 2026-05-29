@@ -35,8 +35,9 @@
  *   FILE: src/**\/*.ts
  */
 
-const crypto = require('crypto');
-const apiFs  = require('./api-fs');
+const crypto  = require('crypto');
+const apiFs   = require('./api-fs');
+const browser = require('./browser');
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ async function executeToolCall(toolCall, projectPath) {
         return {
           toolCall,
           success: false,
-          error:   { code: 'BROWSER_NOT_CONNECTED', message: 'Sin conexión al navegador. Conecta primero desde Ajustes > Navegador.' },
+          error:   { code: 'BROWSER_NOT_CONNECTED', message: 'Sin conexión al navegador. Usa el botón "Reiniciar con CDP" en el panel de ejecución.' },
           executionTime: Date.now() - start,
         };
       }
@@ -262,7 +263,7 @@ async function executeToolCall(toolCall, projectPath) {
         return {
           toolCall,
           success: false,
-          error:   { code: 'BROWSER_NOT_CONNECTED', message: 'Sin conexión al navegador. Conecta primero desde Ajustes > Navegador.' },
+          error:   { code: 'BROWSER_NOT_CONNECTED', message: 'Sin conexión al navegador. Usa el botón "Reiniciar con CDP" en el panel de ejecución.' },
           executionTime: Date.now() - start,
         };
       }

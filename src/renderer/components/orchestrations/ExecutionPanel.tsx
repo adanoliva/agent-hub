@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { req } from '../../api';
-import type { Orchestration, ExecutionLog, ExecutionResult, StepResult } from '../../types';
+import type { Agent, BrowserStatus, Orchestration, ExecutionLog, ExecutionResult, StepResult } from '../../types';
 import { useStore } from '../../store';
 
 interface Props {
@@ -39,6 +39,14 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
   const [stepsDone,   setStepsDone]   = useState<StepResult[]>([]);
   const [rollingBack, setRollingBack] = useState<number | null>(null);
 
+  // Agent objects — loaded to detect browser tools
+  const [agentObjects, setAgentObjects] = useState<Agent[]>([]);
+
+  // Browser CDP state
+  const [browserStatus,  setBrowserStatus]  = useState<BrowserStatus | null>(null);
+  const [browserBusy,    setBrowserBusy]    = useState(false);
+  const [browserMsg,     setBrowserMsg]     = useState('');
+
   const logsEndRef = useRef<HTMLDivElement>(null);
   const esRef      = useRef<EventSource | null>(null);
 
@@ -68,6 +76,102 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     ),
   ];
 
+  // Load agents using the same sources as the orchestration editor palette,
+  // then filter to only those actually added to this orchestration.
+  useEffect(() => {
+    const names = new Set(orchestration.agents);
+    const pid   = orchestration.projectId;
+    Promise.all([
+      pid
+        ? req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(pid)}`).catch(() => [] as Agent[])
+        : req<Agent[]>('GET', '/agents/flat').catch(() => [] as Agent[]),
+      pid
+        ? req<Agent[]>('GET', `/projects/${encodeURIComponent(pid)}/agents`).catch(() => [] as Agent[])
+        : Promise.resolve([] as Agent[]),
+    ]).then(([base, proj]) => {
+      const seen = new Set<string>();
+      const merged: Agent[] = [];
+      for (const a of [...base, ...proj]) {
+        if (!seen.has(a.name)) { seen.add(a.name); merged.push(a); }
+      }
+      setAgentObjects(merged.filter(a => names.has(a.name)));
+    });
+  }, [orchestration.id, orchestration.agents.join(','), orchestration.projectId]);
+
+  // Whether any agent in this orchestration uses browser tools
+  const needsBrowser = useMemo(
+    () => agentObjects.some(a => a.tools?.some(t => t.startsWith('browser_'))),
+    [agentObjects],
+  );
+
+  // Load browser status only when needed
+  useEffect(() => {
+    if (!needsBrowser) return;
+    req<BrowserStatus>('GET', '/browser/status').then(setBrowserStatus).catch(() => {});
+  }, [needsBrowser, orchestration.id]);
+
+  async function launchBrowserCdp() {
+    setBrowserBusy(true);
+    setBrowserMsg('Iniciando navegador con CDP…');
+    try {
+      // Try to launch a known browser with CDP enabled
+      const status = browserStatus ?? await req<BrowserStatus>('GET', '/browser/status');
+      if (status?.installed?.length) {
+        const preferred = status.installed.find(b => b.engine === 'chromium') ?? status.installed[0];
+        await req('POST', '/browser/launch', { browserKey: preferred.key, port: 9222 });
+      }
+      setBrowserMsg('Esperando que arranque el navegador…');
+      // Poll until connected (max 10s)
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        try {
+          const s = await req<BrowserStatus>('GET', '/browser/status');
+          if (s.connected) {
+            setBrowserStatus(s);
+            setBrowserMsg('');
+            setBrowserBusy(false);
+            return;
+          }
+          if (s.cdpActive) {
+            // CDP is active, try to connect
+            await req('POST', '/browser/connect', { port: 9222 }).catch(() => {});
+            const s2 = await req<BrowserStatus>('GET', '/browser/status');
+            setBrowserStatus(s2);
+            setBrowserMsg('');
+            setBrowserBusy(false);
+            return;
+          }
+        } catch {}
+        if (attempts < 5) {
+          setTimeout(poll, 2000);
+        } else {
+          setBrowserMsg('No se pudo conectar. Abre Chrome/Edge con --remote-debugging-port=9222 y pulsa de nuevo.');
+          setBrowserBusy(false);
+          // Still refresh status
+          req<BrowserStatus>('GET', '/browser/status').then(setBrowserStatus).catch(() => {});
+        }
+      };
+      setTimeout(poll, 2500);
+    } catch (e: any) {
+      setBrowserMsg(e.message || 'Error al iniciar el navegador');
+      setBrowserBusy(false);
+    }
+  }
+
+  async function connectBrowserCdp() {
+    setBrowserBusy(true);
+    setBrowserMsg('');
+    try {
+      await req('POST', '/browser/connect', { port: 9222 });
+      const s = await req<BrowserStatus>('GET', '/browser/status');
+      setBrowserStatus(s);
+    } catch (e: any) {
+      setBrowserMsg(e.message || 'Error al conectar');
+    }
+    setBrowserBusy(false);
+  }
+
   // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -78,10 +182,15 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     return () => { esRef.current?.close(); };
   }, []);
 
+  // Gate conditions for the Execute button
+  const missingFields  = temporalFields.filter(f => f.required && !temporalValues[f.key]?.trim());
+  const browserBlocked = needsBrowser && !!browserStatus && !browserStatus.connected;
+  const browserLoading = needsBrowser && !browserStatus;
+  const canExecute     = missingFields.length === 0 && !browserBlocked && !browserLoading;
+
   const handleStart = async () => {
-    const missing = temporalFields.filter(f => f.required && !temporalValues[f.key]?.trim());
-    if (missing.length > 0) {
-      addToast(`Campos requeridos: ${missing.map(m => m.label || m.key).join(', ')}`, 'err');
+    if (missingFields.length > 0) {
+      addToast(`Campos requeridos: ${missingFields.map(m => m.label || m.key).join(', ')}`, 'err');
       return;
     }
 
@@ -219,11 +328,61 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             </section>
           )}
 
+          {needsBrowser && (
+            <section className="orch-exec-section orch-exec-browser">
+              <h4><i className="ti ti-browser" /> Navegador CDP</h4>
+              <div className="orch-exec-browser-row">
+                <div className="orch-exec-browser-status">
+                  {!browserStatus ? (
+                    <span style={{ color: 'var(--text3)', fontSize: 12 }}><i className="ti ti-loader-2 spin" style={{ marginRight: 4 }} />Comprobando…</span>
+                  ) : browserStatus.connected ? (
+                    <span className="badge green"><i className="ti ti-circle-check" />conectado · puerto {browserStatus.cdpPort}</span>
+                  ) : browserStatus.cdpActive ? (
+                    <span className="badge amber"><i className="ti ti-bolt" />CDP activo (sin conectar)</span>
+                  ) : (
+                    <span className="badge gray"><i className="ti ti-circle-x" />sin conexión</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {browserStatus && !browserStatus.connected && browserStatus.cdpActive && (
+                    <button className="btn sm primary" onClick={connectBrowserCdp} disabled={browserBusy}>
+                      <i className="ti ti-link" /> Conectar
+                    </button>
+                  )}
+                  <button className="btn sm ghost" onClick={launchBrowserCdp} disabled={browserBusy}>
+                    <i className={browserBusy ? 'ti ti-loader-2 spin' : 'ti ti-refresh'} /> Reiniciar con CDP
+                  </button>
+                </div>
+              </div>
+              {browserMsg && (
+                <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6, padding: '6px 8px', background: 'var(--bg3)', borderRadius: 5 }}>
+                  <i className="ti ti-info-circle" style={{ marginRight: 4 }} />{browserMsg}
+                </div>
+              )}
+              {browserStatus && !browserStatus.connected && (
+                <div style={{ fontSize: 11, color: 'var(--coral)', marginTop: 6 }}>
+                  <i className="ti ti-alert-triangle" style={{ marginRight: 4 }} />
+                  Conecta el navegador antes de ejecutar.
+                </div>
+              )}
+            </section>
+          )}
+
           <div className="orch-exec-actions">
             <button className="btn ghost" onClick={onBack}>
               <i className="ti ti-arrow-left" /> Volver
             </button>
-            <button className="btn primary" onClick={handleStart}>
+            <button
+              className="btn primary"
+              onClick={handleStart}
+              disabled={!canExecute}
+              title={
+                browserLoading         ? 'Comprobando estado del navegador…' :
+                browserBlocked         ? 'Conecta el navegador CDP antes de ejecutar' :
+                missingFields.length   ? `Completa los campos: ${missingFields.map(f => f.label || f.key).join(', ')}` :
+                ''
+              }
+            >
               <i className="ti ti-player-play" /> Comenzar ejecución
             </button>
           </div>
