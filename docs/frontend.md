@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-29 · Versión: 1.9.2
+> Última actualización: 2026-05-29 · Versión: 1.9.3
 
 ---
 
@@ -331,6 +331,7 @@ Layout shell: `#app` (flex row) → `.sidebar` (48px) + `.main` (flex: 1, flex c
 - `.orch-file-item` / `.orch-file-name` / `.orch-file-remove` — líneas de fichero en el selector de contexto fijo.
 - `.orch-exec-panel` — panel de ejecución. Estados: formulario previo → corriendo (logs SSE) → resultado.
 - `.orch-exec-header` / `.orch-exec-log` / `.orch-exec-log-entry.{info|warn|error|debug}` — cabecera y visor de logs.
+- `.orch-exec-node-label` — encabezado de grupo dentro del formulario de contexto temporal. Muestra el tramo del nodo (`Orquestador → agente-X`) con icono y borde superior separador. La primera instancia no lleva borde superior.
 - `.orch-exec-result-*` — tarjetas de resultado por paso (`.orch-exec-step-card`, `.orch-exec-step-status.{success|error|warning}`).
 - `.orch-error-banner` — banner coral de error.
 
@@ -387,7 +388,7 @@ Aparece vía IPC `app:close-requested`. Responde con `window.api.closeResponse(a
 - **`AgentCard`**: borde izquierdo según `LEVEL_COLOR[level]`. Tool pills (máx 3 + "+N más"). Badge "sugerido" si `agent.suggested`. Cuando `node.level === 'project'` y el agente no es sugerido, muestra `.agent-card-actions` en la parte inferior con los botones **Chat** (`ti-message-chatbot`) y **Ejecutar** (`ti-zap`). El click en estos botones detiene la propagación para no abrir el editor.
 - **`AgentsTree`**: árbol colapsable. Nodos: Global → Categorías (section) → Tecnologías (tech) → Proyectos → Sin categoría (uncategorized, `ti-folder-question`, siempre al final). Al entrar en la vista, el Set inicial de nodos expandidos incluye `'cats'`, `'projs'` y un `'cat-{id}'` por cada categoría del config.
 - **`AgentsCenter`**: grid de agentes reales + separador + grid de sugeridos IA (o spinner). Click en sugerido → editor en modo nuevo con campos precargados. Pasa `onChatWithAgent` y `onExecuteAgent` a cada `AgentCard`.
-- **`AgentEditor`**: campos nombre, descripción, modelo, herramientas. Botón "Generar" (`POST /ai/generate-prompt`). Botón "Optimizar" solo si `!agent.optimized && agent.system` (`POST /ai/optimize-agent`). Tras guardar con `optimized: true`, el botón desaparece.
+- **`AgentEditor`**: campos nombre, descripción, modelo, herramientas. Botón "Generar" (`POST /ai/generate-prompt`). Botón "Optimizar" solo si `!agent.optimized && agent.system` (`POST /ai/optimize-agent`). Tras guardar con `optimized: true`, el botón desaparece. Al final del campo "System prompt" aparece un tip con borde acento (`ti-topology-ring-2`) recordando que si el agente se usará en una orquestación, el prompt debe declarar explícitamente: qué lee del contexto del proyecto, qué recibe del paso anterior y qué produce para el siguiente.
 - **`AgentExecutePanel`**: panel de ejecución que sustituye al centro+editor cuando hay un agente seleccionado para ejecutar. Máquina de estados con fases: `validating → warn-no-model | warn-no-context | warn-default | warn-mismatch | ready → running → result | error`. En `ready` muestra resumen de agente, modelo, contexto, proyecto y proveedor. Botón **Ejecutar** lanza `POST /projects/:id/execute-task`. En `result` renderiza el resultado en markdown con botones Copiar, "Discutir en chat" (→ `setPendingChatAgent` + `navigateTo('chat')`) y Volver.
 
 ---
@@ -533,7 +534,9 @@ Panel de configuración para la conexión entre dos agentes. Auto-guarda al camb
 
 **`normalizeContextExtra(raw)`:** migra datos legacy donde `fixed` podía ser `null` — devuelve `{ freeText: '', files: [] }` como valor seguro.
 
-**Sección DataFlow:** checkboxes para `agentOutput`, `filesModified`, `claudeMd`. Campo de texto para `selectiveFiles` (separados por coma).
+**Prop `isInputNode?: boolean`:** se pasa como `true` desde `OrchestrationEditor` cuando el nodo seleccionado es el de entrada (`selectedNode === -1`, "Orquestador → Agente 1"). Cuando es `true`, los checkboxes "Respuesta del agente anterior" y "Lista de archivos modificados" se deshabilitan y muestran sin marcar (no hay agente previo que haya producido output), y la sección adopta la variante visual de "nodo de entrada" (icono `ti-circuit-diode`, título "Descripción de la tarea").
+
+**Sección DataFlow:** checkboxes para `agentOutput` y `filesModified`. El checkbox "Contexto del proyecto (CLAUDE.md…)" fue eliminado — el agente debe gestionar esa lectura en su propio system prompt.
 
 **Sección Contexto fijo:** textarea para `freeText` + componente `FilePicker`. `FilePicker` muestra un botón "Añadir archivo" que llama `pickFile()` (IPC nativo). Cada archivo se lista en una sola línea con icono, nombre truncado (tooltip = ruta completa) y botón de eliminar.
 
@@ -545,7 +548,7 @@ Panel de configuración para la conexión entre dos agentes. Auto-guarda al camb
 
 Panel de ejecución de una orquestación. Tres estados internos:
 
-1. **Formulario previo:** muestra la configuración de ejecución, los campos de contexto temporal pendientes de rellenar y (condicionalmente) la sección de navegador CDP. Botón "Comenzar ejecución" llama `POST /orchestrations/:id/execute { projectId, temporalContextValues }` y almacena el `executionId` devuelto.
+1. **Formulario previo:** muestra la configuración de ejecución, los campos de contexto temporal pendientes de rellenar y (condicionalmente) la sección de navegador CDP. Los campos temporales se agrupan por nodo con un encabezado `.orch-exec-node-label` que muestra el tramo exacto (`Orquestador → agente-X` o `agente-X → agente-Y`), de modo que queda claro a qué paso pertenece cada entrada. Botón "Comenzar ejecución" llama `POST /orchestrations/:id/execute { projectId, temporalContextValues }` y almacena el `executionId` devuelto.
 2. **Corriendo (SSE):** abre `EventSource` apuntando a `GET /orchestrations/:id/execute/stream?executionId=`. Recibe eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error`. Los logs se muestran en `.orch-exec-log` con clase según nivel. Botón "Rollback" por paso completado llama `POST /orchestrations/:id/executions/:execId/rollback { stepIndex }`.
 3. **Resultado:** muestra resumen (`ExecutionResult`), tarjetas por paso con estado, ficheros modificados, tokens y botones de rollback.
 

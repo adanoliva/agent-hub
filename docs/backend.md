@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-29 · Versión: 1.9.2 — Añadidos: `prompts.js` (prompts centralizados), protocolo HANDOFF en orchestrator
+> Última actualización: 2026-05-29 · Versión: 1.9.3
 
 ---
 

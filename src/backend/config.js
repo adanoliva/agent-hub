@@ -53,7 +53,7 @@ const CACHE_DIR   = path.join(APP_DIR, 'cache');
 // ── Default config ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-  version: '1.9.1',
+  version: '1.9.3',
   aiProvider: 'cli',
 
   // Anthropic API
