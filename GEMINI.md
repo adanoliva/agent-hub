@@ -1,6 +1,6 @@
 # Agent Hub — Project Instructions (GEMINI.md)
 
-> Current Version: **1.9.3** · Update this field on every release.
+> Current Version: **1.9.4** · Update this field on every release.
 
 This file provides project-specific instructions, conventions, and workflows for Gemini CLI.
 

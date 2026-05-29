@@ -18,7 +18,7 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 | API | Express 4 en `localhost:3737` |
 | Renderer | React 19 + Vite + TypeScript |
 | Estado | Zustand 5 |
-| IA | Claude CLI · Anthropic SDK · GitHub Models |
+| IA | Claude CLI · Anthropic SDK · GitHub Models · DeepSeek · Groq · OpenRouter · Perplexity |
 | Build | electron-builder → portable `.exe` x64 |
 
 ## Requisitos
@@ -48,8 +48,8 @@ npm run dev
 
 ## Proveedores de IA soportados
 
-| Provider | Requisito |
-|---|---|
-| `cli` | Claude Code instalado en PATH |
-| `api` | API key de Anthropic |
-| `github` | Token de GitHub con acceso a GitHub Models |
+| Tipo | Provider | Requisito |
+|---|---|---|
+| **CLI (Nativo)** | `cli`, `gemini-cli`, `codex-cli`, `copilot-cli`, `aider-cli`, `cline-cli`, `goose-cli` | Binario instalado en PATH |
+| **API (Cloud)** | `api`, `openai`, `github`, `gemini-api`, `mistral`, `grok`, `deepseek`, `groq`, `openrouter`, `perplexity` | API Key configurada en Ajustes |
+| **Personalizado** | **Custom Providers** | Configuración manual o importación de JSON (soporta Azure/GAIA) |

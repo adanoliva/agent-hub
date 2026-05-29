@@ -652,9 +652,12 @@ Todas las tareas terminan con `' Implementa los cambios directamente sin pedir c
 
 | Provider | Config necesaria | Backend |
 |---|---|---|
-| `cli` | Claude Code instalado en PATH | Spawn de proceso `claude --print` |
+| `cli`... | Claude Code instalado en PATH | Spawn de proceso `claude --print` |
 | `api` | `config.apiKey` (Anthropic) | `@anthropic-ai/sdk` |
 | `github` | `config.githubToken` | `fetch` a Azure inference endpoint |
+| **Nativos** | DeepSeek, Groq, OpenRouter, Perplexity | `fetch` compatible OpenAI |
+| **CLIs** | Aider, Cline, Goose | Spawn de proceso nativo |
+| **Custom** | Dinámicos (API/CLI) | Soporta Azure, Headers custom y JSON import |
 
 ### `callAI(prompt, systemPrompt?)`
 

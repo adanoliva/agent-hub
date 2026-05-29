@@ -97,7 +97,8 @@ interface Project {
 }
 
 interface Config {
-  version: string; aiProvider: 'cli' | 'api' | 'github';
+  version: string; aiProvider: AIProvider;
+  customProviders?: CustomAIProvider[];
   apiKey: string; githubToken: string; githubModel: string;
   theme: 'dark' | 'light'; closeAction?: 'ask' | 'tray' | 'quit';
   agentsDirectoryUrl?: string; agentsDirectoryEnabled?: boolean;
