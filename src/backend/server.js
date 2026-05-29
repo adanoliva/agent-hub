@@ -9,6 +9,7 @@ const path    = require('path');
 const fs      = require('fs');
 
 const { readConfig, writeConfig, bootstrapDirectories, APP_DIR, getAgentDir } = require('./config');
+const prompts = require('./prompts');
 const apiFs   = require('./api-fs');
 const browser = require('./browser');
 const {
@@ -621,42 +622,14 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 **Testing:** ${testingFramework} · **Build:** ${buildTool} · **Lint:** ${lintingTool}
 **Package manager:** ${packageManager} · **CI/CD:** ${cicdPipeline || 'No'} · **Docker:** ${hasDocker ? 'Sí' : 'No'}`;
 
-    const analysisPrompt = existingContext
-      ? `Tienes el ${fileLabel} actual de un proyecto. Debes reescribirlo aplicando estas reglas:
-
-1. **Menos es más**: elimina cualquier sección obvia, repetitiva o que un agente de IA pueda inferir del código.
-2. **Máximo 100 líneas**: si el original supera ese límite, sintetiza sin perder información esencial.
-3. **Solo lo no deducible**: arquitectura, decisiones de diseño, convenciones propias, comandos clave, qué evitar. Nada de tutoriales básicos.
-4. **Conserva el conocimiento real**: no elimines detalles únicos del proyecto que no están en el código.
-
-## Contexto detectado del proyecto
-
-${projectInfo}
-
-## Contenido actual del archivo
-
-${existingContext}
-
-Devuelve únicamente el contenido reescrito del archivo. Sin explicaciones, sin bloques de código envolventes.`
-      : `Genera un ${fileLabel} para este proyecto. Reglas:
-
-1. **Máximo 100 líneas**.
-2. **Solo lo esencial para un agente de IA**: stack, comandos clave, convenciones propias, estructura relevante, qué evitar. Sin tutoriales básicos.
-3. **Markdown limpio**. Solo el contenido del archivo, sin explicaciones adicionales.
-
-## Información del proyecto
-
-${projectInfo}
-
-## Estructura
-
-${structure}
-
-## Dependencias
-
-${dependencies}
-
-${existingReadme ? '## README\n' + existingReadme : ''}`;
+    const analysisPrompt = prompts.generateContext({
+      fileLabel,
+      projectInfo,
+      existingContext,
+      structure,
+      dependencies,
+      existingReadme,
+    });
 
     const { callAI } = require('./ai');
     const content = await callAI(analysisPrompt);
@@ -1267,30 +1240,7 @@ app.post('/api/ai/optimize-agent', async (req, res) => {
   const toolList   = tools.join(', ') || 'ninguna';
   const langTarget = language === 'es' ? 'Spanish' : 'English';
 
-  const prompt = `Rewrite this Claude Code agent's system prompt to be maximally token-efficient. Your goal is to cut tokens, not add them.
-
-Agent: ${name || 'agent'} (model: ${model}, tools: ${toolList})
-Current description: ${description || '(none)'}
-
-Current system prompt:
----
-${system}
----
-
-Rules for the rewrite:
-- Target: 50-100 words. Never exceed 120.
-- Remove ALL filler: "You are an expert", "Your goal is", "Always remember", generic encouragement.
-- Remove instructions the model already follows by default (be accurate, be helpful, etc.).
-- Keep ONLY what is specific and differentiating for THIS agent's task.
-- Use imperative verbs. No preamble.
-- Write in ${langTarget}.
-- Preserve the ORIGINAL FORMAT exactly: keep the same section headers, their order, list style, and spacing style.
-- Do NOT add, remove, or rename sections.
-- If the original prompt has a custom template, keep that template and only tighten wording.
-- If the current description is vague or generic, write a sharper one (one action sentence, max 80 chars, in ${langTarget}).
-
-Respond ONLY with valid JSON, no markdown:
-{"description":"<sharp one-sentence description>","system":"<rewritten prompt that preserves original format>"}`;
+  const prompt = prompts.optimizeAgent({ name, model, toolList, description, system, langTarget });
 
   try {
     const { callAI } = require('./ai');

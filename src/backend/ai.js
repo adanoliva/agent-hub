@@ -17,6 +17,7 @@ const path  = require('path');
 const fs    = require('fs');
 const os    = require('os');
 const { readConfig, CACHE_DIR, ensureDir } = require('./config');
+const prompts = require('./prompts');
 
 const CALL_TIMEOUT_MS = 60_000; // 60s max for AI calls
 const MODEL           = 'claude-sonnet-4-20250514';
@@ -549,33 +550,14 @@ async function generateAgentPrompt(params) {
     ? `The agent will have access to these tools: ${tools.join(', ')}.`
     : '';
 
-  const prompt = `You are an expert at writing system prompts for Claude Code sub-agents.
-
-Create structured content for a Claude Code agent with the following details:
-
-Agent name: ${name}
-Brief description: ${description}
-Agent level: ${levelLabels[level] || level}
-${toolsNote}
-${existingNote}
-
-Return ONLY valid JSON with this exact shape:
-{
-  "role": "string, concise role title",
-  "objective": "string, one sentence, max 20 words",
-  "responsibilities": ["3 to 5 concise bullet items"],
-  "boundaries": ["3 to 5 concise do-not rules"],
-  "outputFormat": ["2 to 4 concise output requirements"]
-}
-
-Content requirements:
-- Be specific and actionable, avoid generic filler
-- Keep focus on one core responsibility for this agent
-- Do NOT copy the user's brief description verbatim in any field
-- No markdown, no commentary outside JSON
-${langInstr}
-
-Output ONLY JSON.`;
+  const prompt = prompts.agentPrompt({
+    name,
+    description,
+    level: levelLabels[level] || level,
+    toolsNote,
+    existingNote,
+    langInstr,
+  });
 
   try {
     const result = await callAI(prompt, { maxTokens: 400 });
@@ -783,34 +765,7 @@ async function generateSuggestions(params) {
     ? `Agents already at this level (do NOT suggest these): ${existingAgents.join(', ')}.`
     : '';
 
-  const prompt = `You are an expert at designing Claude Code sub-agents for software development workflows.
-
-Context: I need agent suggestions for the following level:
-${context}
-
-${existing}
-
-Generate exactly 3 agent suggestions that would be genuinely useful at this level.
-Each suggestion must be distinct and non-redundant with the existing agents above.
-
-Respond with ONLY a valid JSON array. No markdown, no explanation, no preamble.
-Each item must have exactly these fields:
-- name: string (kebab-case, e.g. "unity-audio-dev")
-- description: string (one sentence, max 80 chars)
-- tools: array of strings from: ["Bash", "Read", "Write", "Grep", "Edit", "WebFetch", "WebSearch", "TodoRead", "TodoWrite"]
-- model: string, one of: "haiku", "sonnet", "opus"
-- system: string (40-80 word system prompt, plain text, concise and actionable)
-
-Example format:
-[
-  {
-    "name": "example-agent",
-    "description": "Does one specific thing well",
-    "tools": ["Read", "Write"],
-    "model": "sonnet",
-    "system": "You are an expert in..."
-  }
-]`;
+  const prompt = prompts.agentSuggestions({ context, existing });
 
   const raw    = await callAI(prompt, { maxTokens: 800 });
   const parsed = parseJSONSafely(raw);
@@ -936,32 +891,7 @@ async function generateProjectSuggestions({ project, contextContent, categoryNam
     ? `PROJECT DOCUMENTATION (CLAUDE.md / instructions):\n---\n${contextContent.slice(0, 1500)}\n---`
     : 'PROJECT DOCUMENTATION: Not available — base suggestions on category and technology.';
 
-  const prompt = `You are an expert at designing Claude Code sub-agents for software development projects.
-
-PROJECT:
-- Name: ${project.name}
-- Description: ${project.description || 'Not provided'}
-- Category: ${categoryName || project.categoryId || 'Unknown'}
-- Technology: ${techName || project.techId || 'Unknown'}
-- AI Provider: ${project.aiProvider || 'claude'}
-
-${contextSection}
-
-${existing}
-
-Based on the project documentation and characteristics above, suggest exactly 3 Claude Code agents that would be GENUINELY USEFUL for THIS SPECIFIC PROJECT.
-Prioritize agents that address:
-1. The actual tech stack and architecture described in the documentation
-2. Recurring tasks or conventions mentioned in the docs
-3. Gaps not covered by the existing agents
-
-Respond with ONLY a valid JSON array. No markdown, no explanation.
-Each item must have exactly these fields:
-- name: string (kebab-case, specific to the project)
-- description: string (one sentence, max 80 chars, in Spanish)
-- tools: array of strings from: ["Bash", "Read", "Write", "Grep", "Edit", "WebFetch", "WebSearch", "TodoRead", "TodoWrite"]
-- model: string, one of: "haiku", "sonnet", "opus"
-- system: string (40-80 word system prompt, plain text, in Spanish, concise and actionable)`;
+  const prompt = prompts.projectSuggestions({ project, contextSection, existing, categoryName, techName });
 
   const raw    = await callAI(prompt, { maxTokens: 900 });
   const parsed = parseJSONSafely(raw);
@@ -1191,26 +1121,7 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
 // ── Agent system prompt cross-provider adaptation ─────────────────────────────
 
 const ADAPTATION_PROMPTS = {
-  github: (agent) => `You are adapting a Claude Code sub-agent's system prompt so it works correctly with GitHub Copilot in VS Code.
-
-Agent name: ${agent.name}
-Agent purpose: ${agent.description}
-
-Original system prompt (written for Claude):
----
-${agent.system}
----
-
-Rewrite this system prompt for GitHub Copilot following these rules:
-- GitHub Copilot runs inside VS Code and has access to: codebase search, terminal, GitHub repositories, file editing, fetch
-- Replace Claude tool names with their GitHub Copilot equivalents where needed (e.g. "Read files" → "search the codebase", "run Bash" → "use the terminal")
-- Remove any references to Claude-specific capabilities (extended thinking, etc.)
-- Keep the agent's core role, expertise, tone and approach exactly the same
-- Use second person ("you") consistently
-- Keep the same language as the original
-- Length: similar to the original (do not expand significantly)
-
-Output ONLY the rewritten system prompt. No preamble, no explanation, no code fences.`,
+  github: (agent) => prompts.adaptForProvider({ agent, targetProvider: 'github' }),
 };
 
 /**
