@@ -1024,15 +1024,18 @@ HANDOFF: {"done":"<qué lograste, máx 15 palabras>","changed":["<ruta/relativa.
 
 ### Construcción del prompt del paso (`_buildUserMessage`)
 
-Para el paso 0 solo se incluye el mensaje original del usuario.
+- **Paso 0**: incluye los **contextos temporales** definidos en el nodo de entrada (inputs del usuario al lanzar), el texto de la tarea fija si existe, o un mensaje por defecto describiendo el rol del agente.
+- **Pasos i > 0**:
+  1. **Handoff del agente anterior** — si el agente anterior emitió un `HANDOFF` válido, se formatea con `prompts.formatHandoffAsInput(handoff, fromAgent)`. Resultado: ~4 líneas, ~200 chars. Si no hay handoff (fallback), se pasan los primeros 400 chars del prose en lugar del handoff estructurado.
+  2. **Archivos modificados** — si `dataFlow.filesModified === true`, lista de paths (el contenido se lee si el agente lo solicita vía herramientas).
+  3. **Contextos temporales** — inputs específicos definidos para esa conexión en el editor.
 
-Para cada paso `i > 0`:
+### Integración con Navegador (CDP)
 
-1. **Handoff del agente anterior** — si el agente anterior emitió un `HANDOFF` válido, se formatea con `prompts.formatHandoffAsInput(handoff, fromAgent)`. Resultado: ~4 líneas, ~200 chars. Si no hay handoff (fallback), se pasan los primeros 400 chars del prose en lugar del handoff estructurado.
-2. **Ficheros modificados** — si `dataFlow.filesModified === true`, lista de paths + contenido.
-3. **CLAUDE.md del proyecto** — si `dataFlow.claudeMd === true`.
-4. **Texto libre de contexto fijo** — si `node.contextExtra.fixed.freeText` no está vacío.
-5. **Archivos de contexto fijo** — para cada path en `node.contextExtra.fixed.files`, se lee el fichero (ruta absoluta o relativa al proyecto).
+Si un agente tiene herramientas `browser_*`, el orquestador:
+1. Comprueba si hay un navegador con CDP abierto. Si no, intenta lanzar el preferido.
+2. **Pausa la ejecución**: emite un evento `browser-required` vía SSE y espera a que el usuario pulse "Continuar" (permitiendo login manual).
+3. **Inyecta contexto**: extrae URL, título, cookies de sesión y contenido de la página para inyectarlo en el prompt del agente, permitiéndole usar esas cookies en herramientas como `WebFetch` o comandos `curl`.
 
 El formato del handoff es ~7-10x más compacto que pasar el prose completo del paso anterior (200 chars vs. 1500 chars anteriores).
 
@@ -1353,16 +1356,16 @@ Frontend: POST /api/chat { messages, systemPrompt }
 
 ### Dashboard (`GET /api/dashboard`)
 
-`buildDashboardNotifications(cfg)` recorre todos los proyectos activos y genera oportunidades de mejora:
+`buildDashboardNotifications(cfg)` recorre todos los proyectos activos y todos los agentes para generar oportunidades de mejora:
 
-```
-para cada proyecto activo:
-  para cada p en project.aiProviders:
-    si no existe archivo de contexto → notif critical
-    si archivo < 80 chars           → notif optimization
-```
+**Para cada agente:**
+- **Optimization**: si no tiene herramientas configuradas (`tools: []`).
+- **Optimization**: si el prompt no ha sido optimizado con IA (`!agent.optimized` y `system.length > 30`).
 
-El endpoint también lee `pendingUpdates` de cada proyecto (via `getProjectSyncStatus`) para generar notificaciones de sync pendiente.
+**Para cada proyecto activo:**
+- **Critical**: proyecto sin `CLAUDE.md` (si `needsClaude`) o sin `copilot-instructions.md` (si `needsGithub`).
+- **Optimization**: fichero de contexto existe pero tiene menos de 80 caracteres.
+- **Optimization**: agentes pendientes de sync (si `pendingUpdates > 0`).
 
 ### Notificaciones — dismiss vs. snooze
 

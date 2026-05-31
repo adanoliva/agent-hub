@@ -424,7 +424,7 @@ Vista de inicio (view = `'dashboard'`). Carga en paralelo `GET /api/dashboard` y
 - **Estado General** — contadores de agentes (global/section/tech) y proyectos (activos/pausados/archivados). Click → navega a la vista correspondiente.
 - **Sincronización** — estado de sync de agentes y proyectos, estado del directorio externo. Botón "Sincronizar todo" → `POST /sync-all`. Nota "Salud en vivo: actualización cada 30s".
 - **Salud de Proyectos** — lista `projectHealth[]` con dot indicators (`healthy`=verde, `warning`=ámbar, `critical`=coral). Muestra hasta 6 proyectos con su primer issue.
-- **Oportunidades de Mejora** — lista de `DashboardNotification[]`. Las críticas se muestran en rojo, optimizaciones en ámbar, info en azul. Máx 5 visibles; botón "Ver todas" para expandir. Cada notificación tiene botones **Descartar** (permanente) y **Aplazar** (7 días por defecto) vía `POST /dashboard/notifications/snooze`. Cuando hay ocultas, se muestra desglose "Ocultas / Aplazadas".
+- **Oportunidades de Mejora** — lista de `DashboardNotification[]`. Las críticas se muestran en rojo, optimizaciones en ámbar, info en azul. Máx 5 visibles; botón "Ver todas" para expandir. Incluye sugerencias para **proyectos** (contexto ausente o delgado, sync pendiente) y **agentes** (sin herramientas, prompt no optimizado). Cada notificación tiene botones **Descartar** (permanente) y **Aplazar** (7 días por defecto).
 - **Acciones Rápidas** — botones que llaman `navigateTo(view, action)` para abrir modales directamente desde otra página.
 - **Uso de IA** — `UsageCard` con filas de tokens (entrada/salida/coste) para acumulado y sesión. Botones "Reiniciar sesión" y "Reiniciar total".
 
@@ -569,8 +569,8 @@ Panel de configuración para la conexión entre dos agentes. Auto-guarda al camb
 
 Panel de ejecución de una orquestación. Tres estados internos:
 
-1. **Formulario previo:** muestra la configuración de ejecución, los campos de contexto temporal pendientes de rellenar y (condicionalmente) la sección de navegador CDP. Los campos temporales se agrupan por nodo con un encabezado `.orch-exec-node-label` que muestra el tramo exacto (`Orquestador → agente-X` o `agente-X → agente-Y`), de modo que queda claro a qué paso pertenece cada entrada. Botón "Comenzar ejecución" llama `POST /orchestrations/:id/execute { projectId, temporalContextValues }` y almacena el `executionId` devuelto.
-2. **Corriendo (SSE):** abre `EventSource` apuntando a `GET /orchestrations/:id/execute/stream?executionId=`. Recibe eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error`. Los logs se muestran en `.orch-exec-log` con clase según nivel. Botón "Rollback" por paso completado llama `POST /orchestrations/:id/executions/:execId/rollback { stepIndex }`.
+1. **Formulario previo:** muestra la configuración de ejecución, los campos de contexto temporal pendientes de rellenar y (condicionalmente) la sección de navegador CDP. Los campos temporales se agrupan por nodo con un encabezado `.orch-exec-node-label`. Si algún agente requiere navegador, se muestra el estado de conexión CDP y botones para conectar o lanzar.
+2. **Corriendo (SSE):** abre `EventSource` apuntando a `GET /orchestrations/:id/execute/stream?executionId=`. Recibe eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error`. Los logs se muestran en `.orch-exec-log` con clase según nivel. Si el orquestador requiere acción manual en el navegador, la UI muestra un aviso de "Navegador requerido" y el botón "Continuar".
 3. **Resultado:** muestra resumen (`ExecutionResult`), tarjetas por paso con estado, ficheros modificados, tokens y botones de rollback.
 
 **Detección de herramientas browser (`needsBrowser`):**
