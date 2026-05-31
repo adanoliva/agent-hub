@@ -4,6 +4,7 @@
 
 @docs/backend.md
 @docs/frontend.md
+@docs/visual_styles.md
 
 ## Qué es esto
 
@@ -63,7 +64,11 @@ npm run release
 - **Sin comentarios redundantes**: solo cuando el "por qué" no es obvio.
 - **No actualización optimista**: esperar confirmación del servidor antes de actualizar el estado local.
 - **`window.api` con optional chaining** (`api?.method?.()`) — el renderer puede correr fuera de Electron.
-- **`onConfirm` de Modal lanza `throw`**, no `return`, para mantener el modal abierto si falla validación.
+- **Comunicación API (CRÍTICO):**
+    - USAR SIEMPRE el helper `req()` de `src/renderer/api.ts`.
+    - NUNCA incluir el prefijo `/api` en la ruta pasada a `req()` (ej: usar `/projects` en lugar de `/api/projects`).
+    - Para APIs nativas (ej: `EventSource`), USAR SIEMPRE la constante exportada `API_BASE` para construir la URL.
+- **onConfirm` de Modal lanza `throw`**, no `return`, para mantener el modal abierto si falla validación.
 
 ---
 

@@ -10,7 +10,7 @@ This file provides project-specific instructions, conventions, and workflows for
 
 It allows organizing projects by categories, creating and synchronizing Claude Code agents (`.md` with YAML frontmatter), chatting with AI (CLI / Anthropic API / GitHub Copilot), generating project context, and executing agents directly on a project.
 
-Full technical documentation: [`docs/backend.md`](docs/backend.md) and [`docs/frontend.md`](docs/frontend.md).
+Full technical documentation: [`docs/backend.md`](docs/backend.md), [`docs/frontend.md`](docs/frontend.md) and [`docs/visual_styles.md`](docs/visual_styles.md).
 
 ## Tech Stack
 
@@ -43,6 +43,10 @@ npm run release  # Build and publish to GitHub Releases
 - **Styles:** Use `src/renderer/styles.css`. Do not use CSS Modules or preprocessors.
 - **Validation:** `onConfirm` in Modals should `throw` errors (not return) to keep the modal open on failure.
 - **Electron Safety:** Always use optional chaining for `window.api` (e.g., `api?.method?.()`) as the renderer might run in a browser context during development.
+- **API Communication (CRITICAL):**
+    - ALWAYS use the `req()` helper from `src/renderer/api.ts`.
+    - NEVER include the `/api` prefix in the path passed to `req()` (e.g., use `/projects` instead of `/api/projects`).
+    - If using native APIs (e.g., `EventSource`), ALWAYS use the exported `API_BASE` constant to construct the URL.
 - **No Optimistic Updates:** Always wait for server confirmation before updating local state.
 - **Testing:** Add/update tests in `tests/` after making changes. Use existing tests as a reference.
 

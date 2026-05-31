@@ -13,6 +13,7 @@ const { EventEmitter } = require('events');
 
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
+const { getContextAuto } = require('./projects');
 const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost } = require('./ai');
 const prompts = require('./prompts');
 
@@ -113,9 +114,96 @@ class OrchestrationExecutor extends EventEmitter {
     this.executionId           = `exec-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     this.state                 = 'idle';
     this.currentStep           = -1;
+    this.cancelled             = false;
+    this._browserContinueFn    = null;
     this.results               = [];
     this.logs                  = [];
     this.execDir               = null;
+  }
+
+  cancel() {
+    if (this.state === 'running') {
+      this.cancelled = true;
+      // Also resolve any pending browser pause so the loop can exit cleanly
+      if (this._browserContinueFn) { this._browserContinueFn(); this._browserContinueFn = null; }
+      this._log('warn', 'Ejecución cancelada por el usuario');
+      this.emit('cancelled', { executionId: this.executionId });
+    }
+  }
+
+  // ── Browser CDP pause/resume ──────────────────────────────────────────────
+
+  // Pause execution until the user confirms the browser is ready (authenticated, etc.)
+  _pauseForBrowser(stepIndex, agentName) {
+    return new Promise(resolve => {
+      this._browserContinueFn = resolve;
+      // Store so the SSE stream can replay it if the client connects after the event fires
+      this._pendingBrowserRequired = { stepIndex, agentName, executionId: this.executionId };
+      this.emit('browser-required', this._pendingBrowserRequired);
+    });
+  }
+
+  browserContinue() {
+    if (this._browserContinueFn) {
+      this._pendingBrowserRequired = null;
+      this._browserContinueFn();
+      this._browserContinueFn = null;
+      this.emit('browser-continued', { executionId: this.executionId });
+    }
+  }
+
+  // Build a context block with cookies + page content from the authenticated CDP session.
+  // Native CLIs cannot connect to our CDP browser directly, but they can use the session
+  // cookies in HTTP requests and work with the page content already fetched.
+  async _buildBrowserContext() {
+    try {
+      const browser = require('./browser');
+      const status  = await browser.getStatus();
+      if (!status.connected) return '';
+
+      const page = await browser.getActivePage();
+      const url   = page.url();
+      const title = await page.title().catch(() => '');
+
+      // Get all cookies for the current session
+      let cookieHeader = '';
+      try {
+        const context = page.context();
+        const cookies  = await context.cookies();
+        if (cookies.length > 0) {
+          cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+        }
+      } catch {}
+
+      // Get visible text content of the current page (trimmed to avoid token bloat)
+      let pageText = '';
+      try {
+        const raw = await page.evaluate(() => document.body?.innerText || '');
+        pageText = raw.replace(/\s+/g, ' ').trim().slice(0, 3000);
+      } catch {}
+
+      const lines = [
+        '',
+        '# SESIÓN DE NAVEGADOR AUTENTICADA',
+        `URL activa: ${url}`,
+        title ? `Título: ${title}` : '',
+        '',
+        cookieHeader
+          ? `## Cookies de sesión (úsalas en tus peticiones HTTP)\nCookie: ${cookieHeader}`
+          : '(No se pudieron extraer cookies de sesión)',
+        '',
+        pageText
+          ? `## Contenido actual de la página\n${pageText}`
+          : '',
+        '',
+        'Usa estas cookies en las cabeceras HTTP de tus peticiones para mantener la sesión autenticada.',
+        'Si necesitas navegar a otras URLs del mismo dominio, incluye siempre la cabecera Cookie.',
+      ];
+      return lines.filter(l => l !== undefined).join('\n');
+    } catch (e) {
+      this._log('warn', `No se pudo extraer contexto del navegador: ${e.message}`);
+      return '';
+    }
   }
 
   // ── Logging ──────────────────────────────────────────────────────────────
@@ -160,8 +248,7 @@ class OrchestrationExecutor extends EventEmitter {
 
     // Project-level agents
     try {
-      const provider  = this.project.aiProvider || cfg.aiProvider || 'cli';
-      const providers = provider === 'both' ? ['claude', 'github'] : [provider === 'cli' ? 'claude' : provider];
+      const providers = this.project.aiProviders || ['claude'];
       for (const p of providers) {
         const dir = getAgentsDirForProvider(this.project.path, p);
         if (!fs.existsSync(dir)) continue;
@@ -182,21 +269,13 @@ class OrchestrationExecutor extends EventEmitter {
   }
 
   _getContextFile() {
-    const cfg      = readConfig();
-    const provider = this.project.aiProvider || cfg.aiProvider || 'cli';
-    const GITHUB_PROVIDERS = new Set(['github', 'copilot-cli']);
-    const paths    = GITHUB_PROVIDERS.has(provider)
-      ? [path.join(this.project.path, '.github', 'copilot-instructions.md')]
-      : [
-          path.join(this.project.path, 'CLAUDE.md'),
-          path.join(this.project.path, '.claude', 'CLAUDE.md'),
-        ];
-    for (const fp of paths) {
-      if (fs.existsSync(fp)) {
-        try { return fs.readFileSync(fp, 'utf8'); } catch {}
-      }
+    const cfg = readConfig();
+    try {
+      const ctx = getContextAuto(this.project, cfg.aiProvider);
+      return ctx.content || '';
+    } catch {
+      return '';
     }
-    return '';
   }
 
   // ── Prompt building ───────────────────────────────────────────────────────
@@ -503,8 +582,10 @@ class OrchestrationExecutor extends EventEmitter {
       const agentName = orchestration.agents[i];
       this.currentStep = i;
 
+      if (this.cancelled) break;
+
       this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" ━━`);
-      this.emit('step-start', { stepIndex: i, agentName });
+      this.emit('step-start', { stepIndex: i, agentName, totalSteps: orchestration.agents.length });
 
       let snapshot;
       try {
@@ -522,6 +603,9 @@ class OrchestrationExecutor extends EventEmitter {
         const systemPrompt = this._buildSystemPrompt(i);
         const userMessage  = this._buildUserMessage(i);
 
+        // Emit the input so the frontend can display what each agent receives
+        this.emit('step-input', { stepIndex: i, agentName, userMessage });
+
         this._log('info', `Paso ${i + 1}: Invocando agente "${agentName}"...`);
 
         let response     = '';
@@ -529,26 +613,71 @@ class OrchestrationExecutor extends EventEmitter {
         let outputTokens = 0;
         let stepCostUSD  = 0;
 
-        const CLI_PROVIDERS = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli'];
+        const maxTurns = String(orchestration.executionConfig?.maxTurns || 10);
+        const timeout  = orchestration.executionConfig?.timeout || 300000;
 
-        if (CLI_PROVIDERS.includes(provider)) {
-          const fullPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
+        const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+        const customProviders = readConfig().customProviders || [];
+        const isCustomCLI = customProviders.some(p => p.id === provider && p.type === 'cli');
+
+        const agent = this._getAgent(agentName);
+        const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
+
+        // All native CLIs (claude, gemini, codex…) use their own tool engine.
+        // They do not emit SubsystemCLI TOOL: text blocks, so routing them through
+        // SubsystemCLI produces empty tool execution with a fake-success handoff.
+        // SubsystemCLI browser_ tools only work with API providers (api, github, openai…).
+        const useNativeCLI = CLI_NATIVE.includes(provider) || isCustomCLI;
+
+        if (useNativeCLI) {
+          // If the agent uses browser tools, ensure CDP browser is open and pause
+          // for the user to authenticate before handing control to the CLI.
+          let browserContext = '';
+          if (agentUsesBrowser) {
+            try {
+              const browser = require('./browser');
+              const status  = await browser.getStatus();
+              if (!status.connected) {
+                this._log('info', `Paso ${i + 1}: lanzando navegador CDP para el agente "${agentName}"…`);
+                const installed = browser.listInstalledBrowsers();
+                const preferred = installed.find(b => b.engine === 'chromium') || installed[0];
+                if (preferred) {
+                  await browser.launchBrowserWithCdp(preferred.key, status.cdpPort || 9222);
+                } else {
+                  this._log('warn', `Paso ${i + 1}: no se encontró ningún navegador instalado`);
+                }
+              }
+            } catch (e) {
+              this._log('warn', `Paso ${i + 1}: no se pudo lanzar el navegador: ${e.message}`);
+            }
+
+            if (!this.cancelled) {
+              this._log('info', `Paso ${i + 1}: esperando confirmación del usuario (autenticación en el navegador)…`);
+              await this._pauseForBrowser(i, agentName);
+            }
+            if (this.cancelled) break;
+
+            browserContext = await this._buildBrowserContext();
+            if (browserContext) {
+              this._log('info', `Paso ${i + 1}: contexto CDP inyectado en el prompt`);
+            }
+          }
+
+          const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
+          const extraArgs = provider === 'cli'
+            ? ['--dangerously-skip-permissions', '--max-turns', maxTurns]
+            : [];
           const rich = await callAIRich(fullPrompt, {
-            timeout:   orchestration.executionConfig?.timeout || 300000,
-            extraArgs: provider === 'cli'
-              ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
-              : [],
-            cwd:       this.project.path,
+            timeout,
+            extraArgs,
+            cwd: this.project.path,
           });
           response     = rich.text;
           inputTokens  = rich.inputTokens;
           outputTokens = rich.outputTokens;
           stepCostUSD  = rich.costUSD;
         } else {
-          const agent       = this._getAgent(agentName);
           const contextFile = this._getContextFile();
-          const agentUsesBrowser = Array.isArray(agent?.tools) &&
-            agent.tools.some(t => t.startsWith('browser_'));
           const cliResult   = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
             projectPath:    this.project.path,
             projectContext: contextFile,
@@ -595,7 +724,7 @@ class OrchestrationExecutor extends EventEmitter {
         stepResult = {
           stepIndex:    i,
           agentName,
-          input:        { systemPrompt: '', userMessage: '' }, // Don't store full prompts
+          input:        { systemPrompt: '', userMessage },
           output:       { response: cleanResponse, handoff: handoff || undefined },
           filesModified,
           tokensUsed:   { input: inputTokens, output: outputTokens },
@@ -617,7 +746,7 @@ class OrchestrationExecutor extends EventEmitter {
         stepResult = {
           stepIndex:    i,
           agentName,
-          input:        { systemPrompt: '', userMessage: '' },
+          input:        { systemPrompt: '', userMessage },
           output:       { response: '' },
           filesModified: [],
           tokensUsed:   { input: 0, output: 0 },

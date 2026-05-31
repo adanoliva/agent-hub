@@ -102,6 +102,54 @@ function adaptFromGitHub(agent) {
 const ADAPTERS = {
   claude: (agent) => agent,   // identity — source format is already Claude
   github: adaptForGitHub,
+  gemini: (agent) => agent,   // TODO: Specific Gemini adaptation if needed
+  openai: (agent) => agent,   // TODO: Specific OpenAI adaptation if needed
+};
+
+/**
+ * Registry of project-level AI providers and their conventions.
+ */
+const PROJECT_PROVIDERS = {
+  central: {
+    id: 'central',
+    label: 'Central',
+    icon: 'ti-file-description',
+    agentDir: [],
+    contextFile: 'CONTEXTO.md',
+    templateType: 'claude'
+  },
+  claude: {
+    id: 'claude',
+    label: 'Claude Code',
+    icon: 'ti-robot',
+    agentDir: ['.claude', 'agents'],
+    contextFile: 'CLAUDE.md',
+    templateType: 'claude'
+  },
+  github: {
+    id: 'github',
+    label: 'GitHub Copilot',
+    icon: 'ti-brand-github',
+    agentDir: ['.github', 'agents'],
+    contextFile: '.github/copilot-instructions.md',
+    templateType: 'github'
+  },
+  gemini: {
+    id: 'gemini',
+    label: 'Gemini',
+    icon: 'ti-sparkles',
+    agentDir: ['.gemini', 'agents'],
+    contextFile: 'GEMINI.md',
+    templateType: 'gemini'
+  },
+  openai: {
+    id: 'openai',
+    label: 'OpenAI (Cursor)',
+    icon: 'ti-brain',
+    agentDir: ['.openai', 'agents'],
+    contextFile: '.instructions.md',
+    templateType: 'openai'
+  }
 };
 
 /**
@@ -113,4 +161,4 @@ function adaptAgentForProvider(agent, targetProvider) {
   return adapter ? adapter(agent) : agent;
 }
 
-module.exports = { adaptAgentForProvider, adaptFromGitHub };
+module.exports = { adaptAgentForProvider, adaptFromGitHub, PROJECT_PROVIDERS };

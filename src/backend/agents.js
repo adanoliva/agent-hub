@@ -23,7 +23,7 @@ const crypto = require('crypto');
 const os     = require('os');
 const { AGENTS_DIR, CACHE_DIR, getAgentDir, ensureDir } = require('./config');
 const { DEFAULT_AGENTS } = require('./defaults');
-const { adaptAgentForProvider, adaptFromGitHub } = require('./agent-adapters');
+const { adaptAgentForProvider, adaptFromGitHub, PROJECT_PROVIDERS } = require('./agent-adapters');
 const { adaptSystemPromptForProvider } = require('./ai');
 
 // ── Model name map ────────────────────────────────────────────────────────────
@@ -246,13 +246,8 @@ function deleteAgent(level, categoryId, techId, name) {
 
 // ── Provider-aware helpers ────────────────────────────────────────────────────
 
-const PROVIDER_DIRS = {
-  claude: ['.claude', 'agents'],
-  github: ['.github',  'agents'],
-};
-
 function getAgentsDirForProvider(projectPath, provider) {
-  const parts = PROVIDER_DIRS[provider] || PROVIDER_DIRS.claude;
+  const parts = PROJECT_PROVIDERS[provider]?.agentDir || PROJECT_PROVIDERS.claude.agentDir;
   return path.join(projectPath, ...parts);
 }
 

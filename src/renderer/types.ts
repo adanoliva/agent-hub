@@ -19,7 +19,7 @@ export interface Project {
   path: string;
   description?: string;
   status: 'active' | 'paused' | 'archived';
-  aiProvider?: string;
+  aiProviders: string[]; // Replaces aiProvider
   selectedAgents?: string[];
   excludedAgents?: string[];
   includedAgents?: string[];
@@ -28,6 +28,15 @@ export interface Project {
   // enriched by listProjectsWithStatus
   pendingUpdates?: number;
   pathExists?: boolean;
+}
+
+export interface ProjectProvider {
+  id: string;
+  label: string;
+  icon: string;
+  agentDir: string[];
+  contextFile: string;
+  templateType: 'claude' | 'github' | 'gemini' | 'openai';
 }
 
 export interface SyncEntry {
@@ -134,7 +143,6 @@ export interface Config {
   geminiCliModel?: string;
   codexCliModel?: string;
 
-  theme: 'dark' | 'light';
   closeAction?: 'ask' | 'tray' | 'quit';
   agentsDirectoryUrl?: string;
   agentsDirectoryEnabled?: boolean;
@@ -263,7 +271,7 @@ export interface StepResult {
   stepIndex:     number;
   agentName:     string;
   input:         { systemPrompt: string; userMessage: string };
-  output:        { response: string; toolCalls?: unknown[]; toolResults?: unknown[] };
+  output:        { response: string; handoff?: { done: string; changed: string[]; issues: string[]; next: string }; toolCalls?: unknown[]; toolResults?: unknown[] };
   filesModified: string[];
   tokensUsed:    { input: number; output: number };
   estimatedCost: number;

@@ -62,8 +62,6 @@ function AppInner() {
     req<Config>('GET', '/config')
       .then((cfg) => {
         setConfig(cfg);
-        if (cfg.theme === 'light') document.body.classList.add('light');
-        else document.body.classList.remove('light');
       })
       .catch(() => addToast('Error al cargar la configuración', 'err'));
 

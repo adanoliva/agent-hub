@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-29 · Versión: 1.9.3
+> Última actualización: 2026-05-30 · Versión: 1.9.4
 
 ---
 
@@ -55,7 +55,7 @@ Electron main process (Node.js)
   ├── tray.js          ← icono en la bandeja del sistema
   ├── preload.js       ← contextBridge: window.api expuesto al renderer
   ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
-  └── templates.js     ← plantillas CLAUDE.md / copilot-instructions.md
+  └── templates.js     ← plantillas CONTEXTO.md / CLAUDE.md / etc.
 ```
 
 ### Dos modos de ejecución
@@ -175,7 +175,6 @@ path.resolve(__dirname, '../../')
   "apiKey": "",
   "githubToken": "",
   "githubModel": "gpt-4o-mini",
-  "theme": "dark",
   "closeAction": "ask",
   "agentsDirectoryUrl": "https://github.com/adanoliva/agents-directory",
   "agentsDirectoryEnabled": true,
@@ -229,7 +228,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 |---|---|---|
 | GET | `/api/health` | `{ status: 'ok', port }` |
 | GET | `/api/config` | Config completa |
-| PUT | `/api/config` | Actualiza campos: `aiProvider`, `apiKey`, `githubToken`, `githubModel`, `theme`, `closeAction`, `agentsDirectoryUrl`, `agentsDirectoryEnabled` |
+| PUT | `/api/config` | Actualiza campos: `aiProvider`, `apiKey`, `githubToken`, `githubModel`, `closeAction`, `agentsDirectoryUrl`, `agentsDirectoryEnabled` |
 | GET | `/api/detect-cli` | `{ found: bool, path? }` — busca `claude` en PATH |
 | POST | `/api/setup` | Wizard: guarda proveedor + credenciales y dispara sync del directorio |
 
@@ -568,7 +567,7 @@ triggerSync(url, isFirst)
   path: 'C:/proyectos/mi-proyecto',
   description: '',
   status: 'active',                   // active | paused | archived
-  aiProvider: 'claude',               // claude | github | both
+  aiProviders: ['claude', 'github'],  // claude, github, gemini, openai
   selectedAgents: [],
   excludedAgents: [],
   agentHashes: {},                    // { agentName: sha256 }
@@ -583,11 +582,11 @@ syncProject(projectId)
   │
   ├── getApplicableAgents(project)       ← niveles 1, 2, 3
   ├── listProjectAgents(project)         ← nivel 4 (agentes locales)
-  ├── para cada agente aplicable:
-  │   ├── si excluido → saltar
-  │   ├── hashAgent(agente) vs project.agentHashes[name]
-  │   ├── si igual → 'ok' (sin cambios)
-  │   └── si diferente → saveProjectAgent() + actualizar hash
+  ├── para cada proveedor en project.aiProviders:
+  │   ├── asegurar directorio de agentes del proveedor
+  │   ├── adaptar formato del agente para el proveedor (agent-adapters.js)
+  │   └── escribir archivo .md
+  ├── actualizar agentHashes con el hash de la fuente original (Claude format)
   └── devuelve { added, updated, skipped }
 ```
 
@@ -610,17 +609,19 @@ syncProject(projectId)
 **`updateProject(id, changes)`:** si `aiProvider` cambia, migra los agentes de nivel 4 al nuevo directorio.
 
 **`deleteProject(id, { deleteFolder })`:** elimina de config. Si `deleteFolder: true`, borra el directorio del disco.
-
 ### Ficheros de contexto
 
-| Provider | Ruta | Plantilla |
+| Provider | Ruta | Origen |
 |---|---|---|
-| `claude` | `{path}/CLAUDE.md` | `getTemplate(catId, techId, name)` |
-| `github` | `{path}/.github/copilot-instructions.md` | `getGitHubTemplate(catId, techId, name)` |
-| `both` | Ambos | Ambas |
+| **Maestro** | `{path}/CONTEXTO.md` | Editado por el usuario |
+| `claude` | `{path}/CLAUDE.md` | Replicado |
+| `github` | `{path}/.github/copilot-instructions.md` | Replicado |
+| `gemini` | `{path}/GEMINI.md` | Replicado |
+| `openai` | `{path}/.instructions.md` | Replicado |
 
-### Funciones adicionales exportadas
+---
 
+## 8. Integración IA (`ai.js`)
 **`getContextAuto(project, appAiProvider)`** — detección automática de contexto para la ejecución de agentes:
 - Determina el grupo del proyecto (`claude` ↔ `api|cli`, `github` ↔ `github`) y del proveedor global.
 - Si los grupos no coinciden, marca `mismatch: true` con `mismatchDetails.message`.
@@ -1278,15 +1279,15 @@ Usuario elige:
 ### Crear un proyecto nuevo
 
 ```
-Frontend: POST /api/projects { name, categoryId, techId, path, aiProvider }
+Frontend: POST /api/projects { name, categoryId, techId, path, aiProviders }
   │
   server.js → projects.createProject(data)
     ├── makeProjectId()
     ├── fs.mkdirSync(path, recursive)
-    ├── templates.getTemplate(catId, tech) → escribe CLAUDE.md
+    ├── escribe CONTEXTO.md y replica a CLAUDE.md, etc.
     ├── syncProject(id)
     │   └── getApplicableAgents(project)  → global + section + tech
-    │       para cada agente → saveProjectAgent() + hash
+    │       para cada agente → adapta para cada p en aiProviders → save
     └── writeConfig(cfg con nuevo proyecto)
   ← { project }
 ```
@@ -1303,7 +1304,8 @@ Frontend: PUT /api/agents { level:'global', agent }
     │
     projects.syncProject(id)
       ├── hashAgent(agente modificado) ≠ project.agentHashes['nombre']
-      └── saveProjectAgent() → copia a .claude/agents/nombre.md
+      └── para cada p en aiProviders:
+          └── adapta y guarda en {project}/.{p}/agents/nombre.md
   ← { added: 0, updated: 1, skipped: N }
 ```
 
@@ -1315,7 +1317,7 @@ Frontend: GET /api/projects/:id/context?type=auto
   server.js → projects.getContextAuto(project, cfg.aiProvider)
     ├── detecta grupo del proyecto y del proveedor global
     ├── si grupos difieren → mismatch: true
-    ├── lee CLAUDE.md o copilot-instructions.md
+    ├── lee CONTEXTO.md (o fallback a CLAUDE.md)
     └── devuelve ProjectContextInfo { content, type, label, mismatch, isEmpty, isDefault, sizeBytes }
   ← ProjectContextInfo
 
@@ -1355,13 +1357,9 @@ Frontend: POST /api/chat { messages, systemPrompt }
 
 ```
 para cada proyecto activo:
-  needsClaude = aiProvider ∈ { 'claude', 'both' }
-  needsGithub = aiProvider ∈ { 'github', 'both' }
-
-  si needsClaude y no existe CLAUDE.md         → notif critical
-  si needsClaude y CLAUDE.md < 80 chars        → notif optimization
-  si needsGithub y no existe copilot-instructions.md → notif critical
-  si needsGithub y copilot < 80 chars          → notif optimization
+  para cada p en project.aiProviders:
+    si no existe archivo de contexto → notif critical
+    si archivo < 80 chars           → notif optimization
 ```
 
 El endpoint también lee `pendingUpdates` de cada proyecto (via `getProjectSyncStatus`) para generar notificaciones de sync pendiente.

@@ -103,7 +103,6 @@ const DEFAULT_CONFIG = {
   geminiCliModel: 'gemini-2.5-pro',
   codexCliModel: 'o4-mini',
 
-  theme: 'dark',       // 'dark' | 'light'
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
   agentsDirectoryEnabled: true,
@@ -162,7 +161,25 @@ function readConfig() {
   if (!fs.existsSync(CONFIG_FILE)) return structuredClone(DEFAULT_CONFIG);
   try {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
-    return { ...structuredClone(DEFAULT_CONFIG), ...JSON.parse(raw) };
+    const cfg = { ...structuredClone(DEFAULT_CONFIG), ...JSON.parse(raw) };
+
+    // Migration: aiProvider (string) -> aiProviders (array)
+    let migrated = false;
+    for (const project of (cfg.projects || [])) {
+      if (project.aiProvider && !project.aiProviders) {
+        if (project.aiProvider === 'both') project.aiProviders = ['claude', 'github'];
+        else project.aiProviders = [project.aiProvider];
+        delete project.aiProvider;
+        migrated = true;
+      }
+      if (!project.aiProviders) {
+        project.aiProviders = ['claude'];
+        migrated = true;
+      }
+    }
+    if (migrated) writeConfig(cfg);
+
+    return cfg;
   } catch {
     return structuredClone(DEFAULT_CONFIG);
   }

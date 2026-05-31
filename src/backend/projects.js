@@ -21,7 +21,8 @@ const {
   getAgentsDirForProvider,
   parseAgentFile,
 } = require('./agents');
-const { getTemplate, getGitHubTemplate } = require('./templates');
+const { getContextTemplate } = require('./templates');
+const { PROJECT_PROVIDERS, adaptAgentForProvider, adaptFromGitHub } = require('./agent-adapters');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,9 +42,7 @@ function slugify(name) {
 // ── Provider helpers ──────────────────────────────────────────────────────────
 
 function getProviders(project) {
-  const p = project.aiProvider || 'claude';
-  if (p === 'both') return ['claude', 'github'];
-  return [p];
+  return project.aiProviders || ['claude'];
 }
 
 function getAllCatalogAgents() {
@@ -337,60 +336,70 @@ async function syncAllProjects() {
   return results;
 }
 
-// ── Context files (CLAUDE.md / copilot-instructions.md) ──────────────────────
+// ── Context files ─────────────────────────────────────────────────────────────
 
-function getContextFilePath(project, type) {
-  if (type === 'github') return path.join(project.path, '.github', 'copilot-instructions.md');
-  return path.join(project.path, 'CLAUDE.md');
+function getContextFilePath(project, providerId) {
+  const config = PROJECT_PROVIDERS[providerId] || PROJECT_PROVIDERS.central;
+  return path.join(project.path, ...config.contextFile.split('/'));
 }
 
-function getContextFile(project, type) {
-  const filePath = getContextFilePath(project, type);
+function getContextFile(project, providerId) {
+  // If we want a specific provider context but it doesn't exist, we fallback to central
+  let filePath = getContextFilePath(project, providerId);
+  if (providerId !== 'central' && !fs.existsSync(filePath)) {
+    filePath = getContextFilePath(project, 'central');
+  }
+
+  const config = PROJECT_PROVIDERS[providerId] || PROJECT_PROVIDERS.central;
   return {
     content:  fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '',
     filePath,
-    label:    type === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md',
+    label:    config.contextFile.split('/').pop(),
+    providerId,
   };
 }
 
-function saveContextFile(project, type, content) {
-  const filePath = getContextFilePath(project, type);
-  if (type === 'github') ensureDir(path.join(project.path, '.github'));
-  fs.writeFileSync(filePath, content, 'utf8');
-  return filePath;
-}
+function saveContextFile(project, providerId, content) {
+  // 1. Always save to the central CONTEXTO.md
+  const centralPath = getContextFilePath(project, 'central');
+  ensureDir(path.dirname(centralPath));
+  fs.writeFileSync(centralPath, content, 'utf8');
 
-// Backward-compat aliases
-const getClaudeMd  = (project) => getContextFile(project, 'claude');
-const saveClaudeMd = (project, content) => saveContextFile(project, 'claude', content);
+  // 2. Also save to all active providers in the project
+  const providers = getProviders(project);
+  for (const p of providers) {
+    const filePath = getContextFilePath(project, p);
+    const dir = path.dirname(filePath);
+    ensureDir(dir);
+    fs.writeFileSync(filePath, content, 'utf8');
+  }
+  
+  return centralPath;
+}
 
 // ── Project CRUD ──────────────────────────────────────────────────────────────
 
 /**
- * Creates a new project: folder structure + CLAUDE.md + copies agents.
- * selectedAgents: optional array of agent names to copy; omitted agents are stored in excludedAgents.
+ * Creates a new project: folder structure + context files + copies agents.
+ * selectedAgents: optional array of agent names to copy.
  */
-async function createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }) {
+async function createProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }) {
   const cleanPath = projectPath.replace(/^~/, require('os').homedir());
 
   if (fs.existsSync(cleanPath)) {
     throw new Error(`Path already exists: ${cleanPath}`);
   }
 
-  const provider  = aiProvider || 'claude';
-  const providers = provider === 'both' ? ['claude', 'github'] : [provider];
+  const providers = Array.isArray(aiProviders) && aiProviders.length > 0 ? aiProviders : ['claude'];
 
   ensureDir(cleanPath);
+
+  // Initialize with central context
+  const centralContent = getContextTemplate('claude', categoryId, techId, name);
+  saveContextFile({ path: cleanPath, aiProviders: providers }, 'central', centralContent);
+
   for (const p of providers) {
     ensureDir(getAgentsDirForProvider(cleanPath, p));
-  }
-
-  if (providers.includes('claude')) {
-    fs.writeFileSync(path.join(cleanPath, 'CLAUDE.md'), getTemplate(categoryId, techId, name), 'utf8');
-  }
-  if (providers.includes('github')) {
-    ensureDir(path.join(cleanPath, '.github'));
-    fs.writeFileSync(path.join(cleanPath, '.github', 'copilot-instructions.md'), getGitHubTemplate(categoryId, techId, name), 'utf8');
   }
 
   const initialSelection = resolveInitialAgentSelection(categoryId, techId || null, selectedAgents || null);
@@ -406,7 +415,7 @@ async function createProject({ name, categoryId, techId, projectPath, descriptio
     techId:         techId  || null,
     description:    description || '',
     status:         status  || 'active',
-    aiProvider:     provider,
+    aiProviders:    providers,
     path:           cleanPath,
     agentHashes,
     excludedAgents,
@@ -424,10 +433,8 @@ async function createProject({ name, categoryId, techId, projectPath, descriptio
 
 /**
  * Imports an existing project folder.
- * Creates provider agent dirs if missing, copies applicable agents.
- * selectedAgents: optional array of agent names to copy; omitted agents are stored in excludedAgents.
  */
-async function importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }) {
+async function importProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }) {
   const cleanPath = projectPath.replace(/^~/, require('os').homedir());
 
   if (!fs.existsSync(cleanPath)) {
@@ -439,25 +446,33 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
     throw new Error(`Project already registered: ${cleanPath}`);
   }
 
-  const provider  = aiProvider || 'claude';
-  const providers = provider === 'both' ? ['claude', 'github'] : [provider];
+  const providers = Array.isArray(aiProviders) && aiProviders.length > 0 ? aiProviders : ['claude'];
+
+  // Ensure central context exists or try to adopt existing one
+  const centralPath = getContextFilePath({ path: cleanPath }, 'central');
+  if (!fs.existsSync(centralPath)) {
+    // Try to adopt from an existing provider context
+    let adopted = false;
+    for (const p of ['claude', 'github', 'gemini', 'openai']) {
+      const pPath = getContextFilePath({ path: cleanPath }, p);
+      if (fs.existsSync(pPath)) {
+        fs.copyFileSync(pPath, centralPath);
+        adopted = true;
+        break;
+      }
+    }
+    if (!adopted) {
+      const content = getContextTemplate('claude', categoryId, techId, name);
+      fs.writeFileSync(centralPath, content, 'utf8');
+    }
+  }
+
+  // Now that central exists, sync it to all providers
+  const centralContent = fs.readFileSync(centralPath, 'utf8');
+  saveContextFile({ path: cleanPath, aiProviders: providers }, 'central', centralContent);
 
   for (const p of providers) {
     ensureDir(getAgentsDirForProvider(cleanPath, p));
-  }
-
-  if (providers.includes('claude')) {
-    const claudeMdPath = path.join(cleanPath, 'CLAUDE.md');
-    if (!fs.existsSync(claudeMdPath)) {
-      fs.writeFileSync(claudeMdPath, getTemplate(categoryId, techId, name), 'utf8');
-    }
-  }
-  if (providers.includes('github')) {
-    ensureDir(path.join(cleanPath, '.github'));
-    const copilotPath = path.join(cleanPath, '.github', 'copilot-instructions.md');
-    if (!fs.existsSync(copilotPath)) {
-      fs.writeFileSync(copilotPath, getGitHubTemplate(categoryId, techId, name), 'utf8');
-    }
   }
 
   const initialSelection = resolveInitialAgentSelection(categoryId, techId || null, selectedAgents || null);
@@ -473,7 +488,7 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
     techId:         techId  || null,
     description:    description || '',
     status:         status  || 'active',
-    aiProvider:     provider,
+    aiProviders:    providers,
     path:           cleanPath,
     agentHashes,
     excludedAgents,
@@ -490,28 +505,18 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
 }
 
 /**
- * Migrates level-4 (project-local) agents when the aiProvider changes.
- * Returns { agentsMigrated: number, added: string[], removed: string[] }
- *
- * Rules:
- *   Switch (A→B)    : copy level-4 agents from A dir to B dir (format-converted). Old dir untouched.
- *   Add    (A→both) : copy level-4 agents from A dir to new B dir.
- *   Remove (both→A) : no file ops — old dir stays, just stops being managed.
- * Context files are created for added providers if they don't exist yet.
+ * Migrates project-local agents and context files when aiProviders changes.
  */
-function migrateProjectProvider(project, newProvider) {
+function migrateProjectProviders(project, newProviders) {
   const oldProviders = getProviders(project);
-  const newProviders = newProvider === 'both' ? ['claude', 'github'] : [newProvider];
-
   const added   = newProviders.filter(p => !oldProviders.includes(p));
   const removed = oldProviders.filter(p => !newProviders.includes(p));
 
   let agentsMigrated = 0;
 
-  if (added.length > 0) {
+  if (added.length > 0 && oldProviders.length > 0) {
     const sourceProvider = oldProviders[0];
     const sourceDir      = getAgentsDirForProvider(project.path, sourceProvider);
-
     const applicable     = getApplicableAgents(project.categoryId, project.techId);
     const applicableNames = new Set(applicable.map(a => a.name));
 
@@ -522,7 +527,7 @@ function migrateProjectProvider(project, newProvider) {
       if (fs.existsSync(sourceDir)) {
         for (const file of fs.readdirSync(sourceDir).filter(f => f.endsWith('.md'))) {
           const agentName = path.basename(file, '.md');
-          if (applicableNames.has(agentName)) continue; // level 1-3, handled by sync
+          if (applicableNames.has(agentName)) continue;
 
           const agent    = parseAgentFile(path.join(sourceDir, file));
           const destPath = path.join(targetDir, file);
@@ -531,38 +536,32 @@ function migrateProjectProvider(project, newProvider) {
         }
       }
 
-      // Create context file for the new provider if missing
-      if (targetProvider === 'github') {
-        ensureDir(path.join(project.path, '.github'));
-        const dest = path.join(project.path, '.github', 'copilot-instructions.md');
-        if (!fs.existsSync(dest)) {
-          const claude = path.join(project.path, 'CLAUDE.md');
-          fs.writeFileSync(dest, fs.existsSync(claude)
-            ? fs.readFileSync(claude, 'utf8')
-            : getGitHubTemplate(project.categoryId, project.techId, project.name), 'utf8');
-        }
-      } else if (targetProvider === 'claude') {
-        const dest = path.join(project.path, 'CLAUDE.md');
-        if (!fs.existsSync(dest)) {
-          const copilot = path.join(project.path, '.github', 'copilot-instructions.md');
-          fs.writeFileSync(dest, fs.existsSync(copilot)
-            ? fs.readFileSync(copilot, 'utf8')
-            : getTemplate(project.categoryId, project.techId, project.name), 'utf8');
-        }
+      // Create context file for new provider
+      const filePath = getContextFilePath(project, targetProvider);
+      if (!fs.existsSync(filePath)) {
+        const sourceProvider = oldProviders[0];
+        const sourcePath = getContextFilePath(project, sourceProvider);
+        const content = fs.existsSync(sourcePath)
+          ? fs.readFileSync(sourcePath, 'utf8')
+          : getContextTemplate(targetProvider, project.categoryId, project.techId, project.name);
+        saveContextFile(project, targetProvider, content);
       }
     }
   }
 
-  // Delete everything belonging to removed providers
-  for (const removedProvider of removed) {
-    if (removedProvider === 'claude') {
-      const claudeDir = path.join(project.path, '.claude');
-      const claudeMd  = path.join(project.path, 'CLAUDE.md');
-      if (fs.existsSync(claudeDir)) fs.rmSync(claudeDir, { recursive: true, force: true });
-      if (fs.existsSync(claudeMd))  fs.unlinkSync(claudeMd);
-    } else if (removedProvider === 'github') {
-      const githubDir = path.join(project.path, '.github');
-      if (fs.existsSync(githubDir)) fs.rmSync(githubDir, { recursive: true, force: true });
+  // Remove data for removed providers
+  for (const p of removed) {
+    const config = PROJECT_PROVIDERS[p];
+    if (config) {
+      // Remove agents dir
+      const dir = getAgentsDirForProvider(project.path, p);
+      if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+      // Remove context file
+      const ctx = getContextFilePath(project, p);
+      if (fs.existsSync(ctx)) fs.unlinkSync(ctx);
+      
+      // Cleanup parent .claude/.github/.gemini if empty?
+      // For now we keep it simple.
     }
   }
 
@@ -570,31 +569,46 @@ function migrateProjectProvider(project, newProvider) {
 }
 
 /**
- * Updates project metadata. When aiProvider changes, migrates level-4 agents.
+ * Updates project metadata.
  */
-function updateProject(id, updates) {
+async function updateProject(id, updates) {
   const cfg     = readConfig();
   const idx     = cfg.projects.findIndex(p => p.id === id);
   if (idx === -1) throw new Error('Project not found');
 
+  const project = cfg.projects[idx];
   let migration = null;
-  if (updates.aiProvider && updates.aiProvider !== cfg.projects[idx].aiProvider) {
-    migration = migrateProjectProvider(cfg.projects[idx], updates.aiProvider);
+
+  if (updates.aiProviders && JSON.stringify(updates.aiProviders) !== JSON.stringify(project.aiProviders)) {
+    migration = migrateProjectProviders(project, updates.aiProviders);
   }
 
-  const allowed = ['name', 'description', 'status', 'techId', 'categoryId', 'aiProvider', 'excludedAgents', 'includedAgents'];
+  const allowed = ['name', 'description', 'status', 'techId', 'categoryId', 'aiProviders', 'excludedAgents', 'includedAgents'];
   for (const key of allowed) {
-    if (updates[key] !== undefined) cfg.projects[idx][key] = updates[key];
+    if (updates[key] !== undefined) project[key] = updates[key];
   }
 
-  cfg.projects[idx].updatedAt = new Date().toISOString();
+  project.updatedAt = new Date().toISOString();
   writeConfig(cfg);
-  return { ...cfg.projects[idx], migration };
+
+  // If providers changed, trigger a sync to ensure all agents are in the new locations
+  if (migration && (migration.added.length > 0)) {
+    try { 
+      await syncProject(project); 
+      // Force context sync for all providers
+      const mainProvider = project.aiProviders[0];
+      const ctx = getContextFile(project, mainProvider);
+      if (ctx.content) saveContextFile(project, mainProvider, ctx.content);
+    } catch (e) { 
+      console.error('Sync failed after provider update:', e.message); 
+    }
+  }
+
+  return { ...project, migration };
 }
 
 /**
  * Removes a project from config.
- * Optionally deletes the folder from disk.
  */
 function deleteProject(id, deleteFolder = false) {
   const cfg     = readConfig();
@@ -626,21 +640,25 @@ function listProjectsWithStatus() {
 
 // ── Smart context detection ───────────────────────────────────────────────────
 
-const GITHUB_GROUP_PROVIDERS = new Set(['github', 'copilot-cli']);
-
-function providerGroup(provider) {
-  return GITHUB_GROUP_PROVIDERS.has(provider) ? 'github' : 'claude';
-}
-
 function getContextAuto(project, appAiProvider) {
-  const projectProvider = project.aiProvider || appAiProvider || 'cli';
-  const appGroup     = providerGroup(appAiProvider || 'cli');
-  const projectGroup = providerGroup(projectProvider);
-  const mismatch     = appGroup !== projectGroup;
-  const useType      = projectGroup;
+  const providers = getProviders(project);
+  
+  // Map appAiProvider to project provider type
+  let useType = 'claude'; // default
+  if (appAiProvider === 'github' || appAiProvider === 'copilot-cli') useType = 'github';
+  else if (appAiProvider === 'gemini-cli' || appAiProvider === 'gemini-api') useType = 'gemini';
+  else if (appAiProvider === 'openai') useType = 'openai';
 
-  const ctx     = getContextFile(project, useType);
-  const content = ctx.content || '';
+  // Check if project has this type
+  const hasSelected = providers.includes(useType);
+  if (!hasSelected) {
+    // Fallback to first available in project
+    useType = providers[0];
+  }
+
+  const mismatch = hasSelected ? false : true;
+  const ctx      = getContextFile(project, useType);
+  const content  = ctx.content || '';
   const sizeBytes = Buffer.byteLength(content, 'utf8');
   const isEmpty   = sizeBytes === 0;
   const isDefault = !isEmpty && sizeBytes < 300;
@@ -650,14 +668,14 @@ function getContextAuto(project, appAiProvider) {
 
   return {
     content,
-    type:    useType,
-    label:   ctx.label,
+    type:     useType,
+    label:    ctx.label,
     filePath: ctx.filePath,
     mismatch,
     mismatchDetails: mismatch ? {
-      appProvider:     appGroup,
-      projectProvider: projectGroup,
-      message: `La app usa ${appGroup === 'github' ? 'GitHub Copilot' : 'Claude'} pero el proyecto tiene contexto para ${projectGroup === 'github' ? 'GitHub Copilot' : 'Claude'}`,
+      appProvider:     appAiProvider,
+      projectProvider: useType,
+      message: `La app usa ${appAiProvider} pero el proyecto no tiene contexto para este proveedor. Usando ${useType} como alternativa.`,
     } : null,
     isEmpty,
     isDefault,
@@ -665,6 +683,10 @@ function getContextAuto(project, appAiProvider) {
     lastUpdated,
   };
 }
+
+// Backward-compat aliases
+const getClaudeMd  = (project) => getContextFile(project, 'claude');
+const saveClaudeMd = (project, content) => saveContextFile(project, 'claude', content);
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
@@ -680,6 +702,7 @@ module.exports = {
   syncProject,
   syncAllProjects,
   getContextFile,
+  getContextFilePath,
   saveContextFile,
   getClaudeMd,
   saveClaudeMd,

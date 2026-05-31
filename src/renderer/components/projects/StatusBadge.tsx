@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SyncEntry } from '../../types';
+import { PROJECT_PROVIDERS } from '../../constants/projects';
 
 export function ProjectStatusBadge({ status }: { status: 'active' | 'paused' | 'archived' }) {
   if (status === 'active')   return <span className="badge green"><i className="ti ti-circle-check" />activo</span>;
@@ -17,8 +18,19 @@ export function SyncStatusBadge({ status }: { status: SyncEntry['status'] }) {
   return <span className="badge gray">{status}</span>;
 }
 
-export function ProviderBadge({ provider }: { provider: string }) {
-  if (provider === 'github') return <span className="badge gray"><i className="ti ti-brand-github" />Copilot</span>;
-  if (provider === 'both')   return <span className="badge gray"><i className="ti ti-git-merge" />Ambos</span>;
-  return <span className="badge gray"><i className="ti ti-robot" />Claude</span>;
+export function ProviderBadge({ providers }: { providers: string[] }) {
+  const list = providers || ['claude'];
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {list.map(id => {
+        const config = PROJECT_PROVIDERS[id];
+        if (!config) return null;
+        return (
+          <span key={id} className="badge gray" title={config.label} style={{ padding: '2px 6px' }}>
+            <i className={`ti ${config.icon}`} style={{ margin: 0 }} />
+          </span>
+        );
+      })}
+    </div>
+  );
 }

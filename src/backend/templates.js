@@ -270,17 +270,55 @@ function getTemplate(categoryId, techId, projectName) {
  * Used when creating a GitHub Copilot project.
  */
 function getGitHubTemplate(categoryId, techId, projectName) {
-  const key = techId ? `${categoryId}-${techId}` : categoryId;
-  const fn  = TEMPLATES[key];
+  return getContextTemplate('github', categoryId, techId, projectName);
+}
 
-  // Reuse the CLAUDE.md template content but strip Claude-specific language
-  const base = fn
-    ? fn(projectName)
-        .replace(/## Rules\n/g, '## Coding standards\n')
-        .replace(/for Claude Code/g, '')
-    : `# ${projectName}\n\n## Stack\n<!-- Document your stack here -->\n\n## Project structure\n\`\`\`\n<!-- Describe your folder structure -->\n\`\`\`\n\n## Conventions\n<!-- Document your coding conventions -->\n\n## Coding standards\n<!-- Project-specific coding standards -->\n`;
+/**
+ * Returns the proper context template content for a given provider.
+ */
+function getContextTemplate(providerId, categoryId, techId, projectName) {
+  const key = techId ? `${categoryId}-${techId}` : categoryId;
+  const fn  = TEMPLATES[key] || TEMPLATES.generic;
+  const base = fn(projectName);
+
+  if (providerId === 'github') {
+    return base
+      .replace(/## Rules\n/g, '## Coding standards\n')
+      .replace(/for Claude Code/g, '');
+  }
+
+  if (providerId === 'gemini') {
+    return base
+      .replace(/## Rules\n/g, '## Gemini Rules\n')
+      .replace(/for Claude Code/g, 'for Gemini');
+  }
+
+  if (providerId === 'openai') {
+    return base
+      .replace(/## Rules\n/g, '## OpenAI Instructions\n')
+      .replace(/for Claude Code/g, 'for OpenAI');
+  }
 
   return base;
 }
 
-module.exports = { getTemplate, getGitHubTemplate, TEMPLATES };
+TEMPLATES.generic = (name) => `# ${name}
+
+## Stack
+<!-- Document your stack here -->
+
+## Project structure
+\`\`\`
+<!-- Describe your folder structure -->
+\`\`\`
+
+## Conventions
+<!-- Document your coding conventions -->
+
+## Rules
+<!-- Document project-specific rules for Claude Code -->
+`;
+
+const { PROJECT_PROVIDERS } = require('./agent-adapters');
+
+module.exports = { getTemplate, getGitHubTemplate, getContextTemplate, TEMPLATES, PROJECT_PROVIDERS };

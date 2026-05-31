@@ -539,6 +539,7 @@ module.exports = {
   launchBrowserWithCdp,
 
   // Operations
+  getActivePage,
   browserGet,
   browserAction,
 

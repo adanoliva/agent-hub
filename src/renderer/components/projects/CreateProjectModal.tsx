@@ -1,19 +1,14 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { useStore } from '../../store';
 import { req } from '../../api';
 import { useToast } from '../../hooks/useToast';
+import { PROJECT_PROVIDERS_LIST } from '../../constants/projects';
 
 interface Props {
   onClose: () => void;
   onCreated: () => void;
 }
-
-const PROVIDER_OPTS = [
-  { value: 'claude', label: 'Claude Code', icon: 'ti-robot', sub: '.claude/agents' },
-  { value: 'github', label: 'GitHub Copilot', icon: 'ti-brand-github', sub: '.github/agents' },
-  { value: 'both',   label: 'Ambos', icon: 'ti-git-merge', sub: '' },
-] as const;
 
 export function CreateProjectModal({ onClose, onCreated }: Props) {
   const config  = useStore((s) => s.config);
@@ -25,7 +20,16 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
   const [techId,   setTechId]   = useState('');
   const [basePath, setBasePath] = useState('');
   const [desc,     setDesc]     = useState('');
-  const [provider, setProvider] = useState<'claude' | 'github' | 'both'>('claude');
+
+  // Default providers logic
+  const getDefaultProviders = () => {
+    const active = config?.aiProvider;
+    if (active === 'github' || active === 'copilot-cli') return ['github'];
+    if (active === 'gemini-cli' || active === 'gemini-api') return ['gemini'];
+    if (active === 'openai') return ['openai'];
+    return ['claude'];
+  };
+  const [aiProviders, setAiProviders] = useState<string[]>(getDefaultProviders());
 
   const techs = cats.find((c) => c.id === catId)?.technologies ?? [];
 
@@ -37,22 +41,39 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
   async function handleConfirm() {
     if (!name.trim() || !catId || !basePath.trim()) {
       toast('Rellena nombre, categoría y ruta', 'err');
-      return;
+      throw new Error('validation');
     }
+    if (aiProviders.length === 0) {
+      toast('Selecciona al menos un proveedor', 'err');
+      throw new Error('validation');
+    }
+
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const projectPath = basePath.replace(/[/\\]$/, '') + '\\' + slug;
-    await req('POST', '/projects', {
-      name: name.trim(),
-      categoryId: catId,
-      techId: techId || null,
-      projectPath,
-      description: desc.trim(),
-      aiProvider: provider,
-    });
-    toast(`Proyecto "${name.trim()}" creado`);
-    onCreated();
-    onClose();
+
+    try {
+      await req('POST', '/projects', {
+        name: name.trim(),
+        categoryId: catId,
+        techId: techId || null,
+        projectPath,
+        description: desc.trim(),
+        aiProviders,
+      });
+      toast(`Proyecto "${name.trim()}" creado`);
+      onCreated();
+      onClose();
+    } catch (e: any) {
+      toast(e.message || 'Error al crear proyecto', 'err');
+      throw e;
+    }
   }
+
+  const toggleProvider = (id: string) => {
+    setAiProviders(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   return (
     <Modal title="Nuevo proyecto" onConfirm={handleConfirm} onClose={onClose} confirmLabel="Crear">
@@ -88,24 +109,40 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
         <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Breve descripción…" />
       </div>
       <div className="field">
-        <label>Agentes IA</label>
-        <div className="provider-opts">
-          {PROVIDER_OPTS.map((opt) => (
-            <label key={opt.value} className="provider-opt">
+        <label>Agentes IA (Contexto y Carpetas)</label>
+        <div className="provider-opts" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {PROJECT_PROVIDERS_LIST.map((opt) => (
+            <label
+              key={opt.id}
+              className={`provider-opt-chip ${aiProviders.includes(opt.id) ? 'active' : ''}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 20,
+                border: '1px solid var(--border2)',
+                background: aiProviders.includes(opt.id) ? 'var(--accent-dim)' : 'var(--bg2)',
+                color: aiProviders.includes(opt.id) ? 'var(--accent)' : 'var(--text1)',
+                borderColor: aiProviders.includes(opt.id) ? 'var(--accent)' : 'var(--border2)',
+                cursor: 'pointer',
+                fontSize: 12,
+                transition: 'all .15s'
+              }}
+            >
               <input
-                type="radio"
-                name="create-prov"
-                value={opt.value}
-                checked={provider === opt.value}
-                onChange={() => setProvider(opt.value)}
+                type="checkbox"
+                checked={aiProviders.includes(opt.id)}
+                onChange={() => toggleProvider(opt.id)}
+                style={{ display: 'none' }}
               />
-              <span>
-                <i className={`ti ${opt.icon}`} /> {opt.label}
-                {opt.sub && <small style={{ color: 'var(--text2)' }}> {opt.sub}</small>}
-              </span>
+              <i className={`ti ${opt.icon}`} /> {opt.label}
             </label>
           ))}
         </div>
+        <small style={{ display: 'block', marginTop: 8, color: 'var(--text3)', fontSize: 11 }}>
+          Sincroniza agentes y genera archivos de contexto para los ecosistemas seleccionados.
+        </small>
       </div>
     </Modal>
   );

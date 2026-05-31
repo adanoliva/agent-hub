@@ -3,17 +3,12 @@ import { Modal } from '../ui/Modal';
 import { useStore } from '../../store';
 import { req } from '../../api';
 import { useToast } from '../../hooks/useToast';
+import { PROJECT_PROVIDERS_LIST } from '../../constants/projects';
 
 interface Props {
   onClose: () => void;
   onImported: () => void;
 }
-
-const PROVIDER_OPTS = [
-  { value: 'claude', label: 'Claude Code', icon: 'ti-robot', sub: '.claude/agents' },
-  { value: 'github', label: 'GitHub Copilot', icon: 'ti-brand-github', sub: '.github/agents' },
-  { value: 'both',   label: 'Ambos', icon: 'ti-git-merge', sub: '' },
-] as const;
 
 export function ImportProjectModal({ onClose, onImported }: Props) {
   const config  = useStore((s) => s.config);
@@ -24,7 +19,16 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
   const [catId,    setCatId]    = useState(cats[0]?.id ?? '');
   const [techId,   setTechId]   = useState('');
   const [projPath, setProjPath] = useState('');
-  const [provider, setProvider] = useState<'claude' | 'github' | 'both'>('claude');
+
+  // Default providers logic
+  const getDefaultProviders = () => {
+    const active = config?.aiProvider;
+    if (active === 'github' || active === 'copilot-cli') return ['github'];
+    if (active === 'gemini-cli' || active === 'gemini-api') return ['gemini'];
+    if (active === 'openai') return ['openai'];
+    return ['claude'];
+  };
+  const [aiProviders, setAiProviders] = useState<string[]>(getDefaultProviders());
 
   const techs = cats.find((c) => c.id === catId)?.technologies ?? [];
 
@@ -38,17 +42,28 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
       toast('Rellena todos los campos', 'err');
       return;
     }
+    if (aiProviders.length === 0) {
+      toast('Selecciona al menos un proveedor', 'err');
+      return;
+    }
+
     await req('POST', '/projects/import', {
       name: name.trim(),
       categoryId: catId,
       techId: techId || null,
       projectPath: projPath,
-      aiProvider: provider,
+      aiProviders,
     });
     toast(`Proyecto "${name.trim()}" importado`);
     onImported();
     onClose();
   }
+
+  const toggleProvider = (id: string) => {
+    setAiProviders(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   return (
     <Modal
@@ -85,21 +100,34 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
         </div>
       </div>
       <div className="field">
-        <label>Agentes IA</label>
-        <div className="provider-opts">
-          {PROVIDER_OPTS.map((opt) => (
-            <label key={opt.value} className="provider-opt">
+        <label>Agentes IA (Contexto y Carpetas)</label>
+        <div className="provider-opts" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {PROJECT_PROVIDERS_LIST.map((opt) => (
+            <label
+              key={opt.id}
+              className={`provider-opt-chip ${aiProviders.includes(opt.id) ? 'active' : ''}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 20,
+                border: '1px solid var(--border2)',
+                background: aiProviders.includes(opt.id) ? 'var(--accent-dim)' : 'var(--bg2)',
+                color: aiProviders.includes(opt.id) ? 'var(--accent)' : 'var(--text1)',
+                borderColor: aiProviders.includes(opt.id) ? 'var(--accent)' : 'var(--border2)',
+                cursor: 'pointer',
+                fontSize: 12,
+                transition: 'all .15s'
+              }}
+            >
               <input
-                type="radio"
-                name="import-prov"
-                value={opt.value}
-                checked={provider === opt.value}
-                onChange={() => setProvider(opt.value)}
+                type="checkbox"
+                checked={aiProviders.includes(opt.id)}
+                onChange={() => toggleProvider(opt.id)}
+                style={{ display: 'none' }}
               />
-              <span>
-                <i className={`ti ${opt.icon}`} /> {opt.label}
-                {opt.sub && <small style={{ color: 'var(--text2)' }}> {opt.sub}</small>}
-              </span>
+              <i className={`ti ${opt.icon}`} /> {opt.label}
             </label>
           ))}
         </div>

@@ -24,11 +24,15 @@ interface AppState {
   // Agent name to preload in Chat (consumed on mount)
   pendingChatAgent: string | null;
 
+  // Orchestration lock (prevents navigation while running)
+  isOrchestrating: boolean;
+
   // Toasts
   toasts: Toast[];
 
   // Actions
   setView: (v: View) => void;
+  setIsOrchestrating: (v: boolean) => void;
   navigateTo: (v: View, action?: string) => void;
   setPendingAction: (a: string | null) => void;
   setPendingAgentToEdit: (agent: PendingAgentToEdit | null) => void;
@@ -53,9 +57,11 @@ export const useStore = create<AppState>((set) => ({
   pendingAgentToEdit: null,
   pendingNewAgentDraft: null,
   pendingChatAgent: null,
+  isOrchestrating: false,
   toasts: [],
 
   setView: (view) => set({ view }),
+  setIsOrchestrating: (isOrchestrating) => set({ isOrchestrating }),
   navigateTo: (view, action) => set({ view, pendingAction: action ?? null }),
   setPendingAction: (pendingAction) => set({ pendingAction }),
   setPendingAgentToEdit: (pendingAgentToEdit) => set({ pendingAgentToEdit }),

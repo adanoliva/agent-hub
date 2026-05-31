@@ -14,7 +14,7 @@ fs.mkdirSync(shotDir, { recursive: true });
   // Intercept API calls so app doesn't crash without a backend
   await page.route('**/api/**', async route => {
     const url = route.request().url();
-    if (url.includes('/config')) return route.fulfill({ json: { version: '1.9.1', aiProvider: 'cli', apiKey: '', githubToken: '', githubModel: 'gpt-4o-mini', theme: 'dark', closeAction: 'ask', agentsDirectoryEnabled: true, agentsDirectoryUrl: '', categories: [], projects: [] } });
+    if (url.includes('/config')) return route.fulfill({ json: { version: '1.9.1', aiProvider: 'cli', apiKey: '', githubToken: '', githubModel: 'gpt-4o-mini', closeAction: 'ask', agentsDirectoryEnabled: true, agentsDirectoryUrl: '', categories: [], projects: [] } });
     if (url.includes('/projects')) return route.fulfill({ json: [] });
     if (url.includes('/detect-cli')) return route.fulfill({ json: { found: false } });
     return route.fulfill({ json: {} });

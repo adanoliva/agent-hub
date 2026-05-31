@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-29 · Versión: 1.9.3
+> Última actualización: 2026-05-30 · Versión: 1.9.4
 
 ---
 
@@ -41,6 +41,26 @@ src/renderer/
 **Navegación:** sin React Router. El campo `view` del store Zustand controla qué página se renderiza. Las páginas se cargan con `React.lazy` + wrapper `.then(m => ({ default: m.PageName }))` porque usan named exports.
 
 **Wizard:** visible si `localStorage.getItem('cdm-wizard-done')` no existe, o si `store.showWizard === true` (relanzado desde Ajustes).
+
+---
+
+## Comunicación API (`src/renderer/api.ts`)
+
+Todas las peticiones deben usar el helper `req()`.
+
+**Reglas Críticas:**
+- **Sin prefijo redundante**: `req()` ya añade `/api`. Usar `req('GET', '/projects')`, NO `req('GET', '/api/projects')`.
+- **APIs Nativas**: Para casos como `new EventSource()` o `fetch()` manual, usar la constante exportada `API_BASE`.
+
+```typescript
+import { req, API_BASE } from './api';
+
+// Correcto
+const projects = await req<Project[]>('GET', '/projects');
+
+// Correcto para SSE
+const es = new EventSource(`${API_BASE}/stream`);
+```
 
 ---
 
@@ -100,7 +120,7 @@ interface Config {
   version: string; aiProvider: AIProvider;
   customProviders?: CustomAIProvider[];
   apiKey: string; githubToken: string; githubModel: string;
-  theme: 'dark' | 'light'; closeAction?: 'ask' | 'tray' | 'quit';
+  closeAction?: 'ask' | 'tray' | 'quit';
   agentsDirectoryUrl?: string; agentsDirectoryEnabled?: boolean;
   categories: Category[]; projects: Project[];
 }
@@ -287,9 +307,9 @@ interface ExecutionLog {
 
 ## Sistema de estilos (`styles.css`)
 
-Un único fichero CSS global. Tema oscuro en `:root`, claro en `body.light`. El cambio se aplica con `document.body.classList.toggle('light', ...)`.
+Un único fichero CSS global. Tema oscuro definido mediante variables en `:root`.
 
-Variables principales: `--bg0..5` (fondos), `--text0..3` (textos), `--accent` (#7c6af7 dark / #6c5ce7 light), `--green`, `--amber`, `--blue`, `--coral`, `--border/2/3`.
+Variables principales: `--bg0..5` (fondos), `--text0..3` (textos), `--accent` (#7c6af7), `--green`, `--amber`, `--blue`, `--coral`, `--border/2/3`.
 
 **Clases de botón:** `.btn` (base), `.btn.primary` (accent), `.btn.ghost` (sin fondo), `.btn.danger` (coral), `.btn.sm`.
 **Badges:** `.badge.{green|amber|blue|accent|gray|coral}` — siempre con icono dentro.

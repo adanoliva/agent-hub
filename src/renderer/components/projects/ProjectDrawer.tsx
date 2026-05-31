@@ -5,8 +5,9 @@ import { useCategoryHelpers } from '../../hooks/useCategoryHelpers';
 import { ProjectStatusBadge, ProviderBadge, SyncStatusBadge } from './StatusBadge';
 import { ExcludeAgentModal } from './ExcludeAgentModal';
 import type { Project, SyncPreview, SyncStatus } from '../../types';
+import { PROJECT_PROVIDERS } from '../../constants/projects';
 
-type DrawerTab = 'ctx-claude' | 'ctx-github' | 'sync';
+type DrawerTab = 'context' | 'sync';
 
 interface Props {
   project: Project;
@@ -20,10 +21,9 @@ interface Props {
 export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, onRefresh }: Props) {
   const toast              = useToast();
   const { catName, techName } = useCategoryHelpers();
-  const provider           = (p.aiProvider ?? 'claude') as string;
+  const providers          = p.aiProviders || ['claude'];
 
-  const defaultTab: DrawerTab = provider === 'github' ? 'ctx-github' : 'ctx-claude';
-  const [tab,        setTab]        = useState<DrawerTab>(defaultTab);
+  const [tab,        setTab]        = useState<DrawerTab>('context');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({});
   const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null);
   const [allAgents, setAllAgents]   = useState<{ name: string; level?: string }[]>([]);
@@ -31,13 +31,10 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
   const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
   const [showCrossAdd, setShowCrossAdd] = useState(false);
   const [ctxContent, setCtxContent] = useState('');
-  const [ctxPath,    setCtxPath]    = useState('');
   const [genLoading, setGenLoading] = useState(false);
   const [excludeAgent, setExcludeAgent] = useState<string | null>(null);
 
-  const isCtxTab  = tab === 'ctx-claude' || tab === 'ctx-github';
-  const ctxType   = tab === 'ctx-github' ? 'github' : 'claude';
-  const ctxLabel  = ctxType === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md';
+  const isCtxTab  = tab === 'context';
 
   async function refreshSyncData() {
     try {
@@ -72,24 +69,29 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
   // Load context file when tab changes to ctx
   useEffect(() => {
     if (!isCtxTab) return;
-    req<{ content: string; filePath: string }>('GET', `/projects/${p.id}/context?type=${ctxType}`)
-      .then((r) => { setCtxContent(r.content ?? ''); setCtxPath(r.filePath ?? ''); })
-      .catch(() => { setCtxContent(''); setCtxPath(''); });
+    // Always request the central context for the editor
+    req<{ content: string; filePath: string; label: string }>('GET', `/projects/${p.id}/context?type=central`)
+      .then((r) => { 
+        setCtxContent(r.content ?? ''); 
+      })
+      .catch(() => { setCtxContent(''); });
   }, [p.id, tab]);
 
   async function saveCtx() {
     try {
-      await req('PUT', `/projects/${p.id}/context`, { content: ctxContent, type: ctxType });
-      toast(`${ctxLabel} guardado`);
+      // Backend now writes to central and all providers when saving
+      await req('PUT', `/projects/${p.id}/context`, { content: ctxContent, type: 'central' });
+      toast('Contexto guardado y sincronizado');
     } catch (e: any) { toast(e.message, 'err'); }
   }
 
   async function generateCtx() {
     setGenLoading(true);
     try {
-      const { content } = await req<{ content: string }>('POST', `/projects/${p.id}/generate-context?type=${ctxType}`);
+      // Use the central type for generation
+      const { content } = await req<{ content: string }>('POST', `/projects/${p.id}/generate-context?type=central`);
       setCtxContent(content);
-      toast(`${ctxLabel} generado — revísalo y guarda cuando estés listo`);
+      toast('Contexto generado — revísalo y guarda para sincronizar');
     } catch (e: any) { toast(e.message, 'err'); }
     finally { setGenLoading(false); }
   }
@@ -183,21 +185,6 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
     ? availableCrossAgents.filter((a) => (`${a.name} ${a.level || ''}`).toLowerCase().includes(normalizedQuery))
     : availableCrossAgents;
 
-  const ctxTabs = () => {
-    if (provider === 'both') return (
-      <>
-        <div className={`drawer-tab${tab === 'ctx-claude' ? ' active' : ''}`} onClick={() => setTab('ctx-claude')}>CLAUDE.md</div>
-        <div className={`drawer-tab${tab === 'ctx-github' ? ' active' : ''}`} onClick={() => setTab('ctx-github')}>Copilot</div>
-      </>
-    );
-    if (provider === 'github') return (
-      <div className={`drawer-tab${isCtxTab ? ' active' : ''}`} onClick={() => setTab('ctx-github')}>copilot-instructions.md</div>
-    );
-    return (
-      <div className={`drawer-tab${isCtxTab ? ' active' : ''}`} onClick={() => setTab('ctx-claude')}>CLAUDE.md</div>
-    );
-  };
-
   return (
     <>
       <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -212,13 +199,19 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
               {p.techId && <span className="badge blue"><i className="ti ti-code" />{techName(p.categoryId, p.techId)}</span>}
               <span className="badge gray"><i className="ti ti-folder" />{catName(p.categoryId)}</span>
               <ProjectStatusBadge status={p.status} />
-              <ProviderBadge provider={provider} />
+              <ProviderBadge providers={p.aiProviders} />
             </div>
           </div>
 
           {/* Tabs */}
           <div className="drawer-tabs">
-            {ctxTabs()}
+            <div
+              className={`drawer-tab${tab === 'context' ? ' active' : ''}`}
+              onClick={() => setTab('context')}
+            >
+              <i className="ti ti-file-description" style={{ marginRight: 6 }} />
+              Contexto
+            </div>
             <div
               className={`drawer-tab${tab === 'sync' ? ' active' : ''}`}
               onClick={() => setTab('sync')}
@@ -231,7 +224,7 @@ export function ProjectDrawer({ project: p, onClose, onSync, onEdit, onDelete, o
           <div className="drawer-body">
             {isCtxTab ? (
               <>
-                <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 10, fontFamily: 'var(--mono)' }}>{ctxPath}</div>
+                <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 10 }}>Sincronizado en todos los proveedores ({providers.join(', ')})</div>
                 <textarea
                   className="claude-md-editor"
                   value={ctxContent}

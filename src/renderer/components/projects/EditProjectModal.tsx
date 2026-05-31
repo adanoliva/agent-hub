@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import { req } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import type { Project } from '../../types';
+import { PROJECT_PROVIDERS_LIST, PROJECT_PROVIDERS } from '../../constants/projects';
 
 interface Props {
   project: Project;
@@ -11,32 +12,23 @@ interface Props {
   onUpdated: () => void | Promise<void>;
 }
 
-type Provider = 'claude' | 'github' | 'both';
-
-const PROVIDER_OPTS: { value: Provider; label: string; icon: string }[] = [
-  { value: 'claude', label: 'Claude Code',    icon: 'ti-robot' },
-  { value: 'github', label: 'GitHub Copilot', icon: 'ti-brand-github' },
-  { value: 'both',   label: 'Ambos',          icon: 'ti-git-merge' },
-];
-
-function providerWarning(oldProv: Provider, newProv: Provider): string {
-  if (oldProv === newProv) return '';
-  const oldSet  = oldProv === 'both' ? ['claude', 'github'] : [oldProv];
-  const newSet  = newProv === 'both' ? ['claude', 'github'] : [newProv];
+function getProviderWarning(oldSet: string[], newSet: string[]): string {
   const added   = newSet.filter((p) => !oldSet.includes(p));
   const removed = oldSet.filter((p) => !newSet.includes(p));
-  const dirName = (p: string) => p === 'github' ? '.github/agents' : '.claude/agents';
-  const deletedFiles = (r: string) => r === 'claude'
-    ? 'la carpeta <code>.claude/</code> y <code>CLAUDE.md</code>'
-    : 'la carpeta <code>.github/</code>';
+  
+  if (added.length === 0 && removed.length === 0) return '';
 
-  if (added.length && removed.length)
-    return `Los agentes propios se copiarán de <code>${dirName(removed[0])}</code> a <code>${dirName(added[0])}</code>. Se eliminarán del disco ${deletedFiles(removed[0])}.`;
-  if (added.length)
-    return `Los agentes propios se <strong>duplicarán</strong> en <code>${dirName(added[0])}</code>. Tendrás copias en ambos directorios.`;
-  if (removed.length)
-    return `Se eliminarán del disco ${deletedFiles(removed[0])} junto con todos sus agentes.`;
-  return '';
+  const parts = [];
+  if (added.length > 0) {
+    const names = added.map(id => PROJECT_PROVIDERS[id]?.label || id).join(', ');
+    parts.push(`Se activará soporte para: <strong>${names}</strong>. Los agentes se sincronizarán en sus nuevas carpetas.`);
+  }
+  if (removed.length > 0) {
+    const names = removed.map(id => PROJECT_PROVIDERS[id]?.label || id).join(', ');
+    parts.push(`Se <strong>eliminarán</strong> los archivos de contexto y carpetas de agentes de: <strong>${names}</strong>.`);
+  }
+
+  return parts.join('<br/><br/>');
 }
 
 export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
@@ -45,28 +37,30 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
   const cats     = config?.categories ?? [];
   const cat      = cats.find((c) => c.id === p.categoryId);
   const techs    = cat?.technologies ?? [];
-  const origProv = (p.aiProvider ?? 'claude') as Provider;
+  const origProvs = p.aiProviders || ['claude'];
 
-  const [name,     setName]     = useState(p.name);
-  const [desc,     setDesc]     = useState(p.description ?? '');
-  const [status,   setStatus]   = useState(p.status);
-  const [techId,   setTechId]   = useState(p.techId ?? '');
-  const [provider, setProvider] = useState<Provider>(origProv);
+  const [name,        setName]        = useState(p.name);
+  const [desc,        setDesc]        = useState(p.description ?? '');
+  const [status,      setStatus]      = useState(p.status);
+  const [techId,      setTechId]      = useState(p.techId ?? '');
+  const [aiProviders, setAiProviders] = useState<string[]>(origProvs);
 
-  const warn = providerWarning(origProv, provider);
+  const warn = getProviderWarning(origProvs, aiProviders);
 
   async function handleConfirm() {
     if (!name.trim()) { toast('El nombre es obligatorio', 'err'); return; }
+    if (aiProviders.length === 0) { toast('Selecciona al menos un proveedor', 'err'); return; }
+
     const result = await req<{ migration?: { added: string[]; removed: string[]; agentsMigrated: number } }>(
       'PUT', `/projects/${p.id}`,
-      { name: name.trim(), description: desc.trim(), status, techId: techId || null, aiProvider: provider }
+      { name: name.trim(), description: desc.trim(), status, techId: techId || null, aiProviders }
     );
     const m = result.migration;
     if (m && (m.added.length || m.removed.length)) {
       const detail = m.agentsMigrated > 0
         ? ` (${m.agentsMigrated} agente${m.agentsMigrated !== 1 ? 's' : ''} migrado${m.agentsMigrated !== 1 ? 's' : ''})`
         : '';
-      toast(`Proveedor actualizado${detail}`);
+      toast(`Ecosistemas actualizados${detail}`);
     } else {
       toast(`Proyecto "${name.trim()}" actualizado`);
     }
@@ -74,10 +68,16 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
     onClose();
   }
 
+  const toggleProvider = (id: string) => {
+    setAiProviders(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
   return (
     <Modal
       title="Editar proyecto"
-      sub="Actualiza configuración, tecnología y proveedor IA"
+      sub="Actualiza configuración, tecnología y ecosistemas IA"
       modalClassName="project-edit-modal"
       bodyClassName="project-edit-body"
       onConfirm={handleConfirm}
@@ -113,25 +113,42 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
         </div>
 
         <div className="field project-edit-col-span-2">
-          <label>Agentes IA</label>
-          <div className="provider-opts">
-            {PROVIDER_OPTS.map((opt) => (
-              <label key={opt.value} className="provider-opt">
+          <label>Agentes IA (Contexto y Carpetas)</label>
+          <div className="provider-opts" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {PROJECT_PROVIDERS_LIST.map((opt) => (
+              <label
+                key={opt.id}
+                className={`provider-opt-chip ${aiProviders.includes(opt.id) ? 'active' : ''}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 20,
+                  border: '1px solid var(--border2)',
+                  background: aiProviders.includes(opt.id) ? 'var(--accent-dim)' : 'var(--bg2)',
+                  color: aiProviders.includes(opt.id) ? 'var(--accent)' : 'var(--text1)',
+                  borderColor: aiProviders.includes(opt.id) ? 'var(--accent)' : 'var(--border2)',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  transition: 'all .15s'
+                }}
+              >
                 <input
-                  type="radio"
-                  name="edit-prov"
-                  value={opt.value}
-                  checked={provider === opt.value}
-                  onChange={() => setProvider(opt.value)}
+                  type="checkbox"
+                  checked={aiProviders.includes(opt.id)}
+                  onChange={() => toggleProvider(opt.id)}
+                  style={{ display: 'none' }}
                 />
-                <span><i className={`ti ${opt.icon}`} /> {opt.label}</span>
+                <i className={`ti ${opt.icon}`} /> {opt.label}
               </label>
             ))}
           </div>
           {warn && (
             <div
               className="project-edit-warning"
-              dangerouslySetInnerHTML={{ __html: `<i class="ti ti-alert-triangle" style="color:var(--amber)"></i> ${warn}` }}
+              style={{ marginTop: 12, fontSize: 11, background: 'rgba(217,119,6,0.1)', color: 'var(--amber)', padding: 10, borderRadius: 8, border: '1px solid rgba(217,119,6,0.2)' }}
+              dangerouslySetInnerHTML={{ __html: `<i class="ti ti-alert-triangle"></i> ${warn}` }}
             />
           )}
         </div>

@@ -535,6 +535,13 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
     const spawnOpts = {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: process.platform === 'win32',
+      env: {
+        ...process.env,
+        CI: '1',          // tell CLIs they're running non-interactively
+        NO_COLOR: '1',    // disable ANSI color codes that pollute output
+        TERM: 'dumb',     // disable terminal features that require TTY
+        ...(opts.extraEnv || {}),
+      },
     };
     if (opts.cwd) spawnOpts.cwd = opts.cwd;
 
@@ -555,7 +562,8 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code !== 0) {
-        reject(new Error(`${bin} exited with code ${code}: ${(stderr || stdout).trim()}`));
+        const detail = [stderr.trim(), stdout.trim()].filter(Boolean).join(' | ');
+        reject(new Error(`${bin} exited with code ${code}${detail ? ': ' + detail : ''}`));
         return;
       }
       trackUsage({});
@@ -573,7 +581,10 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
 function callGeminiCLI(prompt, opts = {}) {
   const cfg   = readConfig();
   const model = cfg.geminiCliModel ?? 'gemini-2.5-pro';
-  return callGenericCLI('gemini', ['--model', model, '--yolo'], prompt, opts);
+  return callGenericCLI('gemini', ['--model', model, '--yolo'], prompt, {
+    ...opts,
+    extraEnv: { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
+  });
 }
 
 function callCodexCLI(prompt, opts = {}) {
@@ -1178,7 +1189,35 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     return callOpenAICompatChat(messages, systemPrompt || null, oaConfig, opts);
   }
 
-  throw new Error('Subsystem CLI solo disponible para providers API');
+  // CLI providers: flatten conversation to a single prompt and call in text-only mode.
+  // No agentic flags (--yolo, etc.) — SubsystemCLI handles tool execution via TOOL: blocks.
+  if (CLI_PROVIDERS.includes(provider)) {
+    const lines = [];
+    if (systemPrompt) lines.push(`[System]: ${systemPrompt}\n`);
+    for (const m of messages) {
+      lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+    }
+    const flatPrompt = lines.join('\n\n');
+    const text = await _callCLITextOnly(provider, flatPrompt, cfg, opts);
+    return { text, inputTokens: 0, outputTokens: 0 };
+  }
+
+  throw new Error(`Provider "${provider}" no soportado en modo multi-turno`);
+}
+
+function _callCLITextOnly(provider, prompt, cfg, opts = {}) {
+  switch (provider) {
+    case 'gemini-cli': {
+      const model = cfg.geminiCliModel ?? 'gemini-2.5-flash';
+      return callGenericCLI('gemini', ['--model', model], prompt, opts);
+    }
+    case 'codex-cli':   return callCodexCLI(prompt, opts);
+    case 'copilot-cli': return callCopilotCLI(prompt, opts);
+    case 'aider-cli':   return callGenericCLI('aider', [], prompt, opts);
+    case 'cline-cli':   return callGenericCLI('cline', [], prompt, opts);
+    case 'goose-cli':   return callGenericCLI('goose', [], prompt, opts);
+    default:            return callCLI(prompt, opts);
+  }
 }
 
 // ── Subsystem CLI integration ─────────────────────────────────────────────────
@@ -1199,9 +1238,6 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
  */
 async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
   const provider = opts.provider || readConfig().aiProvider || 'cli';
-  if (!API_PROVIDERS.includes(provider)) {
-    throw new Error('Subsystem CLI solo disponible para providers API');
-  }
 
   const { execute } = require('./subsystem-cli');
 
@@ -1212,7 +1248,7 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     timeout:        opts.timeout        || 300_000,
     useBrowser:     opts.useBrowser     || false,
     callAIRaw: (messages, systemPrompt) =>
-      callAIChatWithTokens(messages, systemPrompt, { provider }),
+      callAIChatWithTokens(messages, systemPrompt, { provider, timeout: opts.timeout }),
   });
 
   return result;

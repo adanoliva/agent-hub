@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { req } from '../../api';
+import { req, API_BASE } from '../../api';
 import type { Agent, BrowserStatus, Orchestration, ExecutionLog, ExecutionResult, StepResult } from '../../types';
 import { useStore } from '../../store';
 
@@ -8,10 +8,15 @@ interface Props {
   onBack:        () => void;
 }
 
+interface StepInput {
+  stepIndex: number;
+  agentName: string;
+  userMessage: string;
+}
+
 function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
-  const s = (ms / 1000).toFixed(1);
-  return `${s}s`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function fmtTime(iso: string): string {
@@ -25,8 +30,15 @@ const STATUS_ICONS: Record<string, string> = {
 };
 
 export function ExecutionPanel({ orchestration, onBack }: Props) {
-  const addToast  = useStore(s => s.addToast);
-  const navigateTo = useStore(s => s.navigateTo);
+  const addToast           = useStore(s => s.addToast);
+  const navigateTo         = useStore(s => s.navigateTo);
+  const setIsOrchestrating = useStore(s => s.setIsOrchestrating);
+  const config             = useStore(s => s.config);
+
+  const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+  const provider   = config?.aiProvider ?? 'cli';
+  const isNativeCLI = CLI_NATIVE.includes(provider) ||
+    (config?.customProviders?.some(p => p.id === provider && p.type === 'cli') ?? false);
 
   // Temporal context values collected from user
   const [temporalValues, setTemporalValues] = useState<Record<string, string>>({});
@@ -36,8 +48,12 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
   const [logs,        setLogs]        = useState<ExecutionLog[]>([]);
   const [result,      setResult]      = useState<ExecutionResult | null>(null);
   const [executionId, setExecutionId] = useState<string | null>(null);
-  const [stepsDone,   setStepsDone]   = useState<StepResult[]>([]);
-  const [rollingBack, setRollingBack] = useState<number | null>(null);
+  const [stepsDone,      setStepsDone]      = useState<StepResult[]>([]);
+  const [stepInputs,     setStepInputs]     = useState<StepInput[]>([]);
+  const [rollingBack,    setRollingBack]     = useState<number | null>(null);
+  const [cancelling,     setCancelling]      = useState(false);
+  const [browserPause,   setBrowserPause]    = useState<{ stepIndex: number; agentName: string } | null>(null);
+  const [browserContinuing, setBrowserContinuing] = useState(false);
 
   // Agent objects — loaded to detect browser tools
   const [agentObjects, setAgentObjects] = useState<Agent[]>([]);
@@ -52,7 +68,6 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
 
   // Collect all temporal context fields: inputNode first, then inter-agent nodes
   const temporalFields = [
-    // inputNode fields — key prefix "input-"
     ...(orchestration.inputNode?.contextExtra?.temporal || []).map(t => ({
       nodeIndex:   -1,
       tempId:      t.id,
@@ -62,7 +77,6 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
       placeholder: t.placeholder,
       required:    t.required,
     })),
-    // Inter-agent node fields — key prefix "{nodeIdx}-"
     ...orchestration.nodes.flatMap((node, nodeIdx) =>
       (node.contextExtra?.temporal || []).map(t => ({
         nodeIndex:   nodeIdx,
@@ -76,8 +90,6 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     ),
   ];
 
-  // Load agents using the same sources as the orchestration editor palette,
-  // then filter to only those actually added to this orchestration.
   useEffect(() => {
     const names = new Set(orchestration.agents);
     const pid   = orchestration.projectId;
@@ -98,13 +110,11 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     });
   }, [orchestration.id, orchestration.agents.join(','), orchestration.projectId]);
 
-  // Whether any agent in this orchestration uses browser tools
   const needsBrowser = useMemo(
     () => agentObjects.some(a => a.tools?.some(t => t.startsWith('browser_'))),
     [agentObjects],
   );
 
-  // Load browser status only when needed
   useEffect(() => {
     if (!needsBrowser) return;
     req<BrowserStatus>('GET', '/browser/status').then(setBrowserStatus).catch(() => {});
@@ -114,41 +124,28 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     setBrowserBusy(true);
     setBrowserMsg('Iniciando navegador con CDP…');
     try {
-      // Try to launch a known browser with CDP enabled
       const status = browserStatus ?? await req<BrowserStatus>('GET', '/browser/status');
       if (status?.installed?.length) {
         const preferred = status.installed.find(b => b.engine === 'chromium') ?? status.installed[0];
         await req('POST', '/browser/launch', { browserKey: preferred.key, port: 9222 });
       }
       setBrowserMsg('Esperando que arranque el navegador…');
-      // Poll until connected (max 10s)
       let attempts = 0;
       const poll = async () => {
         attempts++;
         try {
           const s = await req<BrowserStatus>('GET', '/browser/status');
-          if (s.connected) {
-            setBrowserStatus(s);
-            setBrowserMsg('');
-            setBrowserBusy(false);
-            return;
-          }
+          if (s.connected) { setBrowserStatus(s); setBrowserMsg(''); setBrowserBusy(false); return; }
           if (s.cdpActive) {
-            // CDP is active, try to connect
             await req('POST', '/browser/connect', { port: 9222 }).catch(() => {});
             const s2 = await req<BrowserStatus>('GET', '/browser/status');
-            setBrowserStatus(s2);
-            setBrowserMsg('');
-            setBrowserBusy(false);
-            return;
+            setBrowserStatus(s2); setBrowserMsg(''); setBrowserBusy(false); return;
           }
         } catch {}
-        if (attempts < 5) {
-          setTimeout(poll, 2000);
-        } else {
+        if (attempts < 5) setTimeout(poll, 2000);
+        else {
           setBrowserMsg('No se pudo conectar. Abre Chrome/Edge con --remote-debugging-port=9222 y pulsa de nuevo.');
           setBrowserBusy(false);
-          // Still refresh status
           req<BrowserStatus>('GET', '/browser/status').then(setBrowserStatus).catch(() => {});
         }
       };
@@ -172,20 +169,24 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     setBrowserBusy(false);
   }
 
-  // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // Cleanup SSE on unmount
+  // Cleanup SSE on unmount and release orchestration lock
   useEffect(() => {
-    return () => { esRef.current?.close(); };
+    return () => {
+      esRef.current?.close();
+      setIsOrchestrating(false);
+    };
   }, []);
 
-  // Gate conditions for the Execute button
   const missingFields  = temporalFields.filter(f => f.required && !temporalValues[f.key]?.trim());
-  const browserBlocked = needsBrowser && !!browserStatus && !browserStatus.connected;
-  const browserLoading = needsBrowser && !browserStatus;
+  // Browser gate only applies when using an API provider (SubsystemCLI handles browser_ tools).
+  // Native CLIs manage their own tools — no CDP gate needed.
+  const browserGateActive = needsBrowser && !isNativeCLI;
+  const browserBlocked = browserGateActive && !!browserStatus && !browserStatus.connected;
+  const browserLoading = browserGateActive && !browserStatus;
   const canExecute     = missingFields.length === 0 && !browserBlocked && !browserLoading;
 
   const handleStart = async () => {
@@ -198,6 +199,9 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     setLogs([]);
     setResult(null);
     setStepsDone([]);
+    setStepInputs([]);
+    setCancelling(false);
+    setIsOrchestrating(true);
 
     try {
       const resp = await req<{ executionId: string; status: string }>(
@@ -206,14 +210,19 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
       );
       setExecutionId(resp.executionId);
 
-      const url = `/api/orchestrations/${orchestration.id}/execute/stream?executionId=${resp.executionId}`;
+      const url = `${API_BASE}/orchestrations/${orchestration.id}/execute/stream?executionId=${resp.executionId}`;
       const es  = new EventSource(url);
       esRef.current = es;
 
       es.addEventListener('message', e => {
+        try { setLogs(prev => [...prev, JSON.parse(e.data)]); } catch {}
+      });
+
+      es.addEventListener('step-input', e => {
         try {
-          const log: ExecutionLog = JSON.parse(e.data);
-          setLogs(prev => [...prev, log]);
+          const payload = JSON.parse(e.data);
+          const si: StepInput = payload.data || payload;
+          setStepInputs(prev => [...prev.filter(x => x.stepIndex !== si.stepIndex), si]);
         } catch {}
       });
 
@@ -225,28 +234,76 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
         } catch {}
       });
 
+      es.addEventListener('browser-required', e => {
+        try {
+          const payload = JSON.parse(e.data);
+          const data    = payload.data || payload;
+          setBrowserPause({ stepIndex: data.stepIndex, agentName: data.agentName });
+          // Refresh browser status so the UI shows current state
+          req<BrowserStatus>('GET', '/browser/status').then(setBrowserStatus).catch(() => {});
+        } catch {}
+      });
+
+      es.addEventListener('browser-continued', () => {
+        setBrowserPause(null);
+        setBrowserContinuing(false);
+      });
+
+      es.addEventListener('cancelled', () => {
+        setIsRunning(false);
+        setIsOrchestrating(false);
+        setCancelling(false);
+        setBrowserPause(null);
+        es.close();
+        addToast('Ejecución cancelada', 'warn');
+      });
+
       es.addEventListener('completed', e => {
         try {
           const payload = JSON.parse(e.data);
-          const execResult: ExecutionResult = payload.data || payload;
-          setResult(execResult);
+          setResult(payload.data || payload);
         } catch {}
         setIsRunning(false);
+        setIsOrchestrating(false);
         es.close();
       });
 
       es.addEventListener('error', () => {
-        // SSE connection error (not orchestration error — that comes as event)
-        if (isRunning) {
-          addToast('Conexión con el servidor interrumpida', 'err');
-          setIsRunning(false);
-        }
+        setIsRunning(false);
+        setIsOrchestrating(false);
+        addToast('Conexión con el servidor interrumpida', 'err');
         es.close();
       });
 
     } catch (e: any) {
       addToast(`Error al iniciar: ${e.message}`, 'err');
       setIsRunning(false);
+      setIsOrchestrating(false);
+    }
+  };
+
+  const handleBrowserContinue = async () => {
+    if (!executionId || browserContinuing) return;
+    setBrowserContinuing(true);
+    try {
+      await req('POST', `/orchestrations/${orchestration.id}/browser-continue?executionId=${executionId}`);
+    } catch (e: any) {
+      addToast(`Error al continuar: ${e.message}`, 'err');
+      setBrowserContinuing(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!executionId || cancelling) return;
+    setCancelling(true);
+    try {
+      await req('POST', `/orchestrations/${orchestration.id}/cancel?executionId=${executionId}`);
+    } catch {
+      // Even if the request fails, close the SSE
+      esRef.current?.close();
+      setIsRunning(false);
+      setIsOrchestrating(false);
+      setCancelling(false);
     }
   };
 
@@ -263,7 +320,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     }
   };
 
-  // ── PRE-EXECUTION FORM ────────────────────────────────────────────────────
+  // ── PRE-EXECUTION FORM ──────────────────────────────────────────────────────
 
   if (!isRunning && !result) {
     return (
@@ -349,7 +406,19 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             );
           })()}
 
-          {needsBrowser && (
+          {needsBrowser && isNativeCLI && (
+            <section className="orch-exec-section">
+              <div className="orch-exec-info-item" style={{ color: 'var(--amber)' }}>
+                <i className="ti ti-alert-triangle" />
+                <span>
+                  Este agente declara herramientas <code>browser_*</code>, pero el proveedor activo (<strong>{provider}</strong>) es un CLI nativo que gestiona su propio acceso al navegador.
+                  Las herramientas CDP de Agent Hub no estarán disponibles; el CLI usará sus propias capacidades.
+                </span>
+              </div>
+            </section>
+          )}
+
+          {needsBrowser && !isNativeCLI && (
             <section className="orch-exec-section orch-exec-browser">
               <h4><i className="ti ti-browser" /> Navegador CDP</h4>
               <div className="orch-exec-browser-row">
@@ -398,9 +467,9 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
               onClick={handleStart}
               disabled={!canExecute}
               title={
-                browserLoading         ? 'Comprobando estado del navegador…' :
-                browserBlocked         ? 'Conecta el navegador CDP antes de ejecutar' :
-                missingFields.length   ? `Completa los campos: ${missingFields.map(f => f.label || f.key).join(', ')}` :
+                browserLoading       ? 'Comprobando estado del navegador…' :
+                browserBlocked       ? 'Conecta el navegador CDP antes de ejecutar' :
+                missingFields.length ? `Completa los campos: ${missingFields.map(f => f.label || f.key).join(', ')}` :
                 ''
               }
             >
@@ -412,56 +481,171 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     );
   }
 
-  // ── RUNNING ───────────────────────────────────────────────────────────────
+  // ── RUNNING ─────────────────────────────────────────────────────────────────
 
   if (isRunning) {
     return (
       <div className="orch-exec-panel">
         <div className="orch-exec-running">
           <div className="orch-exec-running-header">
-            <i className="ti ti-loader-2 spin" />
-            <h3>Ejecutando: {orchestration.name}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <i className="ti ti-loader-2 spin" />
+              <h3>Ejecutando: {orchestration.name}</h3>
+            </div>
+            <button
+              className="btn danger sm"
+              onClick={handleCancel}
+              disabled={cancelling}
+              title="Cancela la ejecución al terminar el paso actual"
+            >
+              {cancelling
+                ? <><i className="ti ti-loader-2 spin" /> Cancelando…</>
+                : <><i className="ti ti-player-stop" /> Cancelar</>}
+            </button>
           </div>
 
-          {/* Steps progress */}
-          <div className="orch-steps-progress">
-            {orchestration.agents.map((agentName, i) => {
-              const done = stepsDone.find(s => s.stepIndex === i);
-              const isActive = !done && i === stepsDone.length;
-              return (
-                <div key={i} className={`orch-step-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
-                  <div className="orch-step-indicator">
-                    {done ? (
-                      <i className={`ti ${done.status === 'success' ? 'ti-check' : 'ti-x'}`} />
-                    ) : isActive ? (
-                      <i className="ti ti-loader-2 spin" />
+          {/* Browser authentication pause */}
+          {browserPause && (
+            <div className="orch-browser-pause">
+              <div className="orch-browser-pause-header">
+                <i className="ti ti-browser" style={{ fontSize: 22, color: 'var(--accent)' }} />
+                <div>
+                  <div className="orch-browser-pause-title">Autenticación requerida</div>
+                  <div className="orch-browser-pause-sub">
+                    Paso {browserPause.stepIndex + 1}: <strong>{browserPause.agentName}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="orch-browser-pause-body">
+                <p>El navegador ha sido abierto. Navega a la URL que necesites, inicia sesión (incluido MFA si es necesario) y pulsa <strong>Continuar</strong> cuando estés listo.</p>
+
+                {browserStatus && (
+                  <div className="orch-browser-pause-status">
+                    {browserStatus.connected ? (
+                      <span className="badge green"><i className="ti ti-circle-check" />Navegador conectado · puerto {browserStatus.cdpPort}</span>
                     ) : (
-                      <span>{i + 1}</span>
+                      <span className="badge amber"><i className="ti ti-alert-triangle" />Navegador no conectado</span>
+                    )}
+                    {browserStatus.tabs?.length > 0 && (
+                      <div className="orch-browser-tabs">
+                        {browserStatus.tabs.map((t, i) => (
+                          <div key={i} className="orch-browser-tab">
+                            <i className="ti ti-browser" />
+                            <span className="orch-browser-tab-title">{t.title || t.url}</span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  <span className="orch-step-name">{agentName}</span>
-                  {done && <span className="orch-step-dur">{fmtDuration(done.duration)}</span>}
+                )}
+              </div>
+
+              <div className="orch-browser-pause-actions">
+                <button className="btn ghost sm" onClick={handleCancel} disabled={cancelling}>
+                  <i className="ti ti-x" /> Cancelar
+                </button>
+                <button
+                  className="btn primary"
+                  onClick={handleBrowserContinue}
+                  disabled={browserContinuing}
+                >
+                  {browserContinuing
+                    ? <><i className="ti ti-loader-2 spin" /> Continuando…</>
+                    : <><i className="ti ti-player-play" /> Continuar ejecución</>}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step-by-step data flow */}
+          <div className="orch-steps-flow">
+            {orchestration.agents.map((agentName, i) => {
+              const done    = stepsDone.find(s => s.stepIndex === i);
+              const input   = stepInputs.find(s => s.stepIndex === i);
+              const isActive = !done && i === stepsDone.length;
+              return (
+                <div key={i} className={`orch-step-flow-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
+                  <div className="orch-step-flow-head">
+                    <div className="orch-step-indicator">
+                      {done ? (
+                        <i className={`ti ${done.status === 'success' ? 'ti-check' : 'ti-x'}`} />
+                      ) : isActive ? (
+                        <i className="ti ti-loader-2 spin" />
+                      ) : (
+                        <span>{i + 1}</span>
+                      )}
+                    </div>
+                    <span className="orch-step-name">{agentName}</span>
+                    {done && <span className="orch-step-dur">{fmtDuration(done.duration)}</span>}
+                  </div>
+
+                  {/* Input the agent received */}
+                  {input && (
+                    <details className="orch-step-data-section">
+                      <summary>
+                        <i className="ti ti-arrow-right" style={{ color: 'var(--blue)' }} />
+                        Recibe
+                      </summary>
+                      <pre className="orch-step-data-pre">{input.userMessage}</pre>
+                    </details>
+                  )}
+
+                  {/* Handoff / output the agent produced */}
+                  {done?.output?.handoff && (
+                    <div className="orch-step-data-section orch-handoff-box">
+                      <div className="orch-handoff-label">
+                        <i className="ti ti-arrow-right-circle" style={{ color: 'var(--green)' }} />
+                        Entrega al siguiente
+                      </div>
+                      <div className="orch-handoff-done">{done.output.handoff.done}</div>
+                      {done.output.handoff.next && (
+                        <div className="orch-handoff-next">
+                          <i className="ti ti-message" /> {done.output.handoff.next}
+                        </div>
+                      )}
+                      {done.output.handoff.issues?.length > 0 && (
+                        <div className="orch-handoff-issues">
+                          {done.output.handoff.issues.map((iss: string, j: number) => (
+                            <span key={j}><i className="ti ti-alert-triangle" /> {iss}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {done?.status === 'error' && done.error && (
+                    <div className="orch-step-data-section orch-step-error-inline">
+                      <i className="ti ti-alert-circle" /> {done.error.message}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
 
-          {/* Live logs */}
-          <div className="orch-logs">
-            {logs.map((log, i) => (
-              <div key={i} className={`orch-log-line level-${log.level}`}>
-                <span className="orch-log-time">{fmtTime(log.timestamp)}</span>
-                <span className="orch-log-msg">{log.message}</span>
-              </div>
-            ))}
-            <div ref={logsEndRef} />
-          </div>
+          {/* Live logs (collapsed by default) */}
+          <details className="orch-logs-wrap">
+            <summary className="orch-logs-summary">
+              <i className="ti ti-terminal" /> Logs en vivo ({logs.length})
+            </summary>
+            <div className="orch-logs">
+              {logs.map((log, i) => (
+                <div key={i} className={`orch-log-line level-${log.level}`}>
+                  <span className="orch-log-time">{fmtTime(log.timestamp)}</span>
+                  <span className="orch-log-msg">{log.message}</span>
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </div>
+          </details>
         </div>
       </div>
     );
   }
 
-  // ── RESULT ────────────────────────────────────────────────────────────────
+  // ── RESULT ──────────────────────────────────────────────────────────────────
 
   if (result) {
     const statusIcon = STATUS_ICONS[result.status] || 'ti-help';
@@ -469,7 +653,6 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     return (
       <div className="orch-exec-panel">
         <div className="orch-exec-result">
-          {/* Result header */}
           <div className={`orch-result-header status-${result.status}`}>
             <i className={`ti ${statusIcon}`} />
             <div>
@@ -482,15 +665,12 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             </div>
           </div>
 
-          {/* Stats */}
           <div className="orch-result-stats">
             <div className="orch-stat">
-              <i className="ti ti-clock" />
-              <span>{fmtDuration(result.duration)}</span>
+              <i className="ti ti-clock" /><span>{fmtDuration(result.duration)}</span>
             </div>
             <div className="orch-stat">
-              <i className="ti ti-file-diff" />
-              <span>{result.summary.filesModified} archivos</span>
+              <i className="ti ti-file-diff" /><span>{result.summary.filesModified} archivos</span>
             </div>
             {(result.totalTokensUsed.input + result.totalTokensUsed.output) > 0 && (
               <div className="orch-stat">
@@ -500,28 +680,25 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             )}
             {result.estimatedCost > 0 && (
               <div className="orch-stat orch-stat-cost">
-                <i className="ti ti-receipt" />
-                <span>~${result.estimatedCost.toFixed(4)}</span>
+                <i className="ti ti-receipt" /><span>~${result.estimatedCost.toFixed(4)}</span>
               </div>
             )}
           </div>
 
-          {/* Changed files */}
           {result.changes.length > 0 && (
             <section className="orch-result-section">
               <h4><i className="ti ti-files" /> Archivos modificados ({result.changes.length})</h4>
               <div className="orch-changes-list">
                 {result.changes.map((c, i) => (
                   <div key={i} className="orch-change-item">
-                    <i className="ti ti-file" />
-                    <span>{c.path}</span>
+                    <i className="ti ti-file" /><span>{c.path}</span>
                   </div>
                 ))}
               </div>
             </section>
           )}
 
-          {/* Steps detail */}
+          {/* Steps detail with full data flow */}
           <section className="orch-result-section">
             <h4><i className="ti ti-list-details" /> Resultados por paso</h4>
             {result.results.map((step, i) => (
@@ -544,7 +721,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
                       </span>
                     )}
                   </div>
-                  {step.error?.recoverable && (
+                  {step.backupPath && (
                     <button
                       className="btn ghost sm"
                       disabled={rollingBack === step.stepIndex}
@@ -552,7 +729,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
                     >
                       {rollingBack === step.stepIndex
                         ? <><i className="ti ti-loader-2 spin" /> Deshaciendo...</>
-                        : <><i className="ti ti-history" /> Deshacer paso</>}
+                        : <><i className="ti ti-history" /> Deshacer</>}
                     </button>
                   )}
                 </div>
@@ -560,6 +737,40 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
                 {step.error && (
                   <div className="orch-step-error">
                     <i className="ti ti-alert-circle" /> {step.error.message}
+                  </div>
+                )}
+
+                {/* Input the agent received */}
+                {step.input?.userMessage && (
+                  <details className="orch-step-details">
+                    <summary>
+                      <i className="ti ti-arrow-right" style={{ color: 'var(--blue)', marginRight: 4 }} />
+                      Entrada recibida
+                    </summary>
+                    <pre className="orch-step-data-pre">{step.input.userMessage.slice(0, 3000)}</pre>
+                  </details>
+                )}
+
+                {/* Handoff produced */}
+                {step.output?.handoff && (
+                  <div className="orch-handoff-box">
+                    <div className="orch-handoff-label">
+                      <i className="ti ti-arrow-right-circle" style={{ color: 'var(--green)' }} />
+                      Entrega al siguiente agente
+                    </div>
+                    <div className="orch-handoff-done">{step.output.handoff.done}</div>
+                    {step.output.handoff.next && (
+                      <div className="orch-handoff-next">
+                        <i className="ti ti-message" /> {step.output.handoff.next}
+                      </div>
+                    )}
+                    {step.output.handoff.changed?.length > 0 && (
+                      <div className="orch-handoff-changed">
+                        {step.output.handoff.changed.map((f: string, j: number) => (
+                          <span key={j} className="orch-file-chip"><i className="ti ti-file" />{f}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -576,15 +787,14 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
 
                 {step.output.response && (
                   <details className="orch-step-details">
-                    <summary>Respuesta del agente</summary>
-                    <div className="orch-step-response">{step.output.response.slice(0, 2000)}</div>
+                    <summary>Respuesta completa del agente</summary>
+                    <div className="orch-step-response">{step.output.response.slice(0, 3000)}</div>
                   </details>
                 )}
               </div>
             ))}
           </section>
 
-          {/* Logs */}
           <section className="orch-result-section">
             <details>
               <summary className="orch-logs-summary"><i className="ti ti-terminal" /> Ver logs ({logs.length})</summary>
@@ -599,12 +809,11 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             </details>
           </section>
 
-          {/* Actions */}
           <div className="orch-exec-actions">
             <button className="btn ghost" onClick={onBack}>
               <i className="ti ti-arrow-left" /> Volver
             </button>
-            <button className="btn" onClick={() => { setResult(null); setLogs([]); setStepsDone([]); }}>
+            <button className="btn" onClick={() => { setResult(null); setLogs([]); setStepsDone([]); setStepInputs([]); }}>
               <i className="ti ti-refresh" /> Ejecutar de nuevo
             </button>
             {result.status !== 'failed' && (

@@ -39,9 +39,11 @@ const {
   syncProject,
   syncAllProjects,
   getContextFile,
+  getContextFilePath,
   saveContextFile,
   getContextAuto,
 } = require('./projects');
+const { PROJECT_PROVIDERS } = require('./agent-adapters');
 
 const app  = express();
 const PORT = process.env.PORT || 3737;
@@ -71,7 +73,7 @@ const CONFIG_ALLOWED_FIELDS = [
   'mistralKey', 'mistralModel',
   'grokKey', 'grokModel',
   'geminiCliModel', 'codexCliModel',
-  'theme', 'closeAction',
+  'closeAction',
   'agentsDirectoryUrl', 'agentsDirectoryEnabled',
 ];
 
@@ -352,8 +354,7 @@ app.delete('/api/agents', (req, res) => {
 // ── Agents — project level (4) ────────────────────────────────────────────────
 
 function projectProviders(project) {
-  const p = project.aiProvider || 'claude';
-  return p === 'both' ? ['claude', 'github'] : [p];
+  return project.aiProviders || ['claude'];
 }
 
 app.get('/api/projects/:id/agents', (req, res) => {
@@ -400,32 +401,32 @@ app.get('/api/projects', (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents } = req.body;
+  const { name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(await createProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
+    res.json(await createProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }));
   } catch (e) {
     res.status(e.message.includes('already exists') ? 409 : 500).json({ error: e.message });
   }
 });
 
 app.post('/api/projects/import', async (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents } = req.body;
+  const { name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(await importProject({ name, categoryId, techId, projectPath, description, status, aiProvider, selectedAgents }));
+    res.json(await importProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }));
   } catch (e) {
     res.status(e.message.includes('not exist') ? 404 : 409).json({ error: e.message });
   }
 });
 
-app.put('/api/projects/:id', (req, res) => {
+app.put('/api/projects/:id', async (req, res) => {
   try {
-    res.json(updateProject(req.params.id, req.body));
+    res.json(await updateProject(req.params.id, req.body));
   } catch (e) {
     res.status(404).json({ error: e.message });
   }
@@ -481,21 +482,24 @@ app.post('/api/sync-all', async (req, res) => {
   }
 });
 
-// ── Context files (CLAUDE.md / copilot-instructions.md) ──────────────────────
+// ── Context files ─────────────────────────────────────────────────────────────
 
 app.get('/api/projects/:id/context', (req, res) => {
   const cfg     = readConfig();
   const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  
   if (req.query.type === 'auto') return res.json(getContextAuto(project, cfg.aiProvider));
-  const type = req.query.type || (project.aiProvider === 'github' ? 'github' : 'claude');
+  
+  const type = req.query.type || (project.aiProviders?.includes('github') ? 'github' : 'claude');
   res.json(getContextFile(project, type));
 });
 
 app.put('/api/projects/:id/context', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  const type     = req.body.type || (project.aiProvider === 'github' ? 'github' : 'claude');
+  
+  const type     = req.body.type || (project.aiProviders?.includes('github') ? 'github' : 'claude');
   const filePath = saveContextFile(project, type, req.body.content || '');
   res.json({ ok: true, filePath });
 });
@@ -506,6 +510,7 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const ctxType = req.query.type || 'claude';
+  const config  = PROJECT_PROVIDERS[ctxType] || PROJECT_PROVIDERS.claude;
 
   try {
     const safeRead = (filePath, maxLen = 3000) => {
@@ -607,11 +612,9 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 
     const cat  = (cfg.categories || []).find(c => c.id === project.categoryId);
     const tech = (cat?.technologies || []).find(t => t.id === project.techId);
-    const fileLabel = ctxType === 'github' ? 'copilot-instructions.md (GitHub Copilot)' : 'CLAUDE.md (Claude Code)';
+    const fileLabel = `${config.contextFile} (${config.label})`;
 
-    const contextFilePath = ctxType === 'github'
-      ? path.join(project.path, '.github', 'copilot-instructions.md')
-      : path.join(project.path, 'CLAUDE.md');
+    const contextFilePath = getContextFilePath(project, ctxType);
     const existingContext = safeRead(contextFilePath, 8000);
 
     const projectInfo = `**Nombre:** ${project.name}
@@ -707,59 +710,32 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
   for (const project of projects) {
     if (!project.pathExists) continue;
 
-    const needsClaude = project.aiProvider === 'claude' || project.aiProvider === 'both';
-    const needsGithub = project.aiProvider === 'github' || project.aiProvider === 'both';
+    const providers = project.aiProviders || ['claude'];
 
-    if (needsClaude) {
-      const claudeMdPath = path.join(project.path, 'CLAUDE.md');
-      if (!fs.existsSync(claudeMdPath)) {
+    for (const p of providers) {
+      const config = PROJECT_PROVIDERS[p];
+      if (!config) continue;
+      const filePath = getContextFilePath(project, p);
+      if (!fs.existsSync(filePath)) {
         notifications.push({
-          id:         `project-no-claude-md-${project.id}`,
+          id:         `project-no-ctx-${project.id}-${p}`,
           type:       'critical',
           target:     'project',
           targetName: project.name,
           targetId:   project.id,
-          message:    'Sin CLAUDE.md',
+          message:    `Sin ${config.contextFile}`,
           action:     'generate-context',
         });
       } else {
-        const content = fs.readFileSync(claudeMdPath, 'utf8').trim();
+        const content = fs.readFileSync(filePath, 'utf8').trim();
         if (content.length < MIN_CONTEXT_LENGTH) {
           notifications.push({
-            id:         `project-empty-claude-md-${project.id}`,
+            id:         `project-empty-ctx-${project.id}-${p}`,
             type:       'optimization',
             target:     'project',
             targetName: project.name,
             targetId:   project.id,
-            message:    'CLAUDE.md sin contexto del proyecto',
-            action:     'generate-context',
-          });
-        }
-      }
-    }
-
-    if (needsGithub) {
-      const githubInstrPath = path.join(project.path, '.github', 'copilot-instructions.md');
-      if (!fs.existsSync(githubInstrPath)) {
-        notifications.push({
-          id:         `project-no-github-instr-${project.id}`,
-          type:       'critical',
-          target:     'project',
-          targetName: project.name,
-          targetId:   project.id,
-          message:    'Sin copilot-instructions.md',
-          action:     'generate-context',
-        });
-      } else {
-        const content = fs.readFileSync(githubInstrPath, 'utf8').trim();
-        if (content.length < MIN_CONTEXT_LENGTH) {
-          notifications.push({
-            id:         `project-empty-github-instr-${project.id}`,
-            type:       'optimization',
-            target:     'project',
-            targetName: project.name,
-            targetId:   project.id,
-            message:    'copilot-instructions.md sin contexto del proyecto',
+            message:    `${config.contextFile} sin contexto`,
             action:     'generate-context',
           });
         }
@@ -892,9 +868,7 @@ function buildProjectHealth(projects) {
 
   const health = projects.map((project) => {
     const issues = [];
-    const providers = project.aiProvider === 'both'
-      ? ['claude', 'github']
-      : [project.aiProvider || 'claude'];
+    const providers = project.aiProviders || ['claude'];
 
     if (!project.pathExists) {
       issues.push('Ruta del proyecto no encontrada');
@@ -907,18 +881,18 @@ function buildProjectHealth(projects) {
     let contextState = 'ok';
     if (project.pathExists) {
       for (const p of providers) {
-        const filePath = p === 'github'
-          ? path.join(project.path, '.github', 'copilot-instructions.md')
-          : path.join(project.path, 'CLAUDE.md');
+        const config = PROJECT_PROVIDERS[p];
+        if (!config) continue;
+        const filePath = getContextFilePath(project, p);
         if (!fs.existsSync(filePath)) {
           contextState = 'missing';
-          issues.push(`${p === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md'} ausente`);
+          issues.push(`${config.contextFile} ausente`);
           continue;
         }
         const content = fs.readFileSync(filePath, 'utf8').trim();
         if (content.length < 80 && contextState !== 'missing') {
           contextState = 'thin';
-          issues.push(`${p === 'github' ? 'copilot-instructions.md' : 'CLAUDE.md'} con poco contexto`);
+          issues.push(`${config.contextFile} con poco contexto`);
         }
       }
     }
@@ -1328,11 +1302,12 @@ async function getProjectSuggestionsImpl(projectId, force = false, alreadySugges
     if (cached) return cached.suggestions;
   }
 
-  const provider = project.aiProvider === 'github' ? 'github' : 'claude';
-  const ctx      = getContextFile(project, provider);
-  const cat      = (cfg.categories || []).find(c => c.id === project.categoryId);
-  const tech     = (cat?.technologies || []).find(t => t.id === project.techId);
-  const existing    = listProjectAgents(project.path, [provider]).map(a => a.name);
+  const providers = project.aiProviders || ['claude'];
+  const provider  = providers.includes('github') ? 'github' : providers[0];
+  const ctx       = getContextFile(project, provider);
+  const cat       = (cfg.categories || []).find(c => c.id === project.categoryId);
+  const tech      = (cat?.technologies || []).find(t => t.id === project.techId);
+  const existing    = listProjectAgents(project.path, providers).map(a => a.name);
   const allExcluded = [...new Set([...existing, ...alreadySuggested])];
 
   const suggestions = await generateProjectSuggestions({
@@ -1548,7 +1523,8 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
   const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  const provider = project.aiProvider || cfg.aiProvider || 'cli';
+  const providers = project.aiProviders || ['claude'];
+  const provider  = providers.includes('github') ? 'github' : providers[0];
   if (provider === 'cli') {
     return res.status(400).json({ error: 'Subsystem CLI is only for api and github providers. Use the CLI provider natively.' });
   }
@@ -1716,10 +1692,18 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
 
   // Replay existing logs
   for (const log of executor.logs) send('message', log);
+  // Replay pending browser-required pause if client connected after it was emitted
+  if (executor._pendingBrowserRequired) {
+    send('browser-required', { type: 'browser-required', data: executor._pendingBrowserRequired });
+  }
 
-  const onLog       = (log)    => send('message', log);
-  const onStepDone  = (result) => send('step-done', { type: 'step-done', data: result });
-  const onCompleted = (result) => {
+  const onLog             = (log)    => send('message', log);
+  const onStepInput       = (data)   => send('step-input',       { type: 'step-input',       data });
+  const onStepDone        = (result) => send('step-done',        { type: 'step-done',        data: result });
+  const onBrowserRequired = (data)   => send('browser-required', { type: 'browser-required', data });
+  const onBrowserContinued= (data)   => send('browser-continued',{ type: 'browser-continued',data });
+  const onCancelled       = (data)   => { send('cancelled', { type: 'cancelled', data }); cleanup(); res.end(); };
+  const onCompleted  = (result) => {
     send('completed', { type: 'completed', data: result });
     cleanup();
     res.end();
@@ -1731,17 +1715,45 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
   };
 
   const cleanup = () => {
-    executor.off('log',       onLog);
-    executor.off('step-done', onStepDone);
-    executor.off('completed', onCompleted);
-    executor.off('error',     onError);
+    executor.off('log',              onLog);
+    executor.off('step-input',       onStepInput);
+    executor.off('step-done',        onStepDone);
+    executor.off('browser-required', onBrowserRequired);
+    executor.off('browser-continued',onBrowserContinued);
+    executor.off('cancelled',        onCancelled);
+    executor.off('completed',        onCompleted);
+    executor.off('error',            onError);
   };
 
-  executor.on('log',       onLog);
-  executor.on('step-done', onStepDone);
-  executor.on('completed', onCompleted);
-  executor.on('error',     onError);
+  executor.on('log',              onLog);
+  executor.on('step-input',       onStepInput);
+  executor.on('step-done',        onStepDone);
+  executor.on('browser-required', onBrowserRequired);
+  executor.on('browser-continued',onBrowserContinued);
+  executor.on('cancelled',        onCancelled);
+  executor.on('completed',        onCompleted);
+  executor.on('error',            onError);
   req.on('close', cleanup);
+});
+
+// POST /api/orchestrations/:id/cancel?executionId=...
+app.post('/api/orchestrations/:id/cancel', (req, res) => {
+  const { executionId } = req.query;
+  if (!executionId) return res.status(400).json({ error: 'executionId required' });
+  const executor = getExecutor(executionId);
+  if (!executor) return res.status(404).json({ error: 'Execution not found' });
+  executor.cancel();
+  res.json({ ok: true });
+});
+
+// POST /api/orchestrations/:id/browser-continue?executionId=...
+app.post('/api/orchestrations/:id/browser-continue', (req, res) => {
+  const { executionId } = req.query;
+  if (!executionId) return res.status(400).json({ error: 'executionId required' });
+  const executor = getExecutor(executionId);
+  if (!executor) return res.status(404).json({ error: 'Execution not found' });
+  executor.browserContinue();
+  res.json({ ok: true });
 });
 
 // GET /api/orchestrations/:id/executions

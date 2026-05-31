@@ -106,7 +106,7 @@ PROJECT:
 - Description: ${project.description || 'Not provided'}
 - Category: ${categoryName || project.categoryId || 'Unknown'}
 - Technology: ${techName || project.techId || 'Unknown'}
-- AI Provider: ${project.aiProvider || 'claude'}
+- AI Providers: ${(project.aiProviders || ['claude']).join(', ')}
 
 ${contextSection}
 

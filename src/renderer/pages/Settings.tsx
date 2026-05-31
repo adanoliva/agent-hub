@@ -235,13 +235,6 @@ export function Settings() {
     else window.open(url, '_blank');
   }
 
-  // ── theme ────────────────────────────────────────────────────────────────────
-
-  async function setTheme(theme: 'dark' | 'light') {
-    document.body.classList.toggle('light', theme === 'light');
-    await req('PUT', '/config', { theme });
-    await refreshConfig();
-  }
 
   // ── updates ──────────────────────────────────────────────────────────────────
 
@@ -434,7 +427,6 @@ export function Settings() {
   // ── render ───────────────────────────────────────────────────────────────────
 
   const cats     = config?.categories ?? [];
-  const theme    = config?.theme ?? 'dark';
   const isGitHub = pendingProvider === 'github' || pendingProvider === 'copilot-cli';
   const cliChecks = aiStatus?.cliChecks ?? {};
 
@@ -454,16 +446,6 @@ export function Settings() {
     <div className="view active" id="view-settings">
       <Topbar
         title="Ajustes"
-        actions={
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 10px', borderRadius: 7, background: 'var(--bg3)', border: '1px solid var(--border2)', color: 'var(--text2)' }}
-          >
-            <i className={`ti ${theme === 'dark' ? 'ti-sun' : 'ti-moon'}`} style={{ fontSize: 15 }} />
-            {theme === 'dark' ? 'Claro' : 'Oscuro'}
-          </button>
-        }
       />
 
       <div className="settings-view">

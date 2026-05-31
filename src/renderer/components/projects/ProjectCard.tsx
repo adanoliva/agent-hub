@@ -30,7 +30,7 @@ export function ProjectCard({ project: p, catName, techName, onOpen, onSync, onV
           : <span className="badge gray"><i className="ti ti-folder" />{catName}</span>
         }
         <ProjectStatusBadge status={p.status} />
-        <ProviderBadge provider={p.aiProvider ?? 'claude'} />
+        <ProviderBadge providers={p.aiProviders} />
         {!exists && <span className="badge coral"><i className="ti ti-map-pin-off" />ruta no encontrada</span>}
       </div>
       <div className="proj-card-actions" onClick={(e) => e.stopPropagation()}>
