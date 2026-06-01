@@ -56,7 +56,9 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
   const [browserContinuing, setBrowserContinuing] = useState(false);
 
   // Agent objects — loaded to detect browser tools
-  const [agentObjects, setAgentObjects] = useState<Agent[]>([]);
+  const [agentObjects,     setAgentObjects]     = useState<Agent[]>([]);
+  const [agentsLoading,    setAgentsLoading]    = useState(true);
+  const [agentsLoadError,  setAgentsLoadError]  = useState(false);
 
   // Browser CDP state
   const [browserStatus,  setBrowserStatus]  = useState<BrowserStatus | null>(null);
@@ -93,12 +95,14 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
   useEffect(() => {
     const names = new Set(orchestration.agents);
     const pid   = orchestration.projectId;
+    setAgentsLoading(true);
+    setAgentsLoadError(false);
     Promise.all([
       pid
-        ? req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(pid)}`).catch(() => [] as Agent[])
-        : req<Agent[]>('GET', '/agents/flat').catch(() => [] as Agent[]),
+        ? req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(pid)}`)
+        : req<Agent[]>('GET', '/agents/flat'),
       pid
-        ? req<Agent[]>('GET', `/projects/${encodeURIComponent(pid)}/agents`).catch(() => [] as Agent[])
+        ? req<Agent[]>('GET', `/projects/${encodeURIComponent(pid)}/agents`)
         : Promise.resolve([] as Agent[]),
     ]).then(([base, proj]) => {
       const seen = new Set<string>();
@@ -107,6 +111,10 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
         if (!seen.has(a.name)) { seen.add(a.name); merged.push(a); }
       }
       setAgentObjects(merged.filter(a => names.has(a.name)));
+    }).catch(() => {
+      setAgentsLoadError(true);
+    }).finally(() => {
+      setAgentsLoading(false);
     });
   }, [orchestration.id, orchestration.agents.join(','), orchestration.projectId]);
 
@@ -187,7 +195,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
   const browserGateActive = needsBrowser && !isNativeCLI;
   const browserBlocked = browserGateActive && !!browserStatus && !browserStatus.connected;
   const browserLoading = browserGateActive && !browserStatus;
-  const canExecute     = missingFields.length === 0 && !browserBlocked && !browserLoading;
+  const canExecute     = missingFields.length === 0 && !browserBlocked && !browserLoading && !agentsLoading;
 
   const handleStart = async () => {
     if (missingFields.length > 0) {
@@ -418,6 +426,13 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
             </section>
           )}
 
+          {agentsLoadError && (
+            <div className="orch-error-banner" style={{ marginBottom: 12 }}>
+              <i className="ti ti-alert-triangle" />
+              No se pudieron cargar los agentes. Si alguno requiere navegador CDP, conéctalo manualmente antes de ejecutar.
+            </div>
+          )}
+
           {needsBrowser && !isNativeCLI && (
             <section className="orch-exec-section orch-exec-browser">
               <h4><i className="ti ti-browser" /> Navegador CDP</h4>
@@ -467,9 +482,10 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
               onClick={handleStart}
               disabled={!canExecute}
               title={
-                browserLoading       ? 'Comprobando estado del navegador…' :
-                browserBlocked       ? 'Conecta el navegador CDP antes de ejecutar' :
-                missingFields.length ? `Completa los campos: ${missingFields.map(f => f.label || f.key).join(', ')}` :
+                agentsLoading          ? 'Cargando agentes…' :
+                browserLoading         ? 'Comprobando estado del navegador…' :
+                browserBlocked         ? 'Conecta el navegador CDP antes de ejecutar' :
+                missingFields.length   ? `Completa los campos: ${missingFields.map(f => f.label || f.key).join(', ')}` :
                 ''
               }
             >

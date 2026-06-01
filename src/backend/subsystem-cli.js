@@ -320,6 +320,9 @@ function buildToolResultsMessage(results) {
     if (tc.args.path)    lines.push(`  Archivo: ${tc.args.path}`);
     if (tc.args.command) lines.push(`  Comando: ${tc.args.command}`);
     if (tc.args.pattern) lines.push(`  Patrón: ${tc.args.pattern} en ${tc.args.file}`);
+    if (tc.args.url)     lines.push(`  URL: ${tc.args.url}`);
+    if (tc.args.action)  lines.push(`  Acción: ${tc.args.action}`);
+    if (tc.args.selector) lines.push(`  Selector: ${tc.args.selector}`);
 
     if (result.success) {
       lines.push('  ✓ EXITOSO');
@@ -353,6 +356,28 @@ function buildToolResultsMessage(results) {
           lines.push(`  ${m.file}:${m.lineNumber}: ${m.line}`);
         }
         if (result.data.count > 20) lines.push(`  ... y ${result.data.count - 20} más`);
+      }
+
+      if (tc.tool === 'browser_get' && result.data) {
+        lines.push(`  URL final: ${result.data.url}`);
+        lines.push(`  Título: ${result.data.title}`);
+        if (result.data.text) {
+          lines.push('  Contenido (texto):');
+          lines.push('  ' + result.data.text.split('\n').join('\n  '));
+        }
+        if (result.data.html) {
+          lines.push('  HTML:');
+          lines.push('  ' + result.data.html.split('\n').join('\n  '));
+        }
+      }
+
+      if (tc.tool === 'browser_action' && result.data) {
+        if (result.data.result) lines.push(`  Resultado: ${result.data.result}`);
+      }
+
+      if (tc.tool === 'browser_screenshot') {
+        // Screenshots produce binary PNG — not transmittable as text to the model.
+        lines.push('  Captura realizada (imagen binaria, no disponible como texto).');
       }
     } else {
       lines.push('  ✗ ERROR');

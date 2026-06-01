@@ -859,7 +859,7 @@ Cuando la IA no emite ningún bloque `TOOL:`, el loop termina y esa respuesta es
 |---|---|
 | `parseAgentResponse(text)` | Extrae bloques `TOOL:` del texto. Devuelve `{ text, toolCalls, hasClosed }` |
 | `executeToolCall(toolCall, projectPath)` | Traduce un tool call a una operación `api-fs`. Devuelve `OperationResult` |
-| `buildToolResultsMessage(results)` | Formatea los resultados de un turno en texto para el siguiente mensaje al modelo |
+| `buildToolResultsMessage(results)` | Formatea los resultados de un turno en texto para el siguiente mensaje al modelo. Incluye datos de `browser_get` (URL, título, texto/HTML) y `browser_action` (resultado). `browser_screenshot` indica que la captura se realizó pero no incluye el binario PNG (no transmisible a modelos de texto) |
 | `buildSubsystemSystemPrompt(agentSystemPrompt, projectContext?)` | Inyecta las instrucciones de herramientas al system prompt del agente |
 | `execute(prompt, agentSystemPrompt, config)` | Loop multi-turno completo. `config` requiere `projectPath` y `callAIRaw` |
 

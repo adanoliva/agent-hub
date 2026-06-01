@@ -61,7 +61,6 @@ function create(projectId, projectPath, data) {
       validateAfterEachStep: false,
       maxTurns:              10,
       timeout:               300000,
-      requiresBrowser:       false,
       ...(data.executionConfig || {}),
     },
     createdAt:      now,

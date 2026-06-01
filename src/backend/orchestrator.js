@@ -704,7 +704,7 @@ class OrchestrationExecutor extends EventEmitter {
             provider,
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
             timeout:        stepRemaining,
-            useBrowser:     orchestration.executionConfig?.requiresBrowser || agentUsesBrowser || false,
+            useBrowser:     agentUsesBrowser,
           });
 
           // MAX_TURNS_EXCEEDED / TIMEOUT_EXCEEDED with a partial response → treat as warning, not hard failure

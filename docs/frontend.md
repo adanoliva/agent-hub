@@ -594,9 +594,12 @@ El botón "Comenzar ejecución" se desactiva hasta que se cumplen todas estas co
 
 | Condición | Descripción |
 |---|---|
+| `!agentsLoading` | Los agentes de la orquestación ya se han cargado |
 | `missingFields.length === 0` | Todos los campos temporales requeridos están rellenos |
 | `!browserBlocked` | Si `needsBrowser`: el navegador está conectado por CDP |
 | `!browserLoading` | Si `needsBrowser`: el estado del navegador ya se ha cargado |
+
+Si la carga de agentes falla (`agentsLoadError`), se muestra un banner coral de aviso y el botón se desbloquea para permitir ejecutar igualmente — no se puede determinar si el navegador era necesario.
 
 El atributo `title` del botón explica el motivo de bloqueo al pasar el cursor.
 
