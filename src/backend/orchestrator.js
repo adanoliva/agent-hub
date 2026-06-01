@@ -554,6 +554,22 @@ class OrchestrationExecutor extends EventEmitter {
     if (ec.timeout  && ec.timeout  < 5000)        errors.push('El timeout mínimo es 5 segundos');
     if (ec.maxTurns && (ec.maxTurns < 1 || ec.maxTurns > 100)) errors.push('maxTurns debe estar entre 1 y 100');
 
+    // Browser check: if any agent uses browser tools, verify connectivity once here.
+    const cfg = readConfig();
+    const provider = cfg.aiProvider || 'cli';
+    if (!CLI_PROVIDERS.includes(provider)) {
+      const needsBrowser = (orchestration.agents || []).some(name => {
+        const a = allAgents.find(x => x.name === name);
+        return Array.isArray(a?.tools) && a.tools.some(t => t.startsWith('browser_'));
+      });
+      if (needsBrowser) {
+        const browserMod = require('./browser');
+        if (!browserMod.isConnected()) {
+          errors.push('El navegador CDP no está conectado. Conéctalo desde el panel de ejecución antes de validar.');
+        }
+      }
+    }
+
     return { valid: errors.length === 0, errors };
   }
 
@@ -593,6 +609,28 @@ class OrchestrationExecutor extends EventEmitter {
     const startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
+
+    // Compute once: context file and browser need — shared across all steps.
+    const contextFile = this._getContextFile();
+    const orchestrationUsesBrowser = !CLI_PROVIDERS.includes(provider) && (() => {
+      const allAgents = this._getAllAgents();
+      return orchestration.agents.some(name => {
+        const a = allAgents.find(x => x.name === name);
+        return Array.isArray(a?.tools) && a.tools.some(t => t.startsWith('browser_'));
+      });
+    })();
+
+    // If any agent needs the browser, verify connectivity now — before any step runs.
+    if (orchestrationUsesBrowser) {
+      const browserMod = require('./browser');
+      if (!browserMod.isConnected()) {
+        const msg = 'El navegador CDP no está conectado. Conéctalo desde el panel de ejecución antes de iniciar.';
+        this._log('error', msg);
+        this.emit('error', { message: msg });
+        return;
+      }
+      this._log('info', 'Navegador CDP conectado. Disponible para todos los pasos de esta orquestación.');
+    }
 
     for (let i = 0; i < orchestration.agents.length; i++) {
       const agentName = orchestration.agents[i];
@@ -697,14 +735,13 @@ class OrchestrationExecutor extends EventEmitter {
           outputTokens = rich.outputTokens;
           stepCostUSD  = rich.costUSD;
         } else {
-          const contextFile = this._getContextFile();
-          const cliResult   = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
+          const cliResult = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
             projectPath:    this.project.path,
             projectContext: contextFile,
             provider,
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
             timeout:        stepRemaining,
-            useBrowser:     agentUsesBrowser,
+            useBrowser:     orchestrationUsesBrowser,
           });
 
           // MAX_TURNS_EXCEEDED / TIMEOUT_EXCEEDED with a partial response → treat as warning, not hard failure
