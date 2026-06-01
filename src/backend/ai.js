@@ -1167,8 +1167,19 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     };
     if (systemPrompt) params.system = systemPrompt;
 
-    const result = await client.messages.create(params);
-    const usage  = result.usage || {};
+    // Apply timeout via AbortController (Anthropic SDK supports signal)
+    const timeoutMs    = opts.timeout || CALL_TIMEOUT_MS;
+    const controller   = new AbortController();
+    const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let result;
+    try {
+      result = await client.messages.create(params, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutTimer);
+    }
+
+    const usage        = result.usage || {};
     const inputTokens  = usage.input_tokens  || 0;
     const outputTokens = usage.output_tokens || 0;
     trackUsage({
@@ -1247,8 +1258,8 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     maxTurns:       opts.maxTurns       || 10,
     timeout:        opts.timeout        || 300_000,
     useBrowser:     opts.useBrowser     || false,
-    callAIRaw: (messages, systemPrompt) =>
-      callAIChatWithTokens(messages, systemPrompt, { provider, timeout: opts.timeout }),
+    callAIRaw: (messages, systemPrompt, callOpts = {}) =>
+      callAIChatWithTokens(messages, systemPrompt, { provider, timeout: callOpts.timeout }),
   });
 
   return result;

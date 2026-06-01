@@ -495,24 +495,30 @@ async function execute(prompt, agentSystemPrompt, config) {
   const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, { useBrowser });
   const messages      = [{ role: 'user', content: String(prompt) }];
 
-  const allToolCalls  = [];
-  const allResults    = [];
-  const allErrors     = [];
-  const allBackups    = [];
-  const filesModified = new Set();
-  const startTime     = Date.now();
-  let   totalInput    = 0;
-  let   totalOutput   = 0;
-  let   turn          = 0;
-  let   finalResponse = '';
+  const allToolCalls     = [];
+  const allResults       = [];
+  const allErrors        = [];
+  const allBackups       = [];
+  const filesModified    = new Set();
+  const startTime        = Date.now();
+  let   totalInput       = 0;
+  let   totalOutput      = 0;
+  let   turn             = 0;
+  let   finalResponse    = '';
+  let   completedNormally = false;
 
-  while (turn < maxTurns && (Date.now() - startTime) < timeout) {
+  while (turn < maxTurns) {
+    // Check remaining time before each turn
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= timeout) break;
+
+    const turnTimeout = Math.max(5_000, timeout - elapsed);
     turn++;
 
-    // 1. Call AI provider
+    // 1. Call AI provider with the remaining budget
     let aiResult;
     try {
-      aiResult = await callAIRaw(messages, systemPrompt);
+      aiResult = await callAIRaw(messages, systemPrompt, { timeout: turnTimeout });
     } catch (err) {
       return {
         success:       false,
@@ -536,8 +542,9 @@ async function execute(prompt, agentSystemPrompt, config) {
     // 2. Parse tool calls from AI response
     const parsed = parseAgentResponse(finalResponse);
 
-    // 3. No tool calls → AI is done
+    // 3. No tool calls → AI finished its work
     if (parsed.hasClosed || parsed.toolCalls.length === 0) {
+      completedNormally = true;
       break;
     }
 
@@ -568,12 +575,12 @@ async function execute(prompt, agentSystemPrompt, config) {
     messages.push({ role: 'user',      content: buildToolResultsMessage(turnResults) });
   }
 
-  const exceededTurns   = turn >= maxTurns;
-  const exceededTimeout = (Date.now() - startTime) >= timeout;
-  const timedOut        = exceededTurns || exceededTimeout;
+  // Only mark as exceeded-limit if the loop didn't finish normally
+  const exceededTurns   = !completedNormally && turn >= maxTurns;
+  const exceededTimeout = !completedNormally && (Date.now() - startTime) >= timeout;
 
   return {
-    success:       !timedOut,
+    success:       completedNormally,
     finalResponse,
     turns:         turn,
     toolCalls:     allToolCalls,
@@ -583,7 +590,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     duration:      Date.now() - startTime,
     filesModified: [...filesModified],
     backups:       allBackups,
-    ...(exceededTurns   && { error: 'MAX_TURNS_EXCEEDED' }),
+    ...(exceededTurns                    && { error: 'MAX_TURNS_EXCEEDED' }),
     ...(exceededTimeout && !exceededTurns && { error: 'TIMEOUT_EXCEEDED' }),
   };
 }

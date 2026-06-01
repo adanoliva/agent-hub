@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-05-30 · Versión: 1.9.4
+> Última actualización: 2026-06-01 · Versión: 1.9.4
 
 ---
 
@@ -679,6 +679,10 @@ Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación e
 
 Función interna utilizada por el Subsistema CLI. Igual que `callAIChat` pero devuelve un objeto `{ text, inputTokens, outputTokens }` en lugar del texto plano, permitiendo al loop multi-turno acumular el conteo de tokens por turno. Solo funciona con providers `api` y `github`; lanza error si se invoca con `cli`.
 
+Acepta `opts.timeout` para aplicar un deadline a la llamada individual:
+- **`api` (Anthropic SDK)**: se usa un `AbortController` que aborta tras `opts.timeout` ms. Valor por defecto: `CALL_TIMEOUT_MS` (60 s).
+- **Providers OpenAI-compat** (`github`, etc.): se pasa a `AbortSignal.timeout()` en el `fetch`.
+
 ### Subsistema CLI (`callAIWithSubsystemCLI`)
 
 Punto de entrada público que ejecuta el loop multi-turno completo sobre un proyecto. Delega en `subsystem-cli.execute()`.
@@ -864,22 +868,27 @@ Cuando la IA no emite ningún bloque `TOOL:`, el loop termina y esa respuesta es
 ```
 execute(prompt, systemPrompt, config)
   │
-  ├── while (turn < maxTurns && elapsed < timeout):
-  │   ├── callAIRaw(messages, systemPrompt)        ← un turno de la IA
+  ├── while (turn < maxTurns):
+  │   ├── calcular tiempo restante → si agotado, break (completedNormally=false)
+  │   ├── callAIRaw(messages, systemPrompt, { timeout: remaining })
   │   ├── parseAgentResponse()                    ← extraer tool calls
-  │   ├── si no hay tool calls → RETORNAR (done)
+  │   ├── si no hay tool calls → completedNormally=true, break
   │   ├── para cada tool call → executeToolCall()  ← operar en disco
   │   ├── buildToolResultsMessage()
   │   └── añadir respuesta IA + resultados a messages
-  └── RETORNAR (máx. turnos o timeout)
+  └── RETORNAR
+      success = completedNormally
+      error   = 'MAX_TURNS_EXCEEDED' | 'TIMEOUT_EXCEEDED' (solo si !completedNormally)
 ```
+
+**Garantía de consistencia**: `success: true` solo cuando el loop termina normalmente (sin tool calls pendientes). Si el agente termina su trabajo pero el tiempo total ya expiró, sigue siendo `success: true` — el timeout se evalúa solo al _inicio_ de cada turno, nunca invalida trabajo ya completado.
 
 **Parámetros de `config`:**
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
 | `projectPath` | `string` | Requerido. Ruta absoluta al proyecto |
-| `callAIRaw` | `Function` | Requerido. `async (messages, systemPrompt) → { text, inputTokens, outputTokens }` |
+| `callAIRaw` | `Function` | Requerido. `async (messages, systemPrompt, opts?) → { text, inputTokens, outputTokens }`. Recibe `opts.timeout` con el tiempo restante de la orquestación |
 | `projectContext` | `string` | Contenido del fichero de contexto del proyecto |
 | `maxTurns` | `number` | Máx. iteraciones (default: 10) |
 | `timeout` | `number` | Ms totales (default: 300 000) |
@@ -1064,10 +1073,16 @@ Comprueba:
 - El directorio del proyecto existe.
 - `executionConfig.timeout >= 5000`.
 
+### Timeout global de la orquestación
+
+El `timeout` de `executionConfig` se aplica a **toda la orquestación**, no por paso. Antes de cada agente el orquestador calcula `remaining = orchTimeout - elapsed` y lo pasa al paso. Si quedan menos de 5 s antes de empezar un paso, el bucle se corta sin marcar ese paso como error — el `status` final refleja los pasos completados.
+
+Ese `remaining` llega también hasta `callAIRaw` (y por tanto a `callAIChatWithTokens`) para que cada llamada individual al modelo respete el tiempo disponible, en lugar del timeout fijo de 60 s.
+
 ### Ejecución con CLI vs. API/GitHub
 
-- **CLI** (`aiProvider: 'cli'`): usa `callAI(prompt, systemPrompt, { extraArgs, cwd, timeout })` — proceso nativo de Claude Code.
-- **API / GitHub**: usa `callAIWithSubsystemCLI(prompt, systemPrompt, { projectPath, projectContext, provider, maxTurns, timeout })` — loop multi-turno con el Subsistema CLI.
+- **CLI** (`aiProvider: 'cli'`): usa `callAIRich(prompt, { cwd, timeout: remaining, extraArgs })` — proceso nativo de Claude Code; el timeout mata el proceso si supera el tiempo restante.
+- **API / GitHub**: usa `callAIWithSubsystemCLI(prompt, systemPrompt, { projectPath, projectContext, provider, maxTurns, timeout: remaining })` — loop multi-turno con el Subsistema CLI. Si el subsystem-cli agota sus turnos pero tiene respuesta parcial (`finalResponse` no vacío), el orquestador registra un warning y usa esa respuesta en vez de fallar el paso.
 
 ---
 

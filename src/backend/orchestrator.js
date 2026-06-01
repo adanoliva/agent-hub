@@ -574,6 +574,7 @@ class OrchestrationExecutor extends EventEmitter {
     this._log('info', `Orquestación iniciada: "${orchestration.name}"`);
     this._log('info', `Proveedor: ${provider} | Pasos: ${orchestration.agents.length}`);
 
+    const orchTimeout  = orchestration.executionConfig?.timeout || 300_000;
     const startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
@@ -584,7 +585,15 @@ class OrchestrationExecutor extends EventEmitter {
 
       if (this.cancelled) break;
 
-      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" ━━`);
+      // Check global orchestration timeout before starting each step
+      const elapsed   = Date.now() - startTime;
+      const remaining = orchTimeout - elapsed;
+      if (remaining <= 5_000) {
+        this._log('error', `Orquestación: timeout global alcanzado (${Math.round(elapsed / 1000)}s) antes del paso ${i + 1}`);
+        break;
+      }
+
+      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" (${Math.round(remaining / 1000)}s restantes) ━━`);
       this.emit('step-start', { stepIndex: i, agentName, totalSteps: orchestration.agents.length });
 
       let snapshot;
@@ -614,7 +623,9 @@ class OrchestrationExecutor extends EventEmitter {
         let stepCostUSD  = 0;
 
         const maxTurns = String(orchestration.executionConfig?.maxTurns || 10);
-        const timeout  = orchestration.executionConfig?.timeout || 300000;
+
+        // Calculate step timeout as whatever time is left for the whole orchestration
+        const stepRemaining = Math.max(10_000, orchTimeout - (Date.now() - startTime));
 
         const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
         const customProviders = readConfig().customProviders || [];
@@ -623,15 +634,11 @@ class OrchestrationExecutor extends EventEmitter {
         const agent = this._getAgent(agentName);
         const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
 
-        // All native CLIs (claude, gemini, codex…) use their own tool engine.
-        // They do not emit SubsystemCLI TOOL: text blocks, so routing them through
-        // SubsystemCLI produces empty tool execution with a fake-success handoff.
-        // SubsystemCLI browser_ tools only work with API providers (api, github, openai…).
+        // Native CLIs use their own tool engine — routing them through SubsystemCLI
+        // produces empty tool execution. SubsystemCLI browser_ tools only work with API providers.
         const useNativeCLI = CLI_NATIVE.includes(provider) || isCustomCLI;
 
         if (useNativeCLI) {
-          // If the agent uses browser tools, ensure CDP browser is open and pause
-          // for the user to authenticate before handing control to the CLI.
           let browserContext = '';
           if (agentUsesBrowser) {
             try {
@@ -668,7 +675,7 @@ class OrchestrationExecutor extends EventEmitter {
             ? ['--dangerously-skip-permissions', '--max-turns', maxTurns]
             : [];
           const rich = await callAIRich(fullPrompt, {
-            timeout,
+            timeout:   stepRemaining,
             extraArgs,
             cwd: this.project.path,
           });
@@ -683,13 +690,17 @@ class OrchestrationExecutor extends EventEmitter {
             projectContext: contextFile,
             provider,
             maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
-            timeout:        orchestration.executionConfig?.timeout   || 300000,
+            timeout:        stepRemaining,
             useBrowser:     orchestration.executionConfig?.requiresBrowser || agentUsesBrowser || false,
           });
 
-          // Surface internal failures as real errors so the catch block handles them
+          // MAX_TURNS_EXCEEDED / TIMEOUT_EXCEEDED with a partial response → treat as warning, not hard failure
           if (!cliResult.success && cliResult.error) {
-            throw new Error(cliResult.error);
+            if (cliResult.finalResponse?.trim()) {
+              this._log('warn', `Paso ${i + 1}: ${cliResult.error} — usando respuesta parcial disponible`);
+            } else {
+              throw new Error(cliResult.error);
+            }
           }
 
           response     = cliResult.finalResponse || cliResult.result || '';
