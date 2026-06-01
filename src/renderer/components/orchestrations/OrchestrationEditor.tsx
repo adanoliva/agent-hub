@@ -64,25 +64,43 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   const [agentSearch, setAgentSearch] = useState('');
 
 
-  // Load all agents for this project: applicable (global/section/tech) + project-level
+  // Load all agents for this project: applicable (global/section/tech) + project-level.
+  // After loading, purge from the canvas any agent that no longer exists on disk.
   useEffect(() => {
+    const applyAgents = (fetched: Agent[], currentAgents: string[], currentNodes: OrchestrateNode[]) => {
+      const seen = new Set<string>();
+      const merged: Agent[] = [];
+      for (const a of fetched) {
+        if (!seen.has(a.name)) { seen.add(a.name); merged.push(a); }
+      }
+      setAllAgents(merged);
+
+      // Remove from the canvas any agent that no longer exists on disk
+      const existingNames = new Set(merged.map(a => a.name));
+      const cleaned = currentAgents.filter(name => existingNames.has(name));
+      if (cleaned.length !== currentAgents.length) {
+        setAgents(cleaned);
+        setNodes(rebuildNodes(cleaned, currentNodes));
+      }
+    };
+
+    // Capture state snapshots at effect run time (mount / project change)
+    const snapshotAgents = agents;
+    const snapshotNodes  = nodes;
+
     if (!orchestration.projectId) {
       req<Agent[]>('GET', '/agents/flat')
-        .then(a => setAllAgents(a))
+        .then(a => applyAgents(a, snapshotAgents, snapshotNodes))
         .catch(() => {});
       return;
     }
     Promise.all([
       req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(orchestration.projectId)}`).catch(() => [] as Agent[]),
       req<Agent[]>('GET', `/projects/${encodeURIComponent(orchestration.projectId)}/agents`).catch(() => [] as Agent[]),
-    ]).then(([applicable, projectAgents]) => {
-      const seen = new Set<string>();
-      const merged: Agent[] = [];
-      for (const a of [...applicable, ...projectAgents]) {
-        if (!seen.has(a.name)) { seen.add(a.name); merged.push(a); }
-      }
-      setAllAgents(merged);
-    });
+    ]).then(([applicable, projectAgents]) =>
+      applyAgents([...applicable, ...projectAgents], snapshotAgents, snapshotNodes),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchestration.projectId]);
 
   // Rebuild nodes preserving config by position
