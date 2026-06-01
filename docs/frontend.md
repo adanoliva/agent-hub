@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-05-30 · Versión: 1.9.4
+> Última actualización: 2026-06-01 · Versión: 1.9.4
 
 ---
 
@@ -421,7 +421,7 @@ Aparece vía IPC `app:close-requested`. Responde con `window.api.closeResponse(a
 Vista de inicio (view = `'dashboard'`). Carga en paralelo `GET /api/dashboard` y `GET /api/ai/usage`. Se refresca automáticamente cada 30 s con `setInterval`.
 
 **Tarjetas:**
-- **Estado General** — contadores de agentes (global/section/tech) y proyectos (activos/pausados/archivados). Click → navega a la vista correspondiente.
+- **Estado General** — contadores de agentes (global/section/tech), proyectos (activos/pausados/archivados) y orquestaciones (OK/parcial/fallidas/sin ejecutar). Click → navega a la vista correspondiente. La fila de orquestaciones solo aparece si hay al menos una definida.
 - **Sincronización** — estado de sync de agentes y proyectos, estado del directorio externo. Botón "Sincronizar todo" → `POST /sync-all`. Nota "Salud en vivo: actualización cada 30s".
 - **Salud de Proyectos** — lista `projectHealth[]` con dot indicators (`healthy`=verde, `warning`=ámbar, `critical`=coral). Muestra hasta 6 proyectos con su primer issue.
 - **Oportunidades de Mejora** — lista de `DashboardNotification[]`. Las críticas se muestran en rojo, optimizaciones en ámbar, info en azul. Máx 5 visibles; botón "Ver todas" para expandir. Incluye sugerencias para **proyectos** (contexto ausente o delgado, sync pendiente) y **agentes** (sin herramientas, prompt no optimizado). Cada notificación tiene botones **Descartar** (permanente) y **Aplazar** (7 días por defecto).
@@ -518,6 +518,18 @@ El botón de eliminar usa `Modal` (no `confirm()` nativo) con mensaje de confirm
 Editor principal con layout de tres paneles:
 
 **Panel izquierdo — Paleta de agentes:** buscador + grid de `.orch-palette-card`. Cada card muestra icono cuadrado (`getAgentIcon`), nombre, descripción truncada y grip handle. Son **arrastrables** (`draggable`), iniciando un drag de tipo `palette`.
+
+**Carga de agentes para la paleta** — al montar (o al cambiar `orchestration.projectId`) se hace un `Promise.all` con dos fetches:
+1. `GET /agents/applicable?projectId=` — agentes global + section + tech del proyecto.
+2. `GET /projects/:id/agents` — agentes propios del proyecto (nivel 4, en `.claude/agents/` o `.github/agents/`).
+
+El merge resultante pone **primero los agentes del proyecto** (`projectAgents`), luego los aplicables globales que:
+- no están ya cubiertos por un agente del proyecto (mismo nombre), y
+- no están en `project.excludedAgents`.
+
+Esto garantiza que los agentes propios del proyecto (incluso los de nombre idéntico a un global) aparecen con `level: 'project'`, y los agentes excluidos del proyecto no ensucian la paleta.
+
+**Purga del canvas** — al cargar los agentes, si alguno que estaba en el canvas ya no existe en disco, se elimina del canvas automáticamente. La purga **solo** se ejecuta cuando ambas llamadas API (`applicable` y `projects/:id/agents`) devuelven correctamente. Si alguna falla, el canvas se preserva intacto para evitar pérdida de agentes válidos.
 
 **Panel central — Lienzo:** `NodeCanvas` envuelto en `.orch-canvas-panel`. Este panel recibe todos los eventos DnD directamente:
 - `onDragOver` — calcula la zona de drop a partir de `e.clientY - panelRect.top - 20 + panel.scrollTop`. Fórmula: `zone = clamp(round((yRel - PAD_TOP - SLOT_H/4) / SLOT_H), 0, n)` donde `n = agents.length`.

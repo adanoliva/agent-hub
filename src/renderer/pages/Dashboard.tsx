@@ -305,6 +305,33 @@ export function Dashboard() {
               </div>
             </button>
 
+            {data.orchestrations.total > 0 && (
+              <>
+                <div className="dash-sep" />
+                <button className="dash-stat-row" onClick={() => setView('orchestrations')}>
+                  <div className="dash-stat-main">
+                    <i className="ti ti-topology-ring-2" />
+                    <span className="dash-num">{data.orchestrations.total}</span>
+                    <span className="dash-label">Orquestaciones</span>
+                  </div>
+                  <div className="dash-subs">
+                    {data.orchestrations.success > 0 && (
+                      <span><i className="ti ti-circle-filled" style={{ color: 'var(--green)', fontSize: 7 }} /> OK: {data.orchestrations.success}</span>
+                    )}
+                    {data.orchestrations.partial > 0 && (
+                      <span><i className="ti ti-circle-filled" style={{ color: 'var(--amber)', fontSize: 7 }} /> Parcial: {data.orchestrations.partial}</span>
+                    )}
+                    {data.orchestrations.failed > 0 && (
+                      <span><i className="ti ti-circle-filled" style={{ color: 'var(--coral)', fontSize: 7 }} /> Fallidas: {data.orchestrations.failed}</span>
+                    )}
+                    {data.orchestrations.neverRun > 0 && (
+                      <span><i className="ti ti-circle-filled" style={{ color: 'var(--text3)', fontSize: 7 }} /> Sin ejecutar: {data.orchestrations.neverRun}</span>
+                    )}
+                  </div>
+                </button>
+              </>
+            )}
+
             {data.lastSyncAt && (
               <>
                 <div className="dash-sep" />

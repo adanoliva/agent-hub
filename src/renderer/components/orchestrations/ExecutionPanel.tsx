@@ -5,6 +5,7 @@ import { useStore } from '../../store';
 
 interface Props {
   orchestration: Orchestration;
+  projectId:     string;
   onBack:        () => void;
 }
 
@@ -29,7 +30,7 @@ const STATUS_ICONS: Record<string, string> = {
   failed:  'ti-circle-x',
 };
 
-export function ExecutionPanel({ orchestration, onBack }: Props) {
+export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const addToast           = useStore(s => s.addToast);
   const navigateTo         = useStore(s => s.navigateTo);
   const setIsOrchestrating = useStore(s => s.setIsOrchestrating);
@@ -94,7 +95,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
 
   useEffect(() => {
     const names = new Set(orchestration.agents);
-    const pid   = orchestration.projectId;
+    const pid   = projectId;
     setAgentsLoading(true);
     setAgentsLoadError(false);
     Promise.all([
@@ -105,9 +106,12 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
         ? req<Agent[]>('GET', `/projects/${encodeURIComponent(pid)}/agents`)
         : Promise.resolve([] as Agent[]),
     ]).then(([base, proj]) => {
+      // Project agents take precedence over same-named global agents.
+      const projNames = new Set(proj.map(a => a.name));
+      const filteredBase = base.filter(a => !projNames.has(a.name));
       const seen = new Set<string>();
       const merged: Agent[] = [];
-      for (const a of [...base, ...proj]) {
+      for (const a of [...proj, ...filteredBase]) {
         if (!seen.has(a.name)) { seen.add(a.name); merged.push(a); }
       }
       setAgentObjects(merged.filter(a => names.has(a.name)));
@@ -116,7 +120,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     }).finally(() => {
       setAgentsLoading(false);
     });
-  }, [orchestration.id, orchestration.agents.join(','), orchestration.projectId]);
+  }, [orchestration.id, orchestration.agents.join(','), projectId]);
 
   const needsBrowser = useMemo(
     () => agentObjects.some(a => a.tools?.some(t => t.startsWith('browser_'))),
@@ -214,7 +218,7 @@ export function ExecutionPanel({ orchestration, onBack }: Props) {
     try {
       const resp = await req<{ executionId: string; status: string }>(
         'POST', `/orchestrations/${orchestration.id}/execute`,
-        { projectId: orchestration.projectId, temporalContexts: temporalValues },
+        { projectId, temporalContexts: temporalValues },
       );
       setExecutionId(resp.executionId);
 

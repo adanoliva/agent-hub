@@ -66,7 +66,13 @@ function parseAgentFile(filePath) {
 
   const get = (k) => {
     const r = fm.match(new RegExp(`^${k}:\\s*([^\\n]+)$`, 'm'));
-    return r ? r[1].trim() : '';
+    if (!r) return '';
+    let val = r[1].trim();
+    if ((val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    return val;
   };
 
   let tools = [];

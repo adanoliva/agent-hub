@@ -310,6 +310,8 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | POST | `/api/dashboard/notifications/snooze` | Aplaza una notificación N días `{ id, days }` (1-30, por defecto 7) |
 | POST | `/api/dashboard/notifications/restore` | Restaura todas las notificaciones ocultas y aplazadas |
 
+`buildOrchestrationStats(projects)` recorre el directorio `.agent-hub/orchestrations/` de cada proyecto activo y agrega los contadores: `{ total, success, failed, partial, neverRun }`. Lee únicamente el campo `lastExecutionStatus` de cada JSON, sin tocar el historial de ejecuciones.
+
 `buildDashboardNotifications()` analiza el estado actual y genera `DashboardNotification[]`:
 - **Critical**: proyecto sin `CLAUDE.md` (si `needsClaude`) o sin `copilot-instructions.md` (si `needsGithub`)
 - **Optimization**: fichero de contexto existe pero tiene menos de 80 caracteres

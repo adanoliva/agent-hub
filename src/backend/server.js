@@ -644,6 +644,27 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
+function buildOrchestrationStats(projects) {
+  let total = 0, success = 0, failed = 0, partial = 0;
+  for (const project of projects) {
+    if (!project.path || project.pathExists === false) continue;
+    const orchDir = path.join(project.path, '.agent-hub', 'orchestrations');
+    if (!fs.existsSync(orchDir)) continue;
+    try {
+      for (const file of fs.readdirSync(orchDir).filter(f => f.endsWith('.json'))) {
+        try {
+          const orch = JSON.parse(fs.readFileSync(path.join(orchDir, file), 'utf8'));
+          total++;
+          if      (orch.lastExecutionStatus === 'success') success++;
+          else if (orch.lastExecutionStatus === 'failed')  failed++;
+          else if (orch.lastExecutionStatus === 'partial') partial++;
+        } catch { /* skip corrupt JSON */ }
+      }
+    } catch { /* skip unreadable dir */ }
+  }
+  return { total, success, failed, partial, neverRun: total - success - failed - partial };
+}
+
 function buildDashboardNotifications(allAgents, projects, categories = []) {
     console.log(`🔨 buildDashboardNotifications called with ${allAgents.length} agents`);
     const readmeAgent = allAgents.find(a => a.name === 'readme');
@@ -979,7 +1000,8 @@ app.get('/api/dashboard', (req, res) => {
       return acc;
     }, {});
 
-    const projectHealth = buildProjectHealth(projects);
+    const projectHealth    = buildProjectHealth(projects);
+    const orchestrationStats = buildOrchestrationStats(projects);
 
     res.json({
       agents: {
@@ -997,6 +1019,7 @@ app.get('/api/dashboard', (req, res) => {
         withPending: projects.filter(p => (p.pendingUpdates || 0) > 0).length,
         totalPending: projects.reduce((s, p) => s + (p.pendingUpdates || 0), 0),
       },
+      orchestrations: orchestrationStats,
       lastSyncAt,
       dirStatus: {
         enabled:          cfg.agentsDirectoryEnabled !== false,

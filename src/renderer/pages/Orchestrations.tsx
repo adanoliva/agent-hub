@@ -225,6 +225,7 @@ export function Orchestrations() {
         {selectedProjectId && subView === 'editor' && selectedOrch && (
           <OrchestrationEditor
             orchestration={selectedOrch}
+            projectId={selectedProjectId}
             onSave={handleSave}
             onBack={() => setSubView('list')}
             onExecute={() => setSubView('execution')}
@@ -234,6 +235,7 @@ export function Orchestrations() {
         {selectedProjectId && subView === 'execution' && selectedOrch && (
           <ExecutionPanel
             orchestration={selectedOrch}
+            projectId={selectedProjectId}
             onBack={() => setSubView('list')}
           />
         )}

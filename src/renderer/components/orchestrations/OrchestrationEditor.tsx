@@ -7,6 +7,7 @@ import { useStore } from '../../store';
 
 interface Props {
   orchestration: Orchestration;
+  projectId:     string;   // canonical project ID from the UI selector (may differ from orchestration.projectId if the project was reimported)
   onSave:        (data: Partial<Orchestration>) => Promise<void>;
   onBack:        () => void;
   onExecute:     () => void;
@@ -33,8 +34,9 @@ function makeNode(from: number, to: number): OrchestrateNode {
   };
 }
 
-export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }: Props) {
-  const addToast = useStore(s => s.addToast);
+export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, onExecute }: Props) {
+  const addToast  = useStore(s => s.addToast);
+  const projects  = useStore(s => s.projects);
 
   const [name,        setName]        = useState(orchestration.name);
   const [description, setDescription] = useState(orchestration.description);
@@ -67,7 +69,7 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
   // Load all agents for this project: applicable (global/section/tech) + project-level.
   // After loading, purge from the canvas any agent that no longer exists on disk.
   useEffect(() => {
-    const applyAgents = (fetched: Agent[], currentAgents: string[], currentNodes: OrchestrateNode[]) => {
+    const applyAgents = (fetched: Agent[], currentAgents: string[], currentNodes: OrchestrateNode[], canPurge: boolean) => {
       const seen = new Set<string>();
       const merged: Agent[] = [];
       for (const a of fetched) {
@@ -75,7 +77,9 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
       }
       setAllAgents(merged);
 
-      // Remove from the canvas any agent that no longer exists on disk
+      // Only purge canvas agents when we have a complete picture (both API calls succeeded).
+      // If either call failed we keep the canvas as-is to avoid losing valid agents.
+      if (!canPurge) return;
       const existingNames = new Set(merged.map(a => a.name));
       const cleaned = currentAgents.filter(name => existingNames.has(name));
       if (cleaned.length !== currentAgents.length) {
@@ -88,20 +92,30 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     const snapshotAgents = agents;
     const snapshotNodes  = nodes;
 
-    if (!orchestration.projectId) {
+    if (!projectId) {
       req<Agent[]>('GET', '/agents/flat')
-        .then(a => applyAgents(a, snapshotAgents, snapshotNodes))
+        .then(a => applyAgents(a, snapshotAgents, snapshotNodes, true))
         .catch(() => {});
       return;
     }
+    const project = projects.find(p => p.id === projectId);
+    const excluded = new Set(project?.excludedAgents ?? []);
     Promise.all([
-      req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(orchestration.projectId)}`).catch(() => [] as Agent[]),
-      req<Agent[]>('GET', `/projects/${encodeURIComponent(orchestration.projectId)}/agents`).catch(() => [] as Agent[]),
-    ]).then(([applicable, projectAgents]) =>
-      applyAgents([...applicable, ...projectAgents], snapshotAgents, snapshotNodes),
-    );
+      req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(projectId)}`).catch(() => null),
+      req<Agent[]>('GET', `/projects/${encodeURIComponent(projectId)}/agents`).catch(() => null),
+    ]).then(([applicable, projectAgents]) => {
+      // Both calls must succeed for the canvas purge to be trustworthy.
+      const bothOk = applicable !== null && projectAgents !== null;
+      const resolvedApplicable     = applicable     ?? [];
+      const resolvedProjectAgents  = projectAgents  ?? [];
+      // Project-level agents take precedence; applicable fills in global/section/tech
+      // agents not already covered by the project.
+      const projectNames = new Set(resolvedProjectAgents.map(a => a.name));
+      const filteredApplicable = resolvedApplicable.filter(a => !excluded.has(a.name) && !projectNames.has(a.name));
+      applyAgents([...resolvedProjectAgents, ...filteredApplicable], snapshotAgents, snapshotNodes, bothOk);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orchestration.projectId]);
+  }, [projectId]);
 
   // Rebuild nodes preserving config by position
   const rebuildNodes = (newAgents: string[], currentNodes: OrchestrateNode[]): OrchestrateNode[] => {
@@ -215,7 +229,8 @@ export function OrchestrationEditor({ orchestration, onSave, onBack, onExecute }
     if (!name.trim()) { addToast('El nombre es obligatorio', 'warn'); return; }
     setIsSaving(true);
     try {
-      await onSave({ name, description, agents, nodes, inputNode });
+      // Include projectId so stale IDs (e.g. from reimported projects) get corrected on save.
+      await onSave({ name, description, agents, nodes, inputNode, projectId });
       setErrors([]);
     } finally {
       setIsSaving(false);
