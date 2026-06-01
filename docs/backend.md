@@ -1052,6 +1052,25 @@ El formato del handoff es ~7-10x más compacto que pasar el prose completo del p
 
 Para agentes no-finales (`stepIndex < agents.length - 1`), se añade al final del system prompt el bloque devuelto por `prompts.agentHandoffInstruction()`. El último agente no recibe esta instrucción — su respuesta es la respuesta final de la orquestación.
 
+**Inyección del archivo de contexto del proyecto:**
+
+El contenido de `CLAUDE.md` o `copilot-instructions.md` se añade al system prompt del agente en estas condiciones:
+
+- **Paso 0 (primer agente):** siempre, salvo que `inputNode.dataFlow.projectContext === false`.
+- **Pasos 1+ (agentes siguientes):** solo si `dataFlow.projectContext === true` en el nodo que alimenta ese paso. Como el frontend no expone este campo en los nodos inter-agente, en la práctica nunca se inyecta para pasos 2 en adelante — el agente debe leerlo explícitamente desde su system prompt o configurar ficheros de contexto fijo en el nodo.
+
+**Lógica de selección del archivo (`_getContextFile`):**
+
+Usa `project.aiProvider` (formato de contexto del proyecto), no `cfg.aiProvider` (motor de IA de ejecución):
+
+| `project.aiProvider` | Archivo leído |
+|---|---|
+| `claude` | `CLAUDE.md` / `.claude/CLAUDE.md` |
+| `github` | `.github/copilot-instructions.md` |
+| `both` | `CLAUDE.md` primero; si no existe, `copilot-instructions.md` |
+
+Sin fallbacks cruzados: si el archivo del formato configurado no existe, devuelve cadena vacía.
+
 ### Snapshot y rollback
 
 Antes de ejecutar se crea un snapshot JSON en:

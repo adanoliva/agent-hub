@@ -268,15 +268,24 @@ class OrchestrationExecutor extends EventEmitter {
   }
 
   _getContextFile() {
-    const cfg      = readConfig();
-    const provider = cfg.aiProvider || 'cli';
-    const paths    = GITHUB_GROUP_PROVIDERS.has(provider)
+    // Use project.aiProvider to determine which context file format this project uses.
+    // cfg.aiProvider is the execution engine and is irrelevant here.
+    const projectProvider = this.project.aiProvider || 'claude';
+
+    const candidates = projectProvider === 'github'
       ? [path.join(this.project.path, '.github', 'copilot-instructions.md')]
-      : [
-          path.join(this.project.path, 'CLAUDE.md'),
-          path.join(this.project.path, '.claude', 'CLAUDE.md'),
-        ];
-    for (const fp of paths) {
+      : projectProvider === 'both'
+        ? [
+            path.join(this.project.path, 'CLAUDE.md'),
+            path.join(this.project.path, '.claude', 'CLAUDE.md'),
+            path.join(this.project.path, '.github', 'copilot-instructions.md'),
+          ]
+        : [
+            path.join(this.project.path, 'CLAUDE.md'),
+            path.join(this.project.path, '.claude', 'CLAUDE.md'),
+          ];
+
+    for (const fp of candidates) {
       if (fs.existsSync(fp)) {
         try { return fs.readFileSync(fp, 'utf8'); } catch {}
       }
