@@ -1523,8 +1523,8 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
   const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  const providers = project.aiProviders || ['claude'];
-  const provider  = providers.includes('github') ? 'github' : providers[0];
+  // Use the global execution provider, not project.aiProvider (which only controls file format).
+  const provider = cfg.aiProvider || 'cli';
   if (provider === 'cli') {
     return res.status(400).json({ error: 'Subsystem CLI is only for api and github providers. Use the CLI provider natively.' });
   }

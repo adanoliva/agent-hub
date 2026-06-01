@@ -13,8 +13,7 @@ const { EventEmitter } = require('events');
 
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
-const { getContextAuto } = require('./projects');
-const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost } = require('./ai');
+const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS } = require('./ai');
 const prompts = require('./prompts');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -269,13 +268,20 @@ class OrchestrationExecutor extends EventEmitter {
   }
 
   _getContextFile() {
-    const cfg = readConfig();
-    try {
-      const ctx = getContextAuto(this.project, cfg.aiProvider);
-      return ctx.content || '';
-    } catch {
-      return '';
+    const cfg      = readConfig();
+    const provider = cfg.aiProvider || 'cli';
+    const paths    = GITHUB_GROUP_PROVIDERS.has(provider)
+      ? [path.join(this.project.path, '.github', 'copilot-instructions.md')]
+      : [
+          path.join(this.project.path, 'CLAUDE.md'),
+          path.join(this.project.path, '.claude', 'CLAUDE.md'),
+        ];
+    for (const fp of paths) {
+      if (fs.existsSync(fp)) {
+        try { return fs.readFileSync(fp, 'utf8'); } catch {}
+      }
     }
+    return '';
   }
 
   // ── Prompt building ───────────────────────────────────────────────────────
@@ -622,8 +628,6 @@ class OrchestrationExecutor extends EventEmitter {
         let outputTokens = 0;
         let stepCostUSD  = 0;
 
-        const maxTurns = String(orchestration.executionConfig?.maxTurns || 10);
-
         // Calculate step timeout as whatever time is left for the whole orchestration
         const stepRemaining = Math.max(10_000, orchTimeout - (Date.now() - startTime));
 
@@ -863,4 +867,7 @@ module.exports = {
   OrchestrationExecutor,
   registerExecutor,
   getExecutor,
+  // Exported for testing
+  extractHandoff,
+  stripHandoff,
 };

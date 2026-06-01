@@ -49,7 +49,14 @@
       "Bash(del \"c:\\\\Users\\\\folivaba\\\\Downloads\\\\cdm\\\\agent-hub\\\\src\\\\renderer\\\\components\\\\agents\\\\AgentExecutePanel.tsx\")",
       "Bash(powershell *)",
       "Bash(ls C:/tmp/wizard-shots/ 2>/dev/null && echo \"shots exist\" || echo \"no shots dir\")",
-      "Read(//c/tmp/**)"
+      "Read(//c/tmp/**)",
+      "Bash(sed -n '88,100p' src/backend/ai.js)",
+      "Bash(sed -n '13,25p' src/backend/orchestrator.js)",
+      "Bash(sed -n '272,305p' src/backend/orchestrator.js)",
+      "Bash(sed -n '642,655p' src/backend/orchestrator.js)",
+      "Bash(sed -n '20,35p' src/backend/projects.js)",
+      "Bash(sed -n '644,660p' src/backend/projects.js)",
+      "Bash(sed -n '1522,1540p' src/backend/server.js)"
     ]
   }
 }

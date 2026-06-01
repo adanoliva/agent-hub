@@ -88,8 +88,9 @@ function calcAnthropicCost(model, inputTokens, outputTokens) {
 
 // ── Provider detection ────────────────────────────────────────────────────────
 
-const CLI_PROVIDERS = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
-const API_PROVIDERS = ['api', 'openai', 'github', 'gemini-api', 'mistral', 'grok', 'deepseek', 'groq', 'openrouter', 'perplexity'];
+const CLI_PROVIDERS          = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+const API_PROVIDERS          = ['api', 'openai', 'github', 'gemini-api', 'mistral', 'grok', 'deepseek', 'groq', 'openrouter', 'perplexity'];
+const GITHUB_GROUP_PROVIDERS = new Set(['github', 'copilot-cli']);
 
 function whichBin(bin) {
   return new Promise((resolve) => {
@@ -1388,6 +1389,9 @@ async function testConnection() {
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
+  CLI_PROVIDERS,
+  API_PROVIDERS,
+  GITHUB_GROUP_PROVIDERS,
   callAI,
   callAIRich,
   calcAnthropicCost,
