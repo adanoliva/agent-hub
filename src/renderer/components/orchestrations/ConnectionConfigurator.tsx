@@ -27,17 +27,20 @@ function normalizeContextExtra(ce: ContextExtra): ContextExtra {
 export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode = false, onUpdate }: Props) {
   const [dataFlow,     setDataFlow]     = useState<DataFlow>(node.dataFlow);
   const [contextExtra, setContextExtra] = useState<ContextExtra>(() => normalizeContextExtra(node.contextExtra));
+  const [gateAfter,    setGateAfter]    = useState<boolean>(node.gateAfter ?? false);
   const [dirty, setDirty]              = useState(false);
 
   // Keep refs in sync so the cleanup effect can read latest values
   const dataFlowRef     = useRef(dataFlow);
   const contextExtraRef = useRef(contextExtra);
+  const gateAfterRef    = useRef(gateAfter);
   const dirtyRef        = useRef(dirty);
   const nodeRef         = useRef(node);
   const onUpdateRef     = useRef(onUpdate);
 
   useEffect(() => { dataFlowRef.current     = dataFlow;     }, [dataFlow]);
   useEffect(() => { contextExtraRef.current = contextExtra; }, [contextExtra]);
+  useEffect(() => { gateAfterRef.current    = gateAfter;    }, [gateAfter]);
   useEffect(() => { dirtyRef.current        = dirty;        }, [dirty]);
   useEffect(() => { nodeRef.current         = node;         }, [node]);
   useEffect(() => { onUpdateRef.current     = onUpdate;     }, [onUpdate]);
@@ -46,7 +49,7 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
   useEffect(() => {
     return () => {
       if (dirtyRef.current) {
-        onUpdateRef.current({ ...nodeRef.current, dataFlow: dataFlowRef.current, contextExtra: contextExtraRef.current });
+        onUpdateRef.current({ ...nodeRef.current, dataFlow: dataFlowRef.current, contextExtra: contextExtraRef.current, gateAfter: gateAfterRef.current });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,6 +58,7 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
   useEffect(() => {
     setDataFlow(node.dataFlow);
     setContextExtra(normalizeContextExtra(node.contextExtra));
+    setGateAfter(node.gateAfter ?? false);
     setDirty(false);
   }, [node.id]);
 
@@ -69,7 +73,7 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
   };
 
   const handleSave = () => {
-    onUpdate({ ...node, dataFlow, contextExtra });
+    onUpdate({ ...node, dataFlow, contextExtra, gateAfter });
     setDirty(false);
   };
 
@@ -206,6 +210,26 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
           <i className="ti ti-plus" /> Agregar campo
         </button>
       </section>
+
+      {/* Gate HITL — solo para conexiones inter-agente */}
+      {!isInputNode && (
+        <section className="orch-config-section">
+          <h4><i className="ti ti-user-check" /> Gate de revisión humana</h4>
+          <label className="orch-check-row">
+            <input
+              type="checkbox"
+              checked={gateAfter}
+              onChange={e => { setGateAfter(e.target.checked); setDirty(true); }}
+            />
+            <span>Pausar y esperar aprobación tras este paso</span>
+          </label>
+          {gateAfter && (
+            <p className="orch-gate-hint">
+              La orquestación se pausará después de completar este paso. El operador podrá aprobar, revisar o cancelar antes de continuar.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="orch-conn-apply">
         <button

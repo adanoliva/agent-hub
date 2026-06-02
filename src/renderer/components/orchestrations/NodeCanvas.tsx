@@ -18,6 +18,7 @@ interface Props {
 }
 
 export function getAgentIcon(name: string): string {
+  if (name.startsWith('__script:')) return 'ti-terminal-2';
   const n = name.toLowerCase();
   if (n.includes('test'))     return 'ti-flask';
   if (n.includes('refactor')) return 'ti-wand';
@@ -28,6 +29,10 @@ export function getAgentIcon(name: string): string {
   if (n.includes('debug'))    return 'ti-bug';
   if (n.includes('api'))      return 'ti-api';
   return 'ti-cpu';
+}
+
+function getScriptLabel(name: string): string {
+  return name.replace(/^__script:/, '').replace(/__$/, '');
 }
 
 function hasConfig(node: OrchestrateNode): boolean {
@@ -214,11 +219,13 @@ export function NodeCanvas({
 
       {/* ── Agent nodes ── */}
       {agents.map((agentName, i) => {
-        const model = agentModels[agentName] || '';
+        const model    = agentModels[agentName] || '';
+        const isScript = agentName.startsWith('__script:');
+        const label    = isScript ? getScriptLabel(agentName) : agentName;
         return (
           <div
             key={i}
-            className={`orch-node-agent${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
+            className={`orch-node-agent${isScript ? ' orch-node-script' : ''}${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
             draggable
             onDragStart={e => onNodeDragStart(i, e)}
             style={{
@@ -234,8 +241,11 @@ export function NodeCanvas({
             <div className="orch-node-index">{i + 1}</div>
             <div className="orch-node-icon"><i className={`ti ${getAgentIcon(agentName)}`} /></div>
             <div className="orch-node-info">
-              <div className="orch-node-name" title={agentName}>{agentName}</div>
-              {model && <span className={`orch-node-model model-${model}`}>{model}</span>}
+              <div className="orch-node-name" title={agentName}>{label}</div>
+              {isScript
+                ? <span className="orch-node-model model-script">script</span>
+                : model && <span className={`orch-node-model model-${model}`}>{model}</span>
+              }
             </div>
             <button
               className="btn ghost xs orch-node-remove"

@@ -1573,7 +1573,10 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
 // ── Orchestrations ────────────────────────────────────────────────────────────
 
 const workflows                         = require('./workflows');
-const { OrchestrationExecutor, registerExecutor, getExecutor } = require('./orchestrator');
+const { OrchestrationExecutor, registerExecutor, getExecutor, resolveGate } = require('./orchestrator');
+const scriptsRegistry                   = require('./scripts-registry');
+const skills                            = require('./skills');
+const opsLedger                         = require('./ops-ledger');
 
 /**
  * Finds the project that owns a given orchestration id by scanning all projects.
@@ -1819,6 +1822,121 @@ app.post('/api/orchestrations/:id/executions/:executionId/rollback', async (req,
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Skills endpoints ──────────────────────────────────────────────────────────
+
+// GET /api/skills/flat — todos los skills (para selector en AgentEditor)
+app.get('/api/skills/flat', (req, res) => {
+  try { res.json(skills.listAllSkills()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/skills?level=&categoryId=&techId= → Skill[]
+app.get('/api/skills', (req, res) => {
+  const { level = 'global', categoryId, techId } = req.query;
+  try { res.json(skills.listSkillsByLevel(level, categoryId, techId)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/skills — crea skill
+app.post('/api/skills', (req, res) => {
+  const { level = 'global', categoryId, techId, skill } = req.body;
+  if (!skill?.name) return res.status(400).json({ error: 'name requerido' });
+  try { skills.createSkill(level, categoryId, techId, skill); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/skills — actualiza skill
+app.put('/api/skills', (req, res) => {
+  const { level = 'global', categoryId, techId, skill } = req.body;
+  if (!skill?.name) return res.status(400).json({ error: 'name requerido' });
+  try { skills.updateSkill(level, categoryId, techId, skill); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/skills?level=&name=&categoryId=&techId=
+app.delete('/api/skills', (req, res) => {
+  const { level = 'global', name, categoryId, techId } = req.query;
+  if (!name) return res.status(400).json({ error: 'name requerido' });
+  try { skills.deleteSkill(level, categoryId, techId, name); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/scripts — lista los scripts determinísticos registrados
+app.get('/api/scripts', (req, res) => {
+  res.json(scriptsRegistry.listScripts());
+});
+
+// POST /api/orchestrations/:id/executions/:execId/resume — reanuda ejecución tras crash
+app.post('/api/orchestrations/:id/executions/:execId/resume', async (req, res) => {
+  const { projectId } = req.body;
+  if (!projectId) return res.status(400).json({ error: 'projectId requerido' });
+
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orquestación no encontrada' });
+
+  const execDir = workflows.findExecutionDir(req.params.execId, project.path);
+  if (!execDir) return res.status(404).json({ error: 'Ejecución no encontrada' });
+
+  const statePath = path.join(execDir, 'execution-state.json');
+  if (!fs.existsSync(statePath)) {
+    return res.status(404).json({ error: 'Estado de ejecución no encontrado (execution-state.json)' });
+  }
+
+  let savedState;
+  try { savedState = JSON.parse(fs.readFileSync(statePath, 'utf8')); }
+  catch { return res.status(500).json({ error: 'Error al leer el estado de ejecución' }); }
+
+  if (savedState.status === 'completed') {
+    return res.status(409).json({ error: 'La ejecución ya estaba completada' });
+  }
+
+  const orch = workflows.read(req.params.id, project.path);
+  if (!orch) return res.status(404).json({ error: 'Orquestación no encontrada' });
+
+  // Build temporal context values from saved state if needed
+  const executor = new OrchestrationExecutor(orch, project, {});
+  executor.execDir       = execDir;
+  executor._resumeFromStep = savedState.lastCompletedStep + 1;
+  executor._executionState = savedState;
+
+  registerExecutor(executor);
+  executor.execute().catch(e => console.error('Resume error:', e.message));
+
+  res.json({ executionId: executor.executionId, status: 'resumed' });
+});
+
+// GET /api/orchestrations/:id/ops?projectId= — lee ops-ledger
+app.get('/api/orchestrations/:id/ops', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orquestación no encontrada' });
+  try {
+    const ledger = opsLedger.readLedger(project.path, req.params.id);
+    res.json(ledger);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/orchestrations/:id/ops/:opId/revert?projectId= — marca op como revertida
+app.post('/api/orchestrations/:id/ops/:opId/revert', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orquestación no encontrada' });
+  try {
+    const op = opsLedger.markOpReverted(project.path, req.params.id, req.params.opId);
+    if (!op) return res.status(404).json({ error: 'Operación no encontrada o ya revertida' });
+    res.json({ ok: true, op });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/orchestrations/:id/executions/:execId/gate — resuelve gate HITL
+app.post('/api/orchestrations/:id/executions/:execId/gate', (req, res) => {
+  const { action, feedbackText, stepIndex } = req.body;
+  if (!action) return res.status(400).json({ error: 'action requerida' });
+  if (stepIndex === undefined || stepIndex === null) return res.status(400).json({ error: 'stepIndex requerido' });
+
+  const resolved = resolveGate(req.params.execId, Number(stepIndex), { action, feedbackText });
+  if (!resolved) return res.status(404).json({ error: 'Gate no encontrado o ya resuelto' });
+  res.json({ ok: true });
 });
 
 // ── Browser automation routes ──────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { req } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useStore } from '../../store';
 import { TOOL_GROUPS } from '../../constants/tools';
-import type { Agent, SelectedNode } from '../../types';
+import type { Agent, Skill, SelectedNode } from '../../types';
 
 interface Props {
   agent: Agent;
@@ -18,12 +18,13 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const toast    = useToast();
   const projects = useStore((s) => s.projects);
 
-  const [a,       setA]       = useState<Agent>({ ...initial });
-  const [lang,    setLang]    = useState<'es' | 'en'>('en');
-  const [aiDesc,  setAiDesc]  = useState('');
-  const [genBusy, setGenBusy] = useState(false);
-  const [optBusy, setOptBusy] = useState(false);
-  const [saveBusy,setSaveBusy]= useState(false);
+  const [a,        setA]        = useState<Agent>({ ...initial });
+  const [lang,     setLang]     = useState<'es' | 'en'>('en');
+  const [aiDesc,   setAiDesc]   = useState('');
+  const [genBusy,  setGenBusy]  = useState(false);
+  const [optBusy,  setOptBusy]  = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [allSkills, setAllSkills] = useState<Skill[]>([]);
 
   // Always-fresh ref — avoids stale closure in async save().
   const aRef = React.useRef<Agent>(a);
@@ -39,6 +40,10 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
       setA({ ...initial });
     }
   }, [initial, isNew]);
+
+  useEffect(() => {
+    req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
+  }, []);
 
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
 
@@ -213,6 +218,42 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
             })}
           </div>
         </div>
+
+        {/* Skills */}
+        {allSkills.length > 0 && (
+          <div className="field">
+            <label>Skills asociadas</label>
+            <div className="agent-skills-selector">
+              {(a.skills || []).map(skillName => (
+                <span key={skillName} className="tool-pill agent-skill-chip">
+                  <i className="ti ti-puzzle" />
+                  {skillName}
+                  <button
+                    className="agent-skill-remove"
+                    onClick={() => update({ skills: (a.skills || []).filter(s => s !== skillName) })}
+                    title="Quitar"
+                  >×</button>
+                </span>
+              ))}
+              <select
+                className="input sm agent-skill-add"
+                value=""
+                onChange={e => {
+                  if (!e.target.value) return;
+                  update({ skills: [...(a.skills || []), e.target.value] });
+                }}
+              >
+                <option value="">Añadir skill…</option>
+                {allSkills.filter(s => !(a.skills || []).includes(s.name)).map(s => (
+                  <option key={s.name} value={s.name}>{s.name}{s.description ? ` — ${s.description}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <p className="agent-hint">
+              Las skills inyectan conocimiento tecnológico en el system prompt. Mantén el prompt enfocado en la tarea; el contexto técnico va en skills.
+            </p>
+          </div>
+        )}
 
         {/* AI generate */}
         <div className="field">

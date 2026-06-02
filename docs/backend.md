@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-01 · Versión: 1.9.4
+> Última actualización: 2026-06-02 · Versión: 1.9.5
 
 ---
 
@@ -358,6 +358,16 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso. Emite eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error` |
 | GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones de una orquestación (requiere `?projectId=`) |
 | GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución específica |
+| POST | `/api/orchestrations/:id/executions/:execId/resume` | Reanuda una ejecución interrumpida desde el último paso completado |
+| POST | `/api/orchestrations/:id/executions/:execId/gate` | Resuelve un gate HITL: `{ action: 'approve' \| 'revise' \| 'cancel', feedbackText?, stepIndex }` |
+| GET | `/api/scripts` | Lista los scripts determinísticos disponibles (`scripts-registry.js`) |
+| GET | `/api/skills` | Lista skills por nivel |
+| POST | `/api/skills` | Crea skill |
+| PUT | `/api/skills` | Actualiza skill |
+| DELETE | `/api/skills` | Elimina skill |
+| GET | `/api/skills/flat` | Todos los skills (para selector en AgentEditor) |
+| GET | `/api/orchestrations/:id/ops` | Lee el ops-ledger de una orquestación |
+| POST | `/api/orchestrations/:id/ops/:opId/revert` | Marca una operación atómica como revertida |
 
 #### Subsistema CLI (API-FS)
 

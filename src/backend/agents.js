@@ -96,12 +96,18 @@ function parseAgentFile(filePath) {
 
   const rawModel = get('model');
 
+  const skillsRaw = get('skills');
+  const skillsParsed = skillsRaw
+    ? skillsRaw.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
   return {
     name:        get('name') || path.basename(filePath, '.md'),
     description: get('description'),
     tools,
     model:       shortModel(rawModel) || 'sonnet',
     optimized:   get('optimized') === 'true',
+    skills:      skillsParsed.length > 0 ? skillsParsed : undefined,
     system:      m[2].trim(),
     filePath,
   };
@@ -152,6 +158,9 @@ function serializeAgent(agent) {
     toolsBlock,
   ];
   if (agent.optimized) lines.push('optimized: true');
+  if (Array.isArray(agent.skills) && agent.skills.length > 0) {
+    lines.push(`skills: ${agent.skills.join(', ')}`);
+  }
   lines.push('---', '', agent.system || '', '');
 
   return lines.join('\n');

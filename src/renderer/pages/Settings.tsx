@@ -6,9 +6,9 @@ import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
-import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomAIProvider } from '../types';
+import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomAIProvider, Skill } from '../types';
 
-type Tab = 'general' | 'cats' | 'ext-agents';
+type Tab = 'general' | 'cats' | 'ext-agents' | 'skills';
 
 type CLICheck = { found: boolean; path: string | null };
 
@@ -451,9 +451,9 @@ export function Settings() {
       <div className="settings-view">
         {/* Tabs */}
         <div className="drawer-tabs" style={{ margin: '-32px -32px 24px', paddingLeft: 32 }}>
-          {(['general', 'cats', 'ext-agents'] as Tab[]).map((t) => (
+          {(['general', 'cats', 'ext-agents', 'skills'] as Tab[]).map((t) => (
             <div key={t} className={`drawer-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : 'Directorio de Agentes'}
+              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : t === 'ext-agents' ? 'Directorio de Agentes' : 'Skills'}
             </div>
           ))}
         </div>

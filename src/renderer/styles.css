@@ -816,3 +816,52 @@ select option{background:var(--bg2)}
    .dash-row-health{grid-template-columns:1fr}
 }
 
+
+/* ── Scripts en el orquestador (Fase 1) ────────────────────────────────────── */
+.orch-node-script{background:var(--bg3);border-left:3px solid var(--text3) !important}
+.orch-node-script .orch-node-icon{color:var(--text3)}
+.orch-node-model.model-script{background:rgba(98,98,110,.12);color:var(--text3);border-color:rgba(98,98,110,.2)}
+
+.orch-palette-scripts{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+.orch-palette-scripts-title{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;display:flex;align-items:center;gap:5px;padding:0 2px}
+.orch-palette-card-script{opacity:.85}
+.orch-palette-card-icon-script{background:rgba(98,98,110,.12);color:var(--text3);border:1px solid rgba(98,98,110,.2)}
+
+/* Quality Score badge */
+.orch-quality-badge-wrap{display:inline-flex;flex-direction:column;gap:4px}
+.orch-quality-badge{cursor:pointer;font-size:10.5px;padding:2px 7px}
+.orch-quality-checks{display:flex;flex-direction:column;gap:2px;padding:5px 8px;background:var(--bg3);border-radius:5px;border:1px solid var(--border);font-size:11px}
+.orch-quality-check{display:flex;align-items:center;gap:5px}
+.orch-quality-check.passed{color:var(--green)}
+.orch-quality-check.failed{color:var(--coral)}
+
+/* ── HITL Gate (Fase 2) ─────────────────────────────────────────────────────── */
+.orch-gate-panel{background:var(--bg2);border:1px solid var(--amber);border-radius:8px;padding:1.25rem;display:flex;flex-direction:column;gap:.75rem;margin-bottom:12px}
+.orch-gate-header{display:flex;align-items:center;gap:.5rem;font-weight:600;color:var(--amber);font-size:13px}
+.orch-gate-feedback{width:100%;min-height:80px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:.5rem;color:var(--text0);resize:vertical;font-family:inherit;font-size:12px;box-sizing:border-box}
+.orch-gate-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.orch-gate-hint{margin:0;font-size:11px;color:var(--text2);line-height:1.5}
+
+/* ── Git SHA chip (Fase 4) ──────────────────────────────────────────────────── */
+.orch-step-git-sha{display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
+
+/* ── Skills en AgentEditor (Fase 5) ─────────────────────────────────────────── */
+.agent-skills-selector{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px}
+.agent-skill-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.25);border-radius:12px;font-size:11px;color:var(--text1)}
+.agent-skill-remove{background:none;border:none;cursor:pointer;color:var(--text3);padding:0 0 0 3px;font-size:13px;line-height:1}
+.agent-skill-remove:hover{color:var(--coral)}
+.agent-skill-add{max-width:200px;font-size:11px}
+.agent-hint{margin:4px 0 0;font-size:10.5px;color:var(--text3);line-height:1.5}
+
+/* ── Ops Ledger (Fase 6) ────────────────────────────────────────────────────── */
+.orch-exec-ops{display:flex;flex-direction:column;gap:3px}
+.orch-exec-op-row{display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border-radius:5px;background:var(--bg2);font-size:.8rem}
+.orch-exec-op-row.reverted{opacity:.45;text-decoration:line-through}
+.orch-exec-op-path{flex:1;font-family:'JetBrains Mono',monospace;color:var(--text1);font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orch-exec-op-agent{color:var(--text3);font-size:.72rem;flex-shrink:0}
+
+/* Result tabs */
+.orch-result-tabs{display:flex;gap:6px;margin-bottom:12px}
+.orch-result-tab{padding:5px 12px;border-radius:6px;font-size:12px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:5px}
+.orch-result-tab.active{background:rgba(124,106,247,.15);border-color:rgba(124,106,247,.35);color:var(--text0)}
+.orch-ops-count{background:var(--accent);color:#fff;border-radius:10px;padding:0 5px;font-size:10px}

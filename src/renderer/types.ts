@@ -28,6 +28,7 @@ export interface Project {
   // enriched by listProjectsWithStatus
   pendingUpdates?: number;
   pathExists?: boolean;
+  gitEnabled?: boolean;
 }
 
 export interface ProjectProvider {
@@ -58,6 +59,16 @@ export interface Agent {
   techId?: string;
   projectId?: string;
   suggested?: boolean;
+  skills?: string[];
+}
+
+export interface Skill {
+  name:        string;
+  description: string;
+  content:     string;
+  level?:      'global' | 'section' | 'tech' | 'project' | 'uncategorized';
+  categoryId?: string | null;
+  techId?:     string | null;
 }
 
 export type AIProvider =
@@ -239,6 +250,7 @@ export interface OrchestrateNode {
   to:           number;
   dataFlow:     DataFlow;
   contextExtra: ContextExtra;
+  gateAfter?:   boolean;
 }
 
 export interface ExecutionConfig {
@@ -267,6 +279,34 @@ export interface Orchestration {
   executionCount:       number;
 }
 
+export interface QualityScore {
+  score:         number;
+  grade:         'green' | 'amber' | 'red';
+  filesProduced: number;
+  filesExpected: number;
+  jsonValid:     boolean | null;
+  coverageRatio: number | null;
+  checks:        Array<{ name: string; passed: boolean; detail?: string }>;
+}
+
+export interface ExecutionState {
+  executionId:       string;
+  orchestrationId:   string;
+  projectId:         string;
+  status:            'running' | 'completed' | 'failed' | 'paused_gate';
+  lastCompletedStep: number;
+  startedAt:         string;
+  pauseStartedAt?:   string;
+  pausedAtStep?:     number;
+  steps:             Record<string, { status: 'success' | 'error' | 'warning'; filesModified: string[] }>;
+}
+
+export interface StepRevision {
+  at:                    string;
+  feedback:              string | null;
+  previousFilesModified: string[];
+}
+
 export interface StepResult {
   stepIndex:     number;
   agentName:     string;
@@ -279,6 +319,9 @@ export interface StepResult {
   status:        'success' | 'error' | 'warning';
   error?:        { message: string; category: string; recoverable: boolean };
   backupPath:    string | null;
+  qualityScore?: QualityScore;
+  revisions?:    StepRevision[];
+  gitCommitSha?: string;
 }
 
 export interface ExecutionSummary {
@@ -422,6 +465,27 @@ export interface ProjectContextInfo {
   isDefault:  boolean;
   sizeBytes:  number;
   lastUpdated: string | null;
+}
+
+export interface AtomicOp {
+  id:              string;
+  executionId:     string;
+  orchestrationId: string;
+  stepIndex:       number;
+  agentName:       string;
+  kind:            'add' | 'modify' | 'remove';
+  filePath:        string;
+  status:          'applied' | 'reverted';
+  createdAt:       string;
+  appliedAt:       string;
+  revertedAt?:     string;
+}
+
+export interface OpsLedger {
+  projectId?:       string;
+  orchestrationId:  string;
+  ops:              AtomicOp[];
+  lastUpdated?:     string;
 }
 
 export type ToastType = 'ok' | 'err' | 'info' | 'warn';

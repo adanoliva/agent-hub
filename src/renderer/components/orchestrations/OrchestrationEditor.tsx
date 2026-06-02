@@ -64,7 +64,15 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
 
   const [allAgents,   setAllAgents]   = useState<Agent[]>([]);
   const [agentSearch, setAgentSearch] = useState('');
+  const [scripts,     setScripts]     = useState<Array<{ name: string; label: string; description: string }>>([]);
 
+
+  // Load available scripts from the registry
+  useEffect(() => {
+    req<Array<{ name: string; label: string; description: string }>>('GET', '/scripts')
+      .then(setScripts)
+      .catch(() => {});
+  }, []);
 
   // Load all agents for this project: applicable (global/section/tech) + project-level.
   // After loading, purge from the canvas any agent that no longer exists on disk.
@@ -413,6 +421,34 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
               ))
             )}
           </div>
+
+          {scripts.length > 0 && (
+            <div className="orch-palette-scripts">
+              <div className="orch-palette-scripts-title">
+                <i className="ti ti-terminal-2" /> Scripts
+              </div>
+              {scripts
+                .filter(s => !agents.includes(`__script:${s.name}__`))
+                .map(s => (
+                  <div
+                    key={s.name}
+                    className="orch-palette-card orch-palette-card-script"
+                    draggable
+                    onDragStart={e => handlePaletteDragStart(`__script:${s.name}__`, e)}
+                    title="Script determinístico — sin IA"
+                  >
+                    <div className="orch-palette-card-icon orch-palette-card-icon-script">
+                      <i className="ti ti-terminal-2" />
+                    </div>
+                    <div className="orch-palette-info">
+                      <div className="orch-palette-name">{s.label}</div>
+                      {s.description && <div className="orch-palette-desc">{s.description}</div>}
+                    </div>
+                    <i className="ti ti-grip-vertical orch-palette-grip" />
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         {/* Center: Canvas */}
