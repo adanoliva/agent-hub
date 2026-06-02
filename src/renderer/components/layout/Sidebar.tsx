@@ -10,12 +10,12 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { view: 'dashboard',      icon: 'ti-home',             label: 'Inicio'        },
-  { view: 'projects',       icon: 'ti-layout-grid',      label: 'Proyectos'     },
+  { view: 'dashboard',      icon: 'ti-home',             label: 'Dashboard'     },
   { view: 'agents',         icon: 'ti-cpu',              label: 'Agentes'       },
+  { view: 'projects',       icon: 'ti-layout-grid',      label: 'Proyectos'     },
   { view: 'orchestrations', icon: 'ti-topology-ring-2',  label: 'Orquestaciones'},
-  { view: 'chat',           icon: 'ti-message-chatbot',  label: 'Chat IA'       },
-  { view: 'settings',       icon: 'ti-settings',         label: 'Ajustes', bottom: true },
+  { view: 'chat',           icon: 'ti-message-chatbot',  label: 'Chat IA',  bottom: true },
+  { view: 'settings',       icon: 'ti-settings',         label: 'Ajustes',  bottom: true },
 ];
 
 export function Sidebar() {
