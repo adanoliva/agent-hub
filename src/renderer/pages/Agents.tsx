@@ -4,16 +4,19 @@ import { req } from '../api';
 import { useStore } from '../store';
 import { useToast } from '../hooks/useToast';
 import { AgentsTree } from '../components/agents/AgentsTree';
+import type { AgentsMode } from '../components/agents/AgentsTree';
 import { AgentsCenter } from '../components/agents/AgentsCenter';
 import { AgentEditor } from '../components/agents/AgentEditor';
-import type { Agent, AgentDirectoryStatus, SelectedNode, SyncConflict } from '../types';
+import { SkillsCenter } from '../components/agents/SkillsCenter';
+import { SkillEditor } from '../components/agents/SkillEditor';
+import type { Agent, AgentDirectoryStatus, SelectedNode, Skill, SyncConflict } from '../types';
 
-const DEFAULT_NODE: SelectedNode = { level: 'global', categoryId: null, techId: null, projectId: null };
+const DEFAULT_NODE: SelectedNode = { level: 'global', categoryId: null, projectId: null };
 const NEW_AGENT: Agent = { name: '', description: '', tools: ['Read'], model: 'sonnet', system: '' };
 const SUGGESTIONS_CACHE_KEY = 'cdm-agent-suggestions-cache';
 
 function suggestionsNodeKey(node: SelectedNode) {
-  return [node.level, node.categoryId ?? '', node.techId ?? '', node.projectId ?? ''].join('::');
+  return [node.level, node.categoryId ?? '', node.projectId ?? ''].join('::');
 }
 
 function readStoredSuggestionsCache(): Record<string, Agent[]> {
@@ -49,6 +52,7 @@ export function Agents() {
   const projects             = useStore((s) => s.projects);
   const config               = useStore((s) => s.config);
 
+  const [mode,               setMode]               = useState<AgentsMode>('agents');
   const [node,               setNode]               = useState<SelectedNode>(DEFAULT_NODE);
   const [expanded,           setExpanded]           = useState<Set<string>>(() => {
     const keys = ['cats', 'projs'];
@@ -59,10 +63,17 @@ export function Agents() {
   const [suggestions,        setSuggestions]        = useState<Agent[]>(() => INITIAL_SUGGESTIONS_CACHE[DEFAULT_NODE_KEY] ?? []);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [search,             setSearch]             = useState('');
+  const [debouncedSearch,    setDebouncedSearch]    = useState('');
   const [allAgents,          setAllAgents]          = useState<Agent[]>([]);
   const [selectedAgent,      setSelectedAgent]      = useState<string | null>(null);
   const [editorAgent,        setEditorAgent]        = useState<Agent | null>(null);
   const [editorIsNew,        setEditorIsNew]        = useState(false);
+
+  // Skills state
+  const [skills,             setSkills]             = useState<Skill[]>([]);
+  const [selectedSkill,      setSelectedSkill]      = useState<string | null>(null);
+  const [editorSkill,        setEditorSkill]        = useState<Skill | null>(null);
+  const [editorSkillIsNew,   setEditorSkillIsNew]   = useState(false);
 
   // Sync state
   const [syncStatus,         setSyncStatus]         = useState<AgentDirectoryStatus | null>(null);
@@ -75,6 +86,23 @@ export function Agents() {
   const suggestionsCacheRef                          = useRef<Record<string, Agent[]>>(INITIAL_SUGGESTIONS_CACHE);
 
   const sugAbortRef = useRef<AbortController | null>(null);
+
+  // ── Search helpers ─────────────────────────────────────────────────────────
+
+  const searchTerm = debouncedSearch.trim().toLowerCase();
+
+  function matchSearch(name: string, description?: string) {
+    return name.toLowerCase().includes(searchTerm)
+      || (description?.toLowerCase().includes(searchTerm) ?? false);
+  }
+
+  const filteredAgents: Agent[] = searchTerm
+    ? allAgents.filter((a) => matchSearch(a.name, a.description))
+    : agents;
+
+  const filteredSkills = searchTerm
+    ? skills.filter((s) => matchSearch(s.name, s.description))
+    : skills;
 
   // ── Agent loading ──────────────────────────────────────────────────────────
 
@@ -91,7 +119,6 @@ export function Agents() {
       } else {
         const q = new URLSearchParams({ level: n.level });
         if (n.categoryId) q.set('categoryId', n.categoryId);
-        if (n.techId)     q.set('techId', n.techId);
         data = await req<Agent[]>('GET', `/agents?${q}`);
       }
       setAgents(data);
@@ -123,13 +150,12 @@ export function Agents() {
         const url = force ? '/ai/suggestions/refresh' : '/ai/suggestions';
         if (force) {
           data = await req<Agent[]>('POST', url, {
-            level: n.level, categoryId: n.categoryId ?? null, techId: n.techId ?? null,
+            level: n.level, categoryId: n.categoryId ?? null,
             alreadySuggested,
           });
         } else {
           const q = new URLSearchParams({ level: n.level, force: 'false' });
           if (n.categoryId) q.set('categoryId', n.categoryId);
-          if (n.techId)     q.set('techId', n.techId);
           data = await req<Agent[]>('GET', `${url}?${q}`);
         }
       }
@@ -185,7 +211,6 @@ export function Agents() {
       const targetNode: SelectedNode = {
         level: pendingAgentToEdit.level as any,
         categoryId: pendingAgentToEdit.categoryId || null,
-        techId: pendingAgentToEdit.techId || null,
         projectId: pendingAgentToEdit.projectId || null,
       };
       pendingNodeRef.current = targetNode;
@@ -234,10 +259,71 @@ export function Agents() {
     return () => { sugAbortRef.current?.abort(); };
   }, [node, loadAgents]);
 
+  // Debounce search input — 250 ms
   useEffect(() => {
-    if (!search.trim()) { setAllAgents([]); return; }
-    req<Agent[]>('GET', '/agents/flat').then(setAllAgents).catch(() => setAllAgents([]));
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
   }, [search]);
+
+  // Load flat catalog once on mount for cross-level search
+  useEffect(() => {
+    req<Agent[]>('GET', '/agents/flat').then(setAllAgents).catch(() => setAllAgents([]));
+  }, []);
+
+  // ── Skills loading — flat, no level dependency ────────────────────────────
+
+  const loadSkills = useCallback(async () => {
+    try {
+      const data = await req<Skill[]>('GET', '/skills');
+      setSkills(data);
+    } catch (e: any) {
+      toast(e.message, 'err');
+      setSkills([]);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (mode === 'skills') loadSkills();
+    else setSkills([]);
+  }, [mode, loadSkills]);
+
+  function handleModeChange(m: AgentsMode) {
+    setMode(m);
+    setEditorAgent(null);
+    setSelectedAgent(null);
+    setEditorSkill(null);
+    setSelectedSkill(null);
+  }
+
+  function handleNewSkill() {
+    setSelectedSkill(null);
+    setEditorSkill({ name: '', description: '', content: '' });
+    setEditorSkillIsNew(true);
+  }
+
+  function handleSelectSkill(skill: Skill) {
+    setEditorSkill({ ...skill });
+    setEditorSkillIsNew(false);
+    setSelectedSkill(skill.name);
+  }
+
+  function handleCloseSkillEditor() {
+    setEditorSkill(null);
+    setSelectedSkill(null);
+  }
+
+  async function handleSkillSaved(saved: Skill) {
+    setEditorSkill({ ...saved });
+    setEditorSkillIsNew(false);
+    setSelectedSkill(saved.name);
+    await loadSkills();
+  }
+
+  async function handleSkillDeleted() {
+    setEditorSkill(null);
+    setSelectedSkill(null);
+    await loadSkills();
+  }
 
   // ── Directory sync polling ─────────────────────────────────────────────────
 
@@ -430,31 +516,74 @@ export function Agents() {
       )}
 
       <div className="agents-view">
-        <AgentsTree
-          selected={node}
-          expanded={expanded}
-          onSelect={selectNode}
-          onToggle={toggleExpanded}
-          search={search}
-          onSearchChange={setSearch}
-        />
+        {mode === 'agents' && (
+          <AgentsTree
+            selected={node}
+            expanded={expanded}
+            onSelect={selectNode}
+            onToggle={toggleExpanded}
+            search={search}
+            onSearchChange={setSearch}
+            mode={mode}
+            onModeChange={handleModeChange}
+          />
+        )}
 
-        <AgentsCenter
-          node={node}
-          agents={search.trim() ? allAgents.filter((a) => a.name.toLowerCase().includes(search.toLowerCase().trim())) : agents}
-          suggestions={search.trim() ? [] : suggestions}
-          suggestionsLoading={search.trim() ? false : suggestionsLoading}
-          selectedAgent={selectedAgent}
-          onSelectAgent={handleSelectAgent}
-          onUseSuggestion={handleUseSuggestion}
-          onNewAgent={handleNewAgent}
-          onRefreshSuggestions={handleRefreshSuggestions}
-          onChatWithAgent={handleChatWithAgent}
-          searchActive={!!search.trim()}
-        />
+        {mode === 'skills' && (
+          <div className="agents-tree">
+            <div className="tree-mode-toggle">
+              <button className="tree-mode-btn" onClick={() => handleModeChange('agents')}>
+                <i className="ti ti-cpu" /> Agentes
+              </button>
+              <button className="tree-mode-btn active">
+                <i className="ti ti-puzzle" /> Skills
+              </button>
+            </div>
+            <div className="tree-search">
+              <i className="ti ti-search tree-search-icon" />
+              <input
+                className="tree-search-input"
+                type="text"
+                placeholder="Buscar skill…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button className="tree-search-clear" onClick={() => setSearch('')}>
+                  <i className="ti ti-x" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {mode === 'agents' ? (
+          <AgentsCenter
+            node={node}
+            agents={filteredAgents}
+            suggestions={searchTerm ? [] : suggestions}
+            suggestionsLoading={searchTerm ? false : suggestionsLoading}
+            selectedAgent={selectedAgent}
+            onSelectAgent={handleSelectAgent}
+            onUseSuggestion={handleUseSuggestion}
+            onNewAgent={handleNewAgent}
+            onRefreshSuggestions={handleRefreshSuggestions}
+            onChatWithAgent={handleChatWithAgent}
+            searchActive={!!searchTerm}
+          />
+        ) : (
+          <SkillsCenter
+            skills={filteredSkills}
+            totalSkills={skills.length}
+            selectedSkill={selectedSkill}
+            onSelectSkill={handleSelectSkill}
+            onNewSkill={handleNewSkill}
+            searchActive={!!searchTerm}
+          />
+        )}
       </div>
 
-      {editorAgent && (
+      {editorAgent && mode === 'agents' && (
         <div className="overlay">
           <div className="modal agent-editor-modal" onClick={(e) => e.stopPropagation()}>
             <AgentEditor
@@ -464,6 +593,20 @@ export function Agents() {
               onClose={handleCloseEditor}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
+            />
+          </div>
+        </div>
+      )}
+
+      {editorSkill && mode === 'skills' && (
+        <div className="overlay">
+          <div className="modal agent-editor-modal" onClick={(e) => e.stopPropagation()}>
+            <SkillEditor
+              skill={editorSkill}
+              isNew={editorSkillIsNew}
+              onClose={handleCloseSkillEditor}
+              onSaved={handleSkillSaved}
+              onDeleted={handleSkillDeleted}
             />
           </div>
         </div>

@@ -1,6 +1,6 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **1.9.4** · Actualizar este campo en cada release.
+> Versión actual: **2.1.0** · Actualizar este campo en cada release.
 
 @docs/backend.md
 @docs/frontend.md
@@ -10,7 +10,7 @@
 
 **Agent Hub** es una aplicación de escritorio **Electron + Express + React 19 + TypeScript** para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
-Permite organizar proyectos por categorías, crear y sincronizar agentes Claude Code (`.md` con frontmatter YAML), chatear con IA (CLI / Anthropic API / GitHub Copilot), generar contexto de proyecto y ejecutar agentes directamente sobre un proyecto.
+Permite organizar proyectos por categorías, crear y sincronizar agentes Claude Code (`.md` con frontmatter YAML), gestionar skills de contexto tecnológico, chatear con IA (CLI / Anthropic API / GitHub Copilot), generar contexto de proyecto, ejecutar agentes directamente sobre un proyecto y orquestar pipelines multiagente con scripts determinísticos, gates HITL, quality score automático y checkpointing git.
 
 La documentación técnica completa está en [`docs/backend.md`](docs/backend.md) y [`docs/frontend.md`](docs/frontend.md).
 

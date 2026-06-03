@@ -171,10 +171,9 @@ export function Dashboard() {
         name: n.targetName,
         level: resolvedLevel,
         categoryId: n.categoryId || null,
-        techId: n.techId || null,
         projectId: null,
       };
-      console.log('📢 Notification data:', { targetName: n.targetName, level: n.level, categoryId: n.categoryId, techId: n.techId });
+      console.log('📢 Notification data:', { targetName: n.targetName, level: n.level, categoryId: n.categoryId });
       setView('agents');
       setPendingAgentToEdit(pendingTarget);
     } else {

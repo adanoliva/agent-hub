@@ -17,7 +17,6 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
 
   const [name,     setName]     = useState('');
   const [catId,    setCatId]    = useState(cats[0]?.id ?? '');
-  const [techId,   setTechId]   = useState('');
   const [projPath, setProjPath] = useState('');
 
   // Default providers logic
@@ -29,8 +28,6 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
     return ['claude'];
   };
   const [aiProviders, setAiProviders] = useState<string[]>(getDefaultProviders());
-
-  const techs = cats.find((c) => c.id === catId)?.technologies ?? [];
 
   async function pickFolder() {
     const folder = await (window as any).api?.pickFolder?.();
@@ -50,7 +47,6 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
     await req('POST', '/projects/import', {
       name: name.trim(),
       categoryId: catId,
-      techId: techId || null,
       projectPath: projPath,
       aiProviders,
     });
@@ -79,15 +75,8 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
       </div>
       <div className="field">
         <label>Categoría</label>
-        <select value={catId} onChange={(e) => { setCatId(e.target.value); setTechId(''); }}>
+        <select value={catId} onChange={(e) => setCatId(e.target.value)}>
           {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
-      <div className="field">
-        <label>Tecnología</label>
-        <select value={techId} onChange={(e) => setTechId(e.target.value)}>
-          <option value="">— Sin tecnología específica —</option>
-          {techs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
       <div className="field">

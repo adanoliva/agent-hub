@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-02 · Versión: 1.9.5
+> Última actualización: 2026-06-03 · Versión: 2.1.0
 
 ---
 
@@ -12,6 +12,7 @@
 3. [Configuración (`config.js`)](#3-configuración-configjs)
 4. [API REST (`server.js`)](#4-api-rest-serverjs)
 5. [Gestión de agentes (`agents.js`)](#5-gestión-de-agentes-agentsjs)
+5b. [Skills (`skills.js`)](#5b-skills-skillsjs)
 6. [Sincronización del directorio de agentes (`agents-sync.js`)](#6-sincronización-del-directorio-de-agentes-agents-syncjs)
 7. [Gestión de proyectos (`projects.js`)](#7-gestión-de-proyectos-projectsjs)
 8. [Integración IA (`ai.js`)](#8-integración-ia-aijs)
@@ -20,6 +21,9 @@
 10. [Subsistema CLI (`subsystem-cli.js`)](#10-subsistema-cli-subsystem-clijs)
 11. [Orquestaciones — CRUD (`workflows.js`)](#11-orquestaciones--crud-workflowsjs)
 12. [Orquestaciones — Motor de ejecución (`orchestrator.js`)](#12-orquestaciones--motor-de-ejecución-orchestratorjs)
+12b. [Scripts determinísticos (`scripts-registry.js`)](#12b-scripts-determinísticos-scripts-registryjs)
+12c. [Git Checkpointer (`git-checkpointer.js`)](#12c-git-checkpointer-git-checkpointerjs)
+12d. [Ops Ledger (`ops-ledger.js`)](#12d-ops-ledger-ops-ledgerjs)
 13. [Bandeja del sistema (`tray.js`)](#13-bandeja-del-sistema-trayjs)
 13b. [Automatización de navegador vía CDP (`browser.js`)](#13b-automatización-de-navegador-vía-cdp-browserjs)
 14. [Bridge IPC (`preload.js`)](#14-bridge-ipc-preloadjs)
@@ -45,6 +49,7 @@ Electron main process (Node.js)
   ├── config.js        ← lectura/escritura de config.json
   ├── agents.js        ← CRUD de agentes (.md con frontmatter YAML)
   ├── agents-sync.js   ← sincronización con el Directorio de Agentes (GitHub)
+  ├── skills.js        ← CRUD de skills (bloques de contexto inyectables)
   ├── projects.js      ← CRUD de proyectos, sync de agentes a proyectos
   ├── ai.js            ← llamadas a IA (CLI / Anthropic API / GitHub)
   ├── api-fs.js        ← operaciones de filesystem para el Subsistema CLI
@@ -52,6 +57,9 @@ Electron main process (Node.js)
   ├── prompts.js       ← prompts centralizados para todas las operaciones IA
   ├── workflows.js     ← CRUD de orquestaciones (JSON en .agent-hub/)
   ├── orchestrator.js  ← motor de ejecución de orquestaciones + SSE streaming
+  ├── scripts-registry.js ← scripts determinísticos para orquestaciones (sin IA)
+  ├── git-checkpointer.js ← commits automáticos tras cada paso (gitEnabled)
+  ├── ops-ledger.js    ← registro append-only de operaciones atómicas por orquestación
   ├── tray.js          ← icono en la bandeja del sistema
   ├── preload.js       ← contextBridge: window.api expuesto al renderer
   ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
@@ -86,7 +94,7 @@ app.whenReady()
   └── agentsSync.triggerSync(url, isFirstSync)  ← sync async del directorio
 ```
 
-**Nota sobre el sync del directorio:** a diferencia del arranque anterior (que bloqueaba con `seedDefaultAgents`), la sincronización es completamente asíncrona. El servidor ya está levantado y la ventana visible cuando el sync comienza. El renderer detecta si está en curso consultando `GET /api/agents-directory/status` y muestra un overlay de progreso si es el primer arranque.
+**Nota sobre el sync del directorio:** la sincronización es completamente asíncrona. El servidor ya está levantado y la ventana visible cuando el sync comienza. El renderer detecta si está en curso consultando `GET /api/agents-directory/status` y muestra un overlay de progreso si es el primer arranque.
 
 `isFirstSync = !agentsSync.metaExists()` — es `true` si no existe aún `cache/agents-meta.json`. En ese caso el renderer muestra el overlay de descarga.
 
@@ -96,13 +104,13 @@ app.whenReady()
 new BrowserWindow({
   width: 1280, height: 800,
   minWidth: 900, minHeight: 600,
-  backgroundColor: '#0d0d0f',   // evita flash blanco al arrancar
+  backgroundColor: '#0d0d0f',
   frame: true,
   autoHideMenuBar: true,
   webPreferences: {
-    nodeIntegration: false,      // el renderer no puede usar require()
-    contextIsolation: true,      // el renderer vive en un contexto aislado
-    preload: 'preload.js',       // único puente al main process
+    nodeIntegration: false,
+    contextIsolation: true,
+    preload: 'preload.js',
     devTools: isDev,
   },
 })
@@ -123,7 +131,7 @@ El renderer muestra `<CloseDialog>` y responde con `{ action, remember }` vía I
 
 ### Auto-updater
 
-Solo activo en producción. Comprueba actualizaciones en el repo privado `adanoliva/cdm` usando un token de solo lectura. La descarga e instalación las dispara el renderer a través de los handlers IPC `update:check`, `update:download`, `update:install`.
+Solo activo en producción. Comprueba actualizaciones en el repo privado `adanoliva/cdm`. La descarga e instalación las dispara el renderer a través de los handlers IPC `update:check`, `update:download`, `update:install`.
 
 ### IPC handlers registrados en main.js
 
@@ -138,7 +146,7 @@ Solo activo en producción. Comprueba actualizaciones en el repo privado `adanol
 | `shell:openExternal` | `shell.openExternal(url)` |
 | `shell:openVSCode` | `exec('code "path"')` |
 | `dialog:pickFolder` | `dialog.showOpenDialog({ openDirectory })` |
-| `dialog:pickFile` | `dialog.showOpenDialog({ openFile })` — selector de fichero individual |
+| `dialog:pickFile` | `dialog.showOpenDialog({ openFile })` |
 | `update:check` | `autoUpdater.checkForUpdates()` |
 | `update:download` | `autoUpdater.downloadUpdate()` |
 | `update:install` | `autoUpdater.quitAndInstall()` |
@@ -164,36 +172,32 @@ path.resolve(__dirname, '../../')
 | `APP_DIR` | Directorio base de datos de la app |
 | `CONFIG_FILE` | `APP_DIR/config.json` |
 | `AGENTS_DIR` | `APP_DIR/agents/` |
+| `SKILLS_DIR` | `APP_DIR/agents/skills/` |
 | `CACHE_DIR` | `APP_DIR/cache/` |
 
 ### Estructura de `config.json`
 
 ```json
 {
-  "version": "1.8.2",
+  "version": "1.9.5",
   "aiProvider": "cli",
   "apiKey": "",
-  "githubToken": "",
-  "githubModel": "gpt-4o-mini",
   "closeAction": "ask",
   "agentsDirectoryUrl": "https://github.com/adanoliva/agents-directory",
   "agentsDirectoryEnabled": true,
   "categories": [
-    {
-      "id": "web",
-      "name": "Web",
-      "icon": "ti-world",
-      "color": "#3b82f6",
-      "technologies": [
-        { "id": "react", "name": "React" }
-      ]
-    }
+    { "id": "frontend", "name": "Frontend", "icon": "ti-layout",           "color": "#60a5fa", "technologies": [] },
+    { "id": "backend",  "name": "Backend",  "icon": "ti-server",           "color": "#34d399", "technologies": [] },
+    { "id": "mobile",   "name": "Mobile",   "icon": "ti-device-mobile",    "color": "#a78bfa", "technologies": [] },
+    { "id": "devops",   "name": "DevOps",   "icon": "ti-settings-2",       "color": "#fbbf24", "technologies": [] },
+    { "id": "data",     "name": "Data / IA","icon": "ti-chart-bar",        "color": "#fb923c", "technologies": [] },
+    { "id": "games",    "name": "Games",    "icon": "ti-device-gamepad-2", "color": "#f472b6", "technologies": [] }
   ],
   "projects": [...]
 }
 ```
 
-Los campos `agentsDirectoryUrl` y `agentsDirectoryEnabled` se fusionan automáticamente desde `DEFAULT_CONFIG` si no están presentes en el JSON guardado (el merge se hace con spread en `readConfig()`).
+El campo `technologies` se mantiene por compatibilidad con instalaciones existentes pero la UI ya no lo gestiona. Las categorías por defecto ya no incluyen `docs` (sus agentes pasaron a `global`).
 
 ### Funciones exportadas
 
@@ -201,8 +205,8 @@ Los campos `agentsDirectoryUrl` y `agentsDirectoryEnabled` se fusionan automáti
 |---|---|
 | `readConfig()` | Lee y parsea `config.json`; si no existe, devuelve `DEFAULT_CONFIG` |
 | `writeConfig(cfg)` | Serializa y escribe `config.json` |
-| `getAgentDir(level, catId, techId)` | Calcula la ruta de carpeta de agentes según nivel |
-| `bootstrapDirectories(cfg)` | Crea `agents/global/`, `agents/section-*`, `agents/tech-*`, `agents/uncategorized/` y `cache/` si no existen |
+| `getAgentDir(level, catId)` | Calcula la ruta de carpeta de agentes según nivel |
+| `bootstrapDirectories(cfg)` | Crea `agents/global/`, `agents/section-*`, `agents/skills/`, `agents/uncategorized/` y `cache/` |
 | `ensureDir(p)` | `fs.mkdirSync(p, { recursive: true })` |
 
 ### `getAgentDir` — lógica de nivel
@@ -210,9 +214,10 @@ Los campos `agentsDirectoryUrl` y `agentsDirectoryEnabled` se fusionan automáti
 ```js
 level === 'global'        → agents/global/
 level === 'section'       → agents/section-{catId}/
-level === 'tech'          → agents/tech-{catId}-{techId}/
 level === 'uncategorized' → agents/uncategorized/
 ```
+
+El nivel `tech` fue eliminado. La especificidad tecnológica se gestiona mediante el sistema de skills del proyecto.
 
 ---
 
@@ -228,20 +233,18 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 |---|---|---|
 | GET | `/api/health` | `{ status: 'ok', port }` |
 | GET | `/api/config` | Config completa |
-| PUT | `/api/config` | Actualiza campos: `aiProvider`, `apiKey`, `githubToken`, `githubModel`, `closeAction`, `agentsDirectoryUrl`, `agentsDirectoryEnabled` |
-| GET | `/api/detect-cli` | `{ found: bool, path? }` — busca `claude` en PATH |
+| PUT | `/api/config` | Actualiza campos de configuración |
+| GET | `/api/detect-cli` | `{ found: bool, path? }` — busca CLIs en PATH |
 | POST | `/api/setup` | Wizard: guarda proveedor + credenciales y dispara sync del directorio |
 
 #### Categorías
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/categories` | Array de categorías con technologies |
-| POST | `/api/categories` | Crea categoría `{ id, name, icon, color, technologies: [] }` |
+| GET | `/api/categories` | Array de categorías |
+| POST | `/api/categories` | Crea categoría `{ id, name, icon, color }` |
 | PUT | `/api/categories/:id` | Actualiza nombre, icono, color |
 | DELETE | `/api/categories/:id` | Elimina categoría |
-| POST | `/api/categories/:catId/technologies` | Añade `{ id, name }` a una categoría |
-| DELETE | `/api/categories/:catId/technologies/:techId` | Elimina tecnología |
 
 #### Directorio de Agentes
 
@@ -251,25 +254,35 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | POST | `/api/agents-directory/sync` | Dispara una sincronización manual (no bloqueante) |
 | POST | `/api/agents-directory/resolve-conflict` | Resuelve un conflicto: `{ fileKey, action: 'keep'\|'update' }` |
 
-#### Agentes (niveles 1–3 + Sin categoría)
+#### Agentes (niveles 1–2 + Sin categoría)
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/agents?level=&categoryId=&techId=` | Lista agentes de un nivel (incluye `level=uncategorized`) |
-| GET | `/api/agents/flat` | Todos los agentes de todos los niveles incluido `uncategorized` (para @mention y detección de herramientas) |
-| GET | `/api/agents/applicable?projectId=` | Global + section + tech aplicables al proyecto |
-| POST | `/api/agents` | Crea agente `{ level, categoryId?, techId?, agent }` |
-| PUT | `/api/agents` | Actualiza agente existente (mismo payload) |
-| DELETE | `/api/agents?level=&name=&categoryId=&techId=` | Elimina fichero .md |
+| GET | `/api/agents?level=&categoryId=` | Lista agentes de un nivel (incluye `level=uncategorized`) |
+| GET | `/api/agents/flat` | Todos los agentes de todos los niveles (para búsqueda global y @mention) |
+| GET | `/api/agents/applicable?projectId=` | Global + section aplicables al proyecto |
+| POST | `/api/agents` | Crea agente `{ level, categoryId?, agent }` |
+| PUT | `/api/agents` | Actualiza agente `{ level, categoryId?, oldName, agent }` |
+| DELETE | `/api/agents` | Elimina fichero .md `{ level, categoryId?, name }` |
 | POST | `/api/agents/import-url` | Descarga .md desde URL y parsea `{ agent }` |
 
-#### Agentes de proyecto (nivel 4)
+#### Skills
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/skills` | Lista todos los skills (`agents/skills/*.md`) |
+| POST | `/api/skills` | Crea skill `{ skill: { name, description, content } }` |
+| PUT | `/api/skills` | Actualiza skill existente |
+| DELETE | `/api/skills?name=` | Elimina fichero de skill |
+| GET | `/api/skills/flat` | Alias de GET `/api/skills` — para selector en AgentEditor de proyectos |
+
+#### Agentes de proyecto (nivel proyecto)
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/projects/:id/agents` | Lista agentes del proyecto (`.claude/agents/` o `.github/agents/`) |
 | POST | `/api/projects/:id/agents` | Crea agente local al proyecto |
-| PUT | `/api/projects/:id/agents/:name` | Actualiza agente local |
+| PUT | `/api/projects/:id/agents` | Actualiza agente local (`{ oldName, agent }`) |
 | DELETE | `/api/projects/:id/agents/:name` | Elimina fichero .md del proyecto |
 
 #### Proyectos
@@ -277,9 +290,9 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/projects` | Array de proyectos con `pendingUpdates` y `pathExists` |
-| POST | `/api/projects` | Crea proyecto nuevo (carpeta + templates + sync) |
-| POST | `/api/projects/import` | Importa proyecto existente en disco |
-| PUT | `/api/projects/:id` | Edita metadata; migra provider si cambia `aiProvider` |
+| POST | `/api/projects` | Crea proyecto `{ name, categoryId, projectPath, description?, status?, aiProviders?, selectedAgents?, skills? }` |
+| POST | `/api/projects/import` | Importa proyecto existente en disco (mismos campos) |
+| PUT | `/api/projects/:id` | Edita metadata: `name`, `description`, `status`, `categoryId`, `skills`, `aiProviders`, `excludedAgents`, `includedAgents`, `gitEnabled` |
 | DELETE | `/api/projects/:id` | Elimina proyecto (con opción `deleteFolder`) |
 
 #### Sync
@@ -295,10 +308,10 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/projects/:id/context?type=claude\|github\|auto` | Contenido de CLAUDE.md o copilot-instructions.md. `type=auto` detecta el proveedor y devuelve `ProjectContextInfo` completo (mismatch, isEmpty, isDefault, sizeBytes…) |
+| GET | `/api/projects/:id/context?type=auto` | Detecta proveedor y devuelve `ProjectContextInfo` completo |
 | PUT | `/api/projects/:id/context` | Guarda el fichero de contexto |
 | POST | `/api/projects/:id/generate-context?type=` | Genera con IA analizando el directorio del proyecto |
-| POST | `/api/projects/:id/execute-task` | Ejecuta un agente sobre el proyecto. Body: `{ agent }`. Devuelve `{ result, task, durationMs }`. Usa `--dangerously-skip-permissions --max-turns 10`, `cwd` del proyecto y timeout de 5 min |
+| POST | `/api/projects/:id/execute-task` | Ejecuta un agente sobre el proyecto. Devuelve `{ result, task, durationMs }` |
 
 #### Dashboard
 
@@ -307,17 +320,8 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/dashboard` | `DashboardData`: estadísticas, sync, notificaciones, salud de proyectos |
 | POST | `/api/dashboard/notifications/dismiss` | Descarta permanentemente una notificación `{ id }` |
 | POST | `/api/dashboard/notifications/dismiss-group` | Descarta un grupo de notificaciones |
-| POST | `/api/dashboard/notifications/snooze` | Aplaza una notificación N días `{ id, days }` (1-30, por defecto 7) |
+| POST | `/api/dashboard/notifications/snooze` | Aplaza una notificación N días `{ id, days }` |
 | POST | `/api/dashboard/notifications/restore` | Restaura todas las notificaciones ocultas y aplazadas |
-
-`buildOrchestrationStats(projects)` recorre el directorio `.agent-hub/orchestrations/` de cada proyecto activo y agrega los contadores: `{ total, success, failed, partial, neverRun }`. Lee únicamente el campo `lastExecutionStatus` de cada JSON, sin tocar el historial de ejecuciones.
-
-`buildDashboardNotifications()` analiza el estado actual y genera `DashboardNotification[]`:
-- **Critical**: proyecto sin `CLAUDE.md` (si `needsClaude`) o sin `copilot-instructions.md` (si `needsGithub`)
-- **Optimization**: fichero de contexto existe pero tiene menos de 80 caracteres
-- **Info**: agentes pendientes de sync, proyectos desactualizados
-
-`buildProjectHealth()` genera para cada proyecto activo un objeto `{ projectId, name, status, pathExists, pendingUpdates, staleSync, contextState, lastSyncAt, issues[] }` donde `status` es `healthy | warning | critical`. Se incluye en la respuesta de `GET /api/dashboard` como `projectHealth[]`.
 
 #### IA
 
@@ -325,12 +329,13 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 |---|---|---|
 | GET | `/api/ai/status` | `{ provider, ready: bool }` |
 | GET | `/api/ai/usage` | `AIUsage`: `{ cumulative, session }` con tokens y coste estimado |
-| POST | `/api/ai/usage/reset` | Reinicia contadores de sesión; devuelve `AIUsage` actualizado |
-| POST | `/api/ai/usage/reset-all` | Reinicia todo (sesión + acumulado); borra `cache/ai-usage.json` |
-| POST | `/api/ai/generate-prompt` | Genera system prompt desde descripción `{ description, level, tools, lang }` |
+| POST | `/api/ai/usage/reset` | Reinicia contadores de sesión |
+| POST | `/api/ai/usage/reset-all` | Reinicia todo; borra `cache/ai-usage.json` |
+| POST | `/api/ai/generate-prompt` | Genera system prompt desde descripción `{ description, name, level, tools, language }` |
+| POST | `/api/ai/generate-skill` | Genera contenido Markdown de una skill `{ name, description, language }` → `{ content }` |
 | POST | `/api/ai/optimize-agent` | Mejora system prompt y description existentes |
-| GET | `/api/ai/suggestions?level=&categoryId=&techId=` | 3 sugerencias de agentes (con caché) |
-| POST | `/api/ai/suggestions/refresh` | Invalida caché y regenera. Body opcional: `{ alreadySuggested: string[] }` — excluye esos nombres de las nuevas sugerencias para evitar repetición |
+| GET | `/api/ai/suggestions?level=&categoryId=` | 3 sugerencias de agentes (con caché) |
+| POST | `/api/ai/suggestions/refresh` | Invalida caché y regenera. Body opcional: `{ alreadySuggested: string[] }` |
 | DELETE | `/api/ai/suggestions/cache` | Limpia toda la caché de sugerencias |
 | GET | `/api/ai/project-suggestions?projectId=` | Sugerencias usando CLAUDE.md como contexto |
 | POST | `/api/ai/project-suggestions/refresh` | Invalida caché de proyecto. Body opcional: `{ alreadySuggested: string[] }` |
@@ -349,42 +354,33 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/orchestrations?projectId=` | Lista todas las orquestaciones de un proyecto |
-| POST | `/api/orchestrations` | Crea una orquestación `{ projectId, name, description?, agents?, nodes?, executionConfig? }` |
+| POST | `/api/orchestrations` | Crea una orquestación |
 | GET | `/api/orchestrations/:id` | Lee una orquestación por id (requiere `?projectId=`) |
-| PUT | `/api/orchestrations/:id` | Actualiza la orquestación (mismos campos que POST; requiere `?projectId=`) |
-| DELETE | `/api/orchestrations/:id` | Elimina la orquestación y su JSON del disco (requiere `?projectId=`) |
-| POST | `/api/orchestrations/:id/validate` | Valida la orquestación sin ejecutarla. Devuelve `{ valid, errors[] }` |
-| POST | `/api/orchestrations/:id/execute` | Lanza la ejecución. Body: `{ projectId, temporalContextValues? }`. Devuelve `{ executionId, status: 'started' }` |
-| GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso. Emite eventos `step-start`, `step-progress`, `step-complete`, `step-error`, `complete`, `error` |
-| GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones de una orquestación (requiere `?projectId=`) |
-| GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución específica |
-| POST | `/api/orchestrations/:id/executions/:execId/resume` | Reanuda una ejecución interrumpida desde el último paso completado |
-| POST | `/api/orchestrations/:id/executions/:execId/gate` | Resuelve un gate HITL: `{ action: 'approve' \| 'revise' \| 'cancel', feedbackText?, stepIndex }` |
-| GET | `/api/scripts` | Lista los scripts determinísticos disponibles (`scripts-registry.js`) |
-| GET | `/api/skills` | Lista skills por nivel |
-| POST | `/api/skills` | Crea skill |
-| PUT | `/api/skills` | Actualiza skill |
-| DELETE | `/api/skills` | Elimina skill |
-| GET | `/api/skills/flat` | Todos los skills (para selector en AgentEditor) |
-| GET | `/api/orchestrations/:id/ops` | Lee el ops-ledger de una orquestación |
+| PUT | `/api/orchestrations/:id` | Actualiza la orquestación |
+| DELETE | `/api/orchestrations/:id` | Elimina la orquestación y su JSON del disco |
+| POST | `/api/orchestrations/:id/validate` | Valida sin ejecutar. Devuelve `{ valid, errors[] }` |
+| POST | `/api/orchestrations/:id/execute` | Lanza la ejecución. Devuelve `{ executionId, status: 'started' }` |
+| GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso |
+| GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones |
+| GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución |
+| POST | `/api/orchestrations/:id/executions/:execId/resume` | Reanuda una ejecución interrumpida |
+| POST | `/api/orchestrations/:id/executions/:execId/gate` | Resuelve un gate HITL: `{ action: 'approve'\|'revise'\|'cancel', feedbackText?, stepIndex }` |
+| GET | `/api/scripts` | Lista los scripts determinísticos disponibles |
+| GET | `/api/orchestrations/:id/ops` | Lee el ops-ledger |
 | POST | `/api/orchestrations/:id/ops/:opId/revert` | Marca una operación atómica como revertida |
 
 #### Subsistema CLI (API-FS)
 
-Endpoints bajo el prefijo `/api-fs`. Requieren que el proyecto exista en config. Usan `api-fs.js` internamente. Todos responden con código `500` + `{ error, code }` en caso de fallo.
+Endpoints bajo el prefijo `/api-fs`. Requieren que el proyecto exista en config.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api-fs/projects/:id/files/read?path=` | Lee un fichero del proyecto. Devuelve `{ path, content, size, hash, language, modified }` |
-| GET | `/api-fs/projects/:id/files/list?pattern=` | Lista ficheros del proyecto. `pattern` acepta globs simples (`*.ts`, `src/**`) |
-| POST | `/api-fs/projects/:id/files/write` | Escribe fichero. Body: `{ path, content, metadata? }`. Crea backup automático. `422` si validación falla |
-| POST | `/api-fs/projects/:id/bash` | Ejecuta comando de la whitelist. Body: `{ command }`. `403` si el comando no está permitido |
-| POST | `/api-fs/projects/:id/grep` | Busca patrón en ficheros. Body: `{ pattern, file? }`. Devuelve `{ matches, count }` |
-| POST | `/api-fs/projects/:id/execute-agent` | Ejecuta el loop completo del Subsistema CLI. Body: `{ prompt, agentSystemPrompt?, projectContext?, maxTurns?, timeout? }`. Solo para providers `api`/`github` |
-
-### Servido de archivos estáticos
-
-En producción, el catch-all sirve `dist/renderer/index.html` para todas las rutas no-API (compatibilidad con HashRouter).
+| GET | `/api-fs/projects/:id/files/read?path=` | Lee un fichero del proyecto |
+| GET | `/api-fs/projects/:id/files/list?pattern=` | Lista ficheros del proyecto |
+| POST | `/api-fs/projects/:id/files/write` | Escribe fichero con backup automático |
+| POST | `/api-fs/projects/:id/bash` | Ejecuta comando de la whitelist |
+| POST | `/api-fs/projects/:id/grep` | Busca patrón en ficheros |
+| POST | `/api-fs/projects/:id/execute-agent` | Ejecuta el loop completo del Subsistema CLI |
 
 ---
 
@@ -421,43 +417,96 @@ System prompt del agente aquí.
 |---|---|---|
 | `global` | `agents/global/` | Todos los proyectos |
 | `section` | `agents/section-{catId}/` | Proyectos de esa categoría |
-| `tech` | `agents/tech-{catId}-{techId}/` | Proyectos de esa tecnología |
 | `uncategorized` | `agents/uncategorized/` | Agentes del directorio sin carpeta estándar |
 | `project` | `{projectPath}/.claude/agents/` o `.github/agents/` | Un proyecto concreto |
+
+El nivel `tech` fue eliminado. La especificidad tecnológica se delega al sistema de skills del proyecto (`project.skills[]`).
 
 ### Funciones principales
 
 **Parseo y serialización:**
-- `parseAgentFile(filePath)` — lee un `.md`, extrae frontmatter YAML y body. Devuelve `{ name, description, model, tools, system, optimized? }`.
+- `parseAgentFile(filePath)` — lee un `.md`, extrae frontmatter YAML y body.
 - `parseAgentFromString(content, fallbackName)` — misma lógica desde string (usado en import-url).
 - `serializeAgent(agent)` — construye el string `.md` con frontmatter + body.
-- `hashAgent(agent)` — SHA-256 del string serializado. Usado para detectar si un agente ha cambiado respecto a la copia en el proyecto.
+- `hashAgent(agent)` — SHA-256 del string serializado.
 
-**CRUD niveles 1–3 + uncategorized:**
-- `listAgentsByLevel(level, catId, techId)` — lista `.md` de la carpeta correspondiente. Funciona también para `level='uncategorized'`.
-- `getApplicableAgents(project)` — combina global + section + tech del proyecto.
-- `createAgent(level, catId, techId, agent)` — valida unicidad de nombre y escribe el fichero.
-- `updateAgent(level, catId, techId, agent)` — sobreescribe el fichero existente.
-- `deleteAgent(level, catId, techId, name)` — elimina el fichero.
+**CRUD niveles global/section/uncategorized:**
+- `listAgentsByLevel(level, catId)` — lista `.md` de la carpeta correspondiente.
+- `getApplicableAgents(categoryId)` — combina global + section del proyecto.
+- `createAgent(level, catId, _techId, agent)` — valida unicidad y escribe el fichero. `_techId` ignorado.
+- `updateAgent(level, catId, _techId, oldName, agent)` — sobreescribe el fichero existente.
+- `deleteAgent(level, catId, _techId, name)` — elimina el fichero.
 
-**Nivel de proyecto (nivel 4):**
-- `listProjectAgents(project)` — lee `.claude/agents/` o `.github/agents/` según `aiProvider`.
-- `saveProjectAgent(project, agent)` — escribe en la carpeta del proyecto (formato GitHub si es `github`).
-- `deleteProjectAgent(project, name)` — elimina el fichero del proyecto.
+**Nivel de proyecto:**
+- `listProjectAgents(projectPath, providers)` — lee las carpetas de agentes de cada proveedor.
+- `saveProjectAgent(projectPath, name, agent, providers)` — escribe en la carpeta del proyecto.
+- `deleteProjectAgent(projectPath, name, providers)` — elimina el fichero del proyecto.
 
-**Migración:**
-- `migrateAgentFiles()` — detecta agentes en formato antiguo y los convierte al formato actual. Devuelve el número migrado.
-- `syncGlobalAgentsToClaudeDir()` — copia todos los agentes globales a `~/.claude/agents/` para que Claude Code los cargue automáticamente. Se llama también después de cada sync del directorio.
+**Migración y sincronización:**
+- `migrateAgentFiles()` — detecta agentes en formato antiguo y los convierte.
+- `syncGlobalAgentsToClaudeDir()` — copia todos los agentes globales a `~/.claude/agents/`.
 
-### Formato GitHub vs. Claude
+---
 
-Los agentes para proyectos con `aiProvider: 'github'` se guardan en `.github/agents/` con un header simplificado. `saveProjectAgent` detecta el provider del proyecto y adapta el formato automáticamente.
+## 5b. Skills (`skills.js`)
+
+Las skills son bloques de contexto Markdown que se inyectan en el system prompt de los agentes cuando se ejecutan en un proyecto que las tiene configuradas. Permiten separar el conocimiento tecnológico (React, PostgreSQL, Docker…) del comportamiento del agente.
+
+### Estructura de un fichero de skill
+
+```markdown
+---
+name: react
+description: React 18 con TypeScript, hooks y patrones modernos
+---
+
+## Technology context — React 18
+
+This project uses **React 18** with TypeScript.
+- Functional components with hooks — never classes
+...
+```
+
+### Ubicación en disco
+
+Todos los skills viven en una estructura plana:
+
+```
+APP_DIR/agents/skills/
+  ├── react.md
+  ├── vue.md
+  ├── postgresql.md
+  ├── unity.md
+  └── ...
+```
+
+`SKILLS_DIR = path.join(AGENTS_DIR, 'skills')` — exportado desde `config.js` y usado por `skills.js` y `agents-sync.js`.
+
+### Convención de idioma
+
+- Skills relacionados con código → **inglés** (se inyectan en system prompts de agentes de código).
+- Skills relacionados con documentación → **español** (si aplica).
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `listSkills()` | Lista todos los `.md` de `SKILLS_DIR`. Llama `migrateSkillsFromSubdirs()` antes |
+| `listAllSkills()` | Alias de `listSkills()` para compatibilidad |
+| `createSkill(skill)` | Escribe `{name}.md` en `SKILLS_DIR`; lanza error si ya existe |
+| `updateSkill(skill)` | Sobreescribe el fichero; lanza error si no existe |
+| `deleteSkill(name)` | Elimina el fichero; lanza error si no existe |
+| `migrateSkillsFromSubdirs()` | Migra skills legacy desde subdirectorios a la raíz plana |
+
+### Inyección en ejecución
+
+Cuando un agente se ejecuta (execute-task, orquestación, subsistema CLI), el motor lee `project.skills[]`, carga el contenido de cada skill y lo concatena al system prompt del agente antes de la llamada a la IA.
 
 ---
 
 ## 6. Sincronización del directorio de agentes (`agents-sync.js`)
 
-Este módulo gestiona la descarga y versionado de agentes desde un repositorio GitHub externo (por defecto `https://github.com/adanoliva/agents-directory`).
+Este módulo gestiona la descarga y versionado de agentes y skills desde un repositorio GitHub externo.
 
 ### Algoritmo de versionado
 
@@ -465,102 +514,40 @@ El versionado se hace por archivo usando **git blob SHA** — el mismo algoritmo
 
 ```js
 function gitBlobSHA(content) {
-  const buf    = Buffer.from(content, 'utf8');
+  const buf    = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
   const header = `blob ${buf.length}\0`;
   return crypto.createHash('sha1').update(header).update(buf).digest('hex');
 }
 ```
 
-Esto permite comparar el SHA devuelto por la GitHub API con el SHA del archivo local sin descargar nada.
+### Mapeo de rutas remotas → locales
 
-### Fichero de estado: `cache/agents-meta.json`
+| Ruta en el repo | Destino local |
+|---|---|
+| `skills/{name}.md` | `agents/skills/{name}.md` |
+| `agents/global/{name}.md` | `agents/global/{name}.md` |
+| `global/{name}.md` | `agents/global/{name}.md` |
+| `agents/section-{x}/{name}.md` | `agents/section-{x}/{name}.md` |
+| Cualquier otra ruta (incluidas `tech-*`) | `agents/uncategorized/{name}.md` |
 
-```json
-{
-  "directoryUrl": "https://github.com/adanoliva/agents-directory",
-  "lastSync": "2026-05-23T10:00:00Z",
-  "repoCommitSHA": "abc123...",
-  "files": {
-    "agents/global/doc-writer.md": {
-      "remoteSHA": "def456...",
-      "localSHA":  "def456...",
-      "remotePath": "agents/global/doc-writer.md"
-    }
-  }
-}
-```
-
-- `remoteSHA` — git blob SHA del archivo tal como está en el repo remoto en el momento del último sync.
-- `localSHA` — git blob SHA del archivo tal como quedó escrito en disco (debería coincidir con `remoteSHA` salvo modificación local).
+Las rutas `tech-*` del repositorio remoto se redirigen a `uncategorized`. El repositorio externo ya no debe tener carpetas `tech-*`.
 
 ### Detección de conflictos
-
-Para cada archivo `.md` del árbol remoto:
 
 | Condición | Acción |
 |---|---|
 | `remoteSHA === meta.remoteSHA` | Sin cambios upstream → saltar |
-| `remoteSHA !== meta.remoteSHA` + `diskSHA === meta.localSHA` | Actualización segura → descargar y escribir |
-| `remoteSHA !== meta.remoteSHA` + `diskSHA !== meta.localSHA` | **Conflicto** → encolar, dejar en mano del usuario |
-| Archivo no existe en disco | Nuevo → descargar y escribir |
-
-### Mapeo de rutas remotas → locales
-
-El repositorio remoto puede organizar los archivos de cualquier forma. La lógica de mapeo reconoce carpetas estándar y clasifica el resto como `uncategorized`:
-
-| Ruta en el repo | Destino local |
-|---|---|
-| `agents/global/{name}.md` | `agents/global/{name}.md` |
-| `global/{name}.md` | `agents/global/{name}.md` |
-| `agents/section-{x}/{name}.md` | `agents/section-{x}/{name}.md` |
-| `agents/tech-{x}-{y}/{name}.md` | `agents/tech-{x}-{y}/{name}.md` |
-| Cualquier otra ruta | `agents/uncategorized/{name}.md` |
-
-### Estado en memoria (para polling del renderer)
-
-```js
-const syncState = {
-  syncing:          false,   // sync en curso
-  firstSync:        false,   // true solo en el primer arranque (sin meta)
-  progress:         { done: 0, total: 0, current: '' },
-  lastResult:       null,    // resultado del último sync
-  pendingConflicts: [],      // conflictos pendientes de resolución
-};
-```
-
-El renderer consulta `GET /api/agents-directory/status` cada 600ms mientras `syncing: true`.
-
-### Flujo del sync
-
-```
-triggerSync(url, isFirst)
-  │
-  ├── fetchHeadSHA()          ← GET /repos/{owner}/{repo}/commits/HEAD (1 req API)
-  │   └── si SHA === meta.repoCommitSHA → upToDate, salir
-  │
-  ├── fetchTree(sha)          ← GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1 (1 req API)
-  │
-  └── para cada .md en el árbol:
-      ├── comparar SHAs → skip / download / conflict
-      ├── downloadRaw()       ← raw.githubusercontent.com (sin rate limit)
-      └── writeFile() + actualizar meta
-  │
-  └── syncGlobalAgentsToClaudeDir()   ← si hubo actualizaciones
-```
-
-### Resolución de conflictos
-
-`resolveConflict(fileKey, action, url)`:
-- `action: 'keep'` — actualiza `localSHA` en meta al valor actual del disco, para que futuros syncs no lo re-detecten como conflicto.
-- `action: 'update'` — descarga el archivo remoto, lo escribe y actualiza el meta.
+| `remoteSHA !== meta.remoteSHA` + `diskSHA === meta.localSHA` | Actualización segura → descargar |
+| `remoteSHA !== meta.remoteSHA` + `diskSHA !== meta.localSHA` | **Conflicto** → encolar |
+| Archivo no existe en disco | Nuevo → descargar |
 
 ### Funciones exportadas
 
 | Función | Descripción |
 |---|---|
-| `metaExists()` | `true` si existe `cache/agents-meta.json` (= no es primer arranque) |
+| `metaExists()` | `true` si existe `cache/agents-meta.json` |
 | `readMeta()` | Lee y parsea el meta JSON |
-| `getSyncState()` | Snapshot del estado en memoria (para el endpoint de status) |
+| `getSyncState()` | Snapshot del estado en memoria |
 | `triggerSync(url, isFirst)` | Dispara el sync async; sin-op si ya hay uno en curso |
 | `resolveConflict(fileKey, action, url)` | Resuelve un conflicto pendiente |
 
@@ -574,88 +561,66 @@ triggerSync(url, isFirst)
 {
   id: 'p1234567890abc',
   name: 'Mi Proyecto',
-  categoryId: 'web',
-  techId: 'react',
+  categoryId: 'frontend',
+  skills: ['react', 'tailwind', 'typescript'],  // skills inyectadas en agentes al ejecutar
   path: 'C:/proyectos/mi-proyecto',
   description: '',
   status: 'active',                   // active | paused | archived
-  aiProviders: ['claude', 'github'],  // claude, github, gemini, openai
+  aiProviders: ['claude', 'github'],
   selectedAgents: [],
   excludedAgents: [],
-  agentHashes: {},                    // { agentName: sha256 }
+  agentHashes: {},
   createdAt: '2025-01-01T00:00:00.000Z',
+  lastSyncAt: '2025-01-01T00:00:00.000Z',
 }
 ```
+
+El campo `techId` fue eliminado. La especificidad tecnológica la aportan las skills del proyecto. Proyectos existentes con `techId` en disco son ignorados sin error.
 
 ### Sync de agentes
 
 ```
 syncProject(projectId)
   │
-  ├── getApplicableAgents(project)       ← niveles 1, 2, 3
-  ├── listProjectAgents(project)         ← nivel 4 (agentes locales)
+  ├── getApplicableAgents(project.categoryId)   ← global + section
+  ├── listProjectAgents(project)                ← nivel proyecto
   ├── para cada proveedor en project.aiProviders:
   │   ├── asegurar directorio de agentes del proveedor
-  │   ├── adaptar formato del agente para el proveedor (agent-adapters.js)
+  │   ├── adaptar formato del agente (agent-adapters.js)
   │   └── escribir archivo .md
-  ├── actualizar agentHashes con el hash de la fuente original (Claude format)
-  └── devuelve { added, updated, skipped }
+  ├── actualizar agentHashes
+  └── devuelve { added, updated }
 ```
 
-**`getProjectSyncStatus(projectId)`** devuelve el estado por agente sin modificar nada:
+**`getProjectSyncStatus(project)`** devuelve el estado por agente sin modificar nada:
 
 | Estado | Significado |
 |---|---|
 | `ok` | El hash coincide; el agente está actualizado |
 | `outdated` | El hash difiere; hay una versión más nueva |
 | `new` | El agente no existe aún en el proyecto |
-| `local` | El agente existe en el proyecto pero no en los niveles 1–3 |
+| `local` | El agente existe en el proyecto pero no en los niveles globales |
 | `excluded` | El agente está en `excludedAgents` |
 
 ### Ciclo de vida de un proyecto
 
-**`createProject(data)`:** genera id, crea carpeta, escribe fichero de contexto, sincroniza agentes, persiste en config.
+**`createProject({ name, categoryId, projectPath, skills?, aiProviders?, ... })`** — genera id, crea carpeta, escribe fichero de contexto, sincroniza agentes, persiste en config.
 
-**`importProject(data)`:** como `createProject` pero la carpeta ya existe.
+**`importProject(...)`** — como `createProject` pero la carpeta ya existe; adopta contexto existente si lo encuentra.
 
-**`updateProject(id, changes)`:** si `aiProvider` cambia, migra los agentes de nivel 4 al nuevo directorio.
+**`updateProject(id, changes)`** — campos permitidos: `name`, `description`, `status`, `categoryId`, `skills`, `aiProviders`, `excludedAgents`, `includedAgents`, `gitEnabled`. Si `aiProviders` cambia, migra los agentes de nivel proyecto al nuevo directorio.
 
-**`deleteProject(id, { deleteFolder })`:** elimina de config. Si `deleteFolder: true`, borra el directorio del disco.
+**`deleteProject(id, { deleteFolder })`** — elimina de config. Si `deleteFolder: true`, borra el directorio del disco.
+
 ### Ficheros de contexto
 
-| Provider | Ruta | Origen |
-|---|---|---|
-| **Maestro** | `{path}/CONTEXTO.md` | Editado por el usuario |
-| `claude` | `{path}/CLAUDE.md` | Replicado |
-| `github` | `{path}/.github/copilot-instructions.md` | Replicado |
-| `gemini` | `{path}/GEMINI.md` | Replicado |
-| `openai` | `{path}/.instructions.md` | Replicado |
-
----
-
-## 8. Integración IA (`ai.js`)
-**`getContextAuto(project, appAiProvider)`** — detección automática de contexto para la ejecución de agentes:
-- Determina el grupo del proyecto (`claude` ↔ `api|cli`, `github` ↔ `github`) y del proveedor global.
-- Si los grupos no coinciden, marca `mismatch: true` con `mismatchDetails.message`.
-- Lee el fichero de contexto correspondiente y devuelve `{ content, type, label, filePath, mismatch, mismatchDetails, isEmpty, isDefault, sizeBytes, lastUpdated }`.
-- `isEmpty` — el fichero no existe.
-- `isDefault` — el contenido coincide sustancialmente con la plantilla genérica (menos de 300 chars o solo cabecera).
-
-**`deriveAgentTask(agent)`** — infiere la tarea predefinida de un agente a partir de su nombre y descripción:
-
-| Keyword regex | Tarea derivada |
+| Provider | Ruta |
 |---|---|
-| `seo\|meta.?tag\|schema.?org\|…` | SEO técnico |
-| `review\|revisar\|code.?review` | Code review |
-| `test\|spec\|testing` | Plan de tests |
-| `doc\|readme\|wiki` | Documentación |
-| `\bperf\b\|performance\|rendimiento\|benchmark` | Rendimiento |
-| `security\|seguridad\|\bauth\b` | Seguridad |
-| `refactor\|clean\|architect` | Refactorización |
-| `debug\|\bfix\b\|\bbug\b` | Búsqueda de bugs |
-| (fallback) | Tarea principal del agente |
-
-Todas las tareas terminan con `' Implementa los cambios directamente sin pedir confirmación previa.'` para evitar que el agente pause la ejecución solicitando permiso.
+| **Maestro** | `{path}/CONTEXTO.md` |
+| `claude` | `{path}/CLAUDE.md` |
+| `github` | `{path}/.github/copilot-instructions.md` |
+| `gemini` | `{path}/GEMINI.md` |
+| `openai` | `{path}/.instructions.md` |
 
 ---
 
@@ -665,98 +630,43 @@ Todas las tareas terminan con `' Implementa los cambios directamente sin pedir c
 
 | Provider | Config necesaria | Backend |
 |---|---|---|
-| `cli`... | Claude Code instalado en PATH | Spawn de proceso `claude --print` |
+| `cli` | Claude Code instalado en PATH | Spawn de proceso `claude --print` |
 | `api` | `config.apiKey` (Anthropic) | `@anthropic-ai/sdk` |
 | `github` | `config.githubToken` | `fetch` a Azure inference endpoint |
 | **Nativos** | DeepSeek, Groq, OpenRouter, Perplexity | `fetch` compatible OpenAI |
 | **CLIs** | Aider, Cline, Goose | Spawn de proceso nativo |
-| **Custom** | Dinámicos (API/CLI) | Soporta Azure, Headers custom y JSON import |
+| **Custom** | Dinámicos (API/CLI) | Soporta Azure, Headers custom |
 
 ### `callAI(prompt, systemPrompt?)`
 
-Punto de entrada único. Lee `config.aiProvider` y delega a `callCLI`, `callAPI` o `callGitHub`. Cada rama captura el uso de tokens y llama a `trackUsage()`.
+Punto de entrada único. Lee `config.aiProvider` y delega a la rama correspondiente. Captura uso de tokens y llama a `trackUsage()`.
 
 ### `callCLI(prompt, opts?)`
 
-Acepta un objeto de opciones:
-- `opts.extraArgs` — array de argumentos adicionales añadidos al comando `claude --print`. Usado por `execute-task` para pasar `['--dangerously-skip-permissions', '--max-turns', '10']`.
-- `opts.cwd` — directorio de trabajo para el proceso spawneado. Usado por `execute-task` para que el agente opere en el directorio del proyecto.
-- `opts.timeout` — timeout en ms (por defecto 60 000; `execute-task` pasa 300 000). El mensaje de error incluye el tiempo: `` `timed out after ${Math.round(timeout/1000)}s` ``.
-
-### Chat multi-turno (`callAIChat`)
-
-Para API y GitHub usa mensajes estructurados. Para CLI aplana la conversación en texto plano. También registra tokens en cada llamada.
-
-### Chat con tokens (`callAIChatWithTokens`)
-
-Función interna utilizada por el Subsistema CLI. Igual que `callAIChat` pero devuelve un objeto `{ text, inputTokens, outputTokens }` en lugar del texto plano, permitiendo al loop multi-turno acumular el conteo de tokens por turno. Solo funciona con providers `api` y `github`; lanza error si se invoca con `cli`.
-
-Acepta `opts.timeout` para aplicar un deadline a la llamada individual:
-- **`api` (Anthropic SDK)**: se usa un `AbortController` que aborta tras `opts.timeout` ms. Valor por defecto: `CALL_TIMEOUT_MS` (60 s).
-- **Providers OpenAI-compat** (`github`, etc.): se pasa a `AbortSignal.timeout()` en el `fetch`.
-
-### Subsistema CLI (`callAIWithSubsystemCLI`)
-
-Punto de entrada público que ejecuta el loop multi-turno completo sobre un proyecto. Delega en `subsystem-cli.execute()`.
-
-```js
-callAIWithSubsystemCLI(prompt, agentSystemPrompt, {
-  projectPath,      // requerido: ruta absoluta al proyecto
-  projectContext,   // contenido de CLAUDE.md / copilot-instructions.md
-  provider,         // 'api' | 'github'
-  maxTurns,         // default: 10
-  timeout,          // ms, default: 300 000
-})
-// → Promise<SubsystemCLIResult>
-```
-
-Devuelve `SubsystemCLIResult`:
-
-```ts
-{
-  success:       boolean;
-  finalResponse: string;       // última respuesta del agente
-  turns:         number;
-  toolCalls:     ParsedToolCall[];
-  results:       OperationResult[];
-  errors:        ToolExecutionError[];
-  tokens:        { input, output, total };
-  duration:      number;       // ms
-  filesModified: string[];     // paths relativos modificados
-  backups:       string[];     // paths de backups creados en .agent-hub/backups/
-  error?:        string;       // 'MAX_TURNS_EXCEEDED' | 'TIMEOUT_EXCEEDED' | mensaje
-}
-```
+- `opts.extraArgs` — argumentos adicionales para `claude --print`.
+- `opts.cwd` — directorio de trabajo del proceso spawneado.
+- `opts.timeout` — timeout en ms (por defecto 60 000).
 
 ### Funciones de generación
 
-Todas delegan la construcción del prompt en `prompts.js` (ver sección 8b). `ai.js` solo aporta la lógica de llamada al proveedor, extracción de tokens y respuesta final.
-
-- `generateAgentPrompt({ description, level, tools, lang })` — genera un system prompt desde descripción informal. Usa `prompts.agentPrompt()`.
-- `generateSuggestions({ level, categoryId, techId, existingNames, alreadySuggested? })` — 3 agentes sugeridos en JSON. `alreadySuggested` se fusiona con `existingNames` para garantizar que las sugerencias nuevas no repitan ni lo guardado en disco ni lo ya visible en la UI. Usa `prompts.agentSuggestions()`.
-- `generateProjectSuggestions({ project, contextContent, existingNames, alreadySuggested? })` — sugerencias contextualizadas con el CLAUDE.md del proyecto. Mismo patrón de deduplicación. Usa `prompts.projectSuggestions()`.
-- `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Devuelve `{ description, system }`. Usa `prompts.optimizeAgent()`.
+- `generateAgentPrompt({ description, level, tools, language })` — genera system prompt. Usa `prompts.agentPrompt()`.
+- `generateSuggestions({ level, categoryId, existingAgents, alreadySuggested? })` — 3 agentes sugeridos. Usa `prompts.agentSuggestions()`.
+- `generateProjectSuggestions({ project, contextContent, existingAgents, alreadySuggested? })` — sugerencias contextualizadas. Usa `prompts.projectSuggestions()`.
+- `optimizeAgent({ name, description, system, tools, model })` — mejora system prompt y descripción. Usa `prompts.optimizeAgent()`.
 
 ### Seguimiento de uso de tokens
 
 ```js
-// Estructuras en memoria + disco
 cumulative  // persiste en cache/ai-usage.json entre sesiones
 session     // solo en memoria, se reinicia con la app
 
-// API de uso
-trackUsage({ inputTokens, outputTokens, costUSD })  // actualiza ambas + guarda cumulative
-resetSessionUsage()    // reinicia solo session
-resetAllUsage()        // reinicia ambas + borra cache/ai-usage.json
-getSessionUsage()      // devuelve { cumulative, session } (tipo AIUsage)
+trackUsage({ inputTokens, outputTokens, costUSD })
+resetSessionUsage()
+resetAllUsage()
+getSessionUsage()  // → { cumulative, session }
 ```
 
-**Extracción de tokens por proveedor:**
-- `cli` — usa `--output-format json`; extrae `parsed.usage.input_tokens / output_tokens`
-- `api` — `message.usage.input_tokens / output_tokens` del SDK de Anthropic
-- `github` — `data.usage.prompt_tokens / completion_tokens` (formato OpenAI)
-
-**Coste estimado** (solo para `api`): tabla `ANTHROPIC_PRICING` keyed por model ID completo:
+**Coste estimado** (solo para `api`):
 
 | Modelo | Input $/1M | Output $/1M |
 |---|---|---|
@@ -764,116 +674,78 @@ getSessionUsage()      // devuelve { cumulative, session } (tipo AIUsage)
 | claude-haiku-4-5-20251001 | $0.25 | $1.25 |
 | claude-opus-4-20250514 | $15 | $75 |
 
-### Caché de sugerencias
-
-Fichero `cache/suggestions.json`. Clave de caché:
-
-```js
-key = `${level}::${categoryId ?? ''}::${techId ?? ''}`  // niveles 1-3
-key = `project::${projectId}`                            // nivel proyecto
-```
-
 ---
 
 ## 8b. Prompts centralizados (`prompts.js`)
 
-Módulo de solo lectura que centraliza todos los prompts que la app envía a la IA. **No expone ningún endpoint HTTP ni IPC** — es un módulo interno requerido por `ai.js`, `server.js` y `orchestrator.js`.
-
-La razón de existir: antes los prompts estaban dispersos como template literals inline en esos tres ficheros. Ahora para ajustar el comportamiento de cualquier botón "Generar con IA" u "Optimizar con IA" basta con editar `prompts.js` y hacer build.
+Módulo de solo lectura que centraliza todos los prompts enviados a la IA. No expone endpoints — es requerido internamente por `ai.js`, `server.js` y `orchestrator.js`.
 
 ### Funciones exportadas
 
 | Función | Usada por | Descripción |
 |---|---|---|
-| `agentPrompt({ name, description, level, toolsNote, existingNote, langInstr })` | `ai.js` · `generateAgentPrompt` | Genera el system prompt de un agente desde una descripción informal. Devuelve un JSON con campos `role`, `objective`, `responsibilities`, `boundaries`, `outputFormat` |
-| `optimizeAgent({ name, model, toolList, description, system, langTarget })` | `server.js` · `POST /ai/optimize-agent` | Reescribe el system prompt del agente para ser token-eficiente (objetivo: 50-100 palabras). Devuelve `{ description, system }` |
-| `agentSuggestions({ context, existing })` | `ai.js` · `generateSuggestions` | Pide 3 sugerencias de agentes para un nivel dado. JSON array con `name`, `description`, `tools`, `model`, `system` |
-| `projectSuggestions({ project, contextSection, existing, categoryName, techName })` | `ai.js` · `generateProjectSuggestions` | Igual que `agentSuggestions` pero contextualizado al CLAUDE.md del proyecto |
-| `generateContext({ fileLabel, projectInfo, existingContext, structure, dependencies, existingReadme })` | `server.js` · `POST /projects/:id/generate-context` | Dos ramas: si `existingContext` existe → reescribe y reduce a máx. 100 líneas; si no existe → genera desde cero con la misma restricción |
-| `adaptForProvider({ agent, targetProvider })` | `ai.js` · `ADAPTATION_PROMPTS` | Reescribe el system prompt del agente para el proveedor destino (actualmente solo `'github'`). Devuelve `null` si el proveedor no requiere adaptación |
-| `agentHandoffInstruction()` | `orchestrator.js` · `_buildSystemPrompt` | Devuelve el bloque de texto que se inyecta al final del system prompt de cada agente no-final en una orquestación. Define el protocolo HANDOFF (ver sección 12) |
-| `formatHandoffAsInput(handoff, fromAgent)` | `orchestrator.js` · `_buildUserMessage` | Formatea el handoff extraído del paso anterior como mensaje de usuario compacto para el siguiente agente |
+| `agentPrompt({ name, description, level, toolsNote, langInstr })` | `ai.js` | Genera system prompt de agente desde descripción informal |
+| `optimizeAgent({ name, model, toolList, description, system, langTarget })` | `server.js` | Reescribe system prompt para ser token-eficiente (50-100 palabras) |
+| `agentSuggestions({ context, existing })` | `ai.js` | 3 sugerencias de agentes en JSON |
+| `projectSuggestions({ project, contextSection, existing, categoryName, techName })` | `ai.js` | Sugerencias contextualizadas al CLAUDE.md del proyecto |
+| `generateContext({ fileLabel, projectInfo, existingContext, structure, dependencies, existingReadme })` | `server.js` | Genera o reescribe el fichero de contexto del proyecto (máx. 100 líneas) |
+| `skillContent({ name, description, language })` | `server.js · POST /ai/generate-skill` | Genera el bloque Markdown de una skill (h2 heading + bullets + ejemplos, 20-40 líneas, sin frontmatter) |
+| `adaptForProvider({ agent, targetProvider })` | `ai.js` | Reescribe el system prompt para el proveedor destino |
+| `agentHandoffInstruction()` | `orchestrator.js` | Bloque HANDOFF inyectado en agentes no-finales de orquestaciones |
+| `formatHandoffAsInput(handoff, fromAgent)` | `orchestrator.js` | Formatea handoff como mensaje compacto para el siguiente agente |
 
-### Reglas de diseño de los prompts
+### Convención de idioma en `skillContent`
 
-- **Sin tutoriales básicos**: los prompts no explican al modelo cómo funciona JSON, markdown, etc.
-- **Siempre con restricción de formato**: cada prompt termina con una instrucción de respuesta exacta (solo JSON, sin explicaciones, etc.).
-- **Idioma adaptativo**: las funciones que lo necesitan reciben `lang` o `langTarget` para emitir el prompt final en español o inglés según el contexto.
-- **Token-eficientes**: los prompts de generación apuntan a respuestas de 40-120 palabras para system prompts de agentes.
+El parámetro `language` acepta `'es'` o `'en'`. Los skills de código se generan en inglés por defecto; los de documentación en español.
 
 ---
 
 ## 9. Servicio de filesystem (`api-fs.js`)
 
-Encapsula todas las operaciones de I/O que el Subsistema CLI necesita para que los agentes puedan leer, escribir y buscar en el proyecto. Todas las operaciones validan la ruta antes de ejecutarse.
+Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta antes de cada operación.
 
 ### Seguridad y restricciones
 
-- **Path traversal**: rechaza cualquier ruta que contenga `..`.
-- **Fuera de proyecto**: rechaza rutas que no resuelvan dentro de `projectPath`.
-- **Directorios excluidos**: `node_modules`, `dist`, `.git`, `.next`, `build`, `__pycache__`, `.venv`, `venv`, `out`, `coverage`, `.svelte-kit`, `target`, `.nuxt`.
-- **Archivos binarios**: extensiones `.exe`, `.bin`, `.o`, `.so`, `.dll`, imágenes, audio, vídeo, fuentes, archivos comprimidos.
+- **Path traversal**: rechaza rutas con `..`.
+- **Directorios excluidos**: `node_modules`, `dist`, `.git`, `.next`, `build`, etc.
+- **Archivos binarios**: `.exe`, `.bin`, imágenes, audio, vídeo, fuentes, comprimidos.
 - **Tamaño máximo**: 10 MB por fichero.
-- **Bash whitelist**: solo `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`. Además, patrones prohibidos (`rm`, `del`, `sudo`, `npm install`, `git push`, `curl`, `wget`, encadenamiento con `;`, `|`, `&`).
+- **Bash whitelist**: solo `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`.
 
 ### Funciones exportadas
 
 | Función | Descripción |
 |---|---|
-| `readFile(projectPath, filePath)` | Lee un fichero de texto. Devuelve `{ path, content, size, hash, language, modified, encoding }` |
-| `writeFile(projectPath, filePath, content, metadata?)` | Escribe, crea backup del anterior y valida JSON si aplica. Devuelve `{ saved, path, hash, changes, backupPath, validations }` |
-| `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5) respetando exclusiones. Acepta globs simples (`*.ts`, `src/**`). Máx. 500 resultados |
-| `bashCommand(projectPath, command)` | Ejecuta un comando de la whitelist en el directorio del proyecto. Timeout 30 s. Devuelve `{ stdout, stderr, exitCode }` |
-| `grepFiles(projectPath, pattern, glob?)` | Búsqueda de patrón regex en los ficheros del proyecto. Máx. 300 coincidencias. Devuelve `{ matches, count }` |
-
-### Backups automáticos
-
-Antes de cada `writeFile` se crea una copia del fichero existente en `{projectPath}/.agent-hub/backups/{nombre}_{timestamp}.bak`. La función devuelve el `backupPath` relativo al proyecto.
+| `readFile(projectPath, filePath)` | Lee fichero. Devuelve `{ path, content, size, hash, language, modified }` |
+| `writeFile(projectPath, filePath, content)` | Escribe con backup automático. Devuelve `{ saved, path, hash, backupPath }` |
+| `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5). Máx. 500 resultados |
+| `bashCommand(projectPath, command)` | Ejecuta comando de la whitelist. Timeout 30 s |
+| `grepFiles(projectPath, pattern, glob?)` | Búsqueda regex. Máx. 300 coincidencias |
 
 ---
 
 ## 10. Subsistema CLI (`subsystem-cli.js`)
 
-Emula la interfaz de herramientas de Claude Code CLI para proveedores que no tienen acceso nativo al filesystem (Anthropic API, GitHub Models). Implementa un loop multi-turno en el que la IA puede solicitar operaciones de archivo y el subsistema las ejecuta, devolviendo los resultados en el siguiente mensaje.
+Emula la interfaz de herramientas de Claude Code para proveedores sin acceso nativo al filesystem. Implementa un loop multi-turno en el que la IA solicita operaciones de archivo y el subsistema las ejecuta.
 
-### Formato de tool calls en las respuestas de la IA
-
-La IA emite bloques separados por `---` (solos en su línea):
+### Formato de tool calls
 
 ```
 TOOL: read
 PATH: src/main.ts
-
 ---
-
 TOOL: write
 PATH: src/utils.ts
 CONTENT:
-[contenido completo del archivo]
-
+[contenido]
 ---
-
 TOOL: bash
-COMMAND: find src -name "*.ts" -type f
-
+COMMAND: find src -name "*.ts"
 ---
-
 TOOL: grep
 PATTERN: export const
 FILE: src/**/*.ts
 ```
-
-Cuando la IA no emite ningún bloque `TOOL:`, el loop termina y esa respuesta es la final.
-
-### Funciones exportadas
-
-| Función | Descripción |
-|---|---|
-| `parseAgentResponse(text)` | Extrae bloques `TOOL:` del texto. Devuelve `{ text, toolCalls, hasClosed }` |
-| `executeToolCall(toolCall, projectPath)` | Traduce un tool call a una operación `api-fs`. Devuelve `OperationResult` |
-| `buildToolResultsMessage(results)` | Formatea los resultados de un turno en texto para el siguiente mensaje al modelo. Incluye datos de `browser_get` (URL, título, texto/HTML) y `browser_action` (resultado). `browser_screenshot` indica que la captura se realizó pero no incluye el binario PNG (no transmisible a modelos de texto) |
-| `buildSubsystemSystemPrompt(agentSystemPrompt, projectContext?)` | Inyecta las instrucciones de herramientas al system prompt del agente |
-| `execute(prompt, agentSystemPrompt, config)` | Loop multi-turno completo. `config` requiere `projectPath` y `callAIRaw` |
 
 ### Loop multi-turno
 
@@ -881,241 +753,192 @@ Cuando la IA no emite ningún bloque `TOOL:`, el loop termina y esa respuesta es
 execute(prompt, systemPrompt, config)
   │
   ├── while (turn < maxTurns):
-  │   ├── calcular tiempo restante → si agotado, break (completedNormally=false)
+  │   ├── calcular tiempo restante → si agotado, break
   │   ├── callAIRaw(messages, systemPrompt, { timeout: remaining })
-  │   ├── parseAgentResponse()                    ← extraer tool calls
+  │   ├── parseAgentResponse() ← extraer tool calls
   │   ├── si no hay tool calls → completedNormally=true, break
-  │   ├── para cada tool call → executeToolCall()  ← operar en disco
-  │   ├── buildToolResultsMessage()
-  │   └── añadir respuesta IA + resultados a messages
-  └── RETORNAR
-      success = completedNormally
-      error   = 'MAX_TURNS_EXCEEDED' | 'TIMEOUT_EXCEEDED' (solo si !completedNormally)
-```
-
-**Garantía de consistencia**: `success: true` solo cuando el loop termina normalmente (sin tool calls pendientes). Si el agente termina su trabajo pero el tiempo total ya expiró, sigue siendo `success: true` — el timeout se evalúa solo al _inicio_ de cada turno, nunca invalida trabajo ya completado.
-
-**Parámetros de `config`:**
-
-| Parámetro | Tipo | Descripción |
-|---|---|---|
-| `projectPath` | `string` | Requerido. Ruta absoluta al proyecto |
-| `callAIRaw` | `Function` | Requerido. `async (messages, systemPrompt, opts?) → { text, inputTokens, outputTokens }`. Recibe `opts.timeout` con el tiempo restante de la orquestación |
-| `projectContext` | `string` | Contenido del fichero de contexto del proyecto |
-| `maxTurns` | `number` | Máx. iteraciones (default: 10) |
-| `timeout` | `number` | Ms totales (default: 300 000) |
-
-### Estructura de directorios generados en el proyecto
-
-```
-{projectPath}/
-└── .agent-hub/
-    └── backups/
-        ├── src_main_ts_1748450000000.bak
-        └── src_utils_ts_1748450001000.bak
+  │   ├── para cada tool call → executeToolCall()
+  │   └── buildToolResultsMessage() → añadir a messages
+  └── RETORNAR SubsystemCLIResult
 ```
 
 ---
 
-## 13. Orquestaciones — CRUD (`workflows.js`)
+## 11. Orquestaciones — CRUD (`workflows.js`)
 
-Gestiona la persistencia de las definiciones de orquestación. Cada orquestación se almacena como fichero JSON en:
-
-```
-{projectPath}/.agent-hub/orchestrations/{id}.json
-```
-
-El historial de ejecuciones se guarda en:
-
-```
-{projectPath}/.agent-hub/executions/{timestamp}-{orchId}/
-  ├── result.json      ← ExecutionResult completo
-  └── snapshot.json    ← snapshot del estado del filesystem antes de ejecutar
-```
-
-### Estructura de una orquestación en disco
-
-```json
-{
-  "id": "orch-1748450000000-a1b2c3d4",
-  "projectId": "p1234567890abc",
-  "name": "CI Full",
-  "description": "",
-  "enabled": true,
-  "agents": ["code-reviewer", "test-writer", "doc-writer"],
-  "nodes": [
-    {
-      "id": "node-0-1-1748450000001",
-      "from": 0, "to": 1,
-      "dataFlow": { "agentOutput": true, "filesModified": true, "claudeMd": true, "selectiveFiles": [] },
-      "contextExtra": {
-        "fixed": { "freeText": "", "files": [] },
-        "temporal": []
-      }
-    }
-  ],
-  "executionConfig": {
-    "stopOnError": true,
-    "validateAfterEachStep": false,
-    "maxTurns": 10,
-    "timeout": 300000
-  },
-  "createdAt": "2026-05-28T10:00:00Z",
-  "updatedAt": "2026-05-28T10:00:00Z",
-  "executionCount": 0
-}
-```
+Gestiona la persistencia de las definiciones de orquestación en `{projectPath}/.agent-hub/orchestrations/{id}.json`.
 
 ### Funciones exportadas
 
 | Función | Descripción |
 |---|---|
-| `create(projectId, projectPath, data)` | Genera id, establece defaults y escribe el JSON |
-| `read(orchId, projectPath)` | Lee un JSON por id; devuelve `null` si no existe |
-| `update(orchId, projectPath, changes)` | Merge de cambios + actualiza `updatedAt` |
+| `create(projectId, projectPath, data)` | Genera id y escribe el JSON |
+| `read(orchId, projectPath)` | Lee JSON por id |
+| `update(orchId, projectPath, changes)` | Merge + actualiza `updatedAt` |
 | `remove(orchId, projectPath)` | Elimina el fichero JSON |
-| `list(projectId, projectPath)` | Lista todos los JSONs del directorio de orquestaciones |
-| `listExecutions(orchId, projectPath)` | Lista el historial de ejecuciones (metadatos básicos sin resultados completos) |
-| `readExecution(orchId, executionId, projectPath)` | Lee el `result.json` de una ejecución específica |
-| `saveExecution(orchId, projectPath, result)` | Escribe `result.json` en el directorio de la ejecución y actualiza el JSON de la orquestación (`lastExecutedAt`, `lastExecutionStatus`, `executionCount`) |
+| `list(projectId, projectPath)` | Lista todos los JSONs del directorio |
+| `listExecutions(orchId, projectPath)` | Lista el historial de ejecuciones |
+| `readExecution(orchId, executionId, projectPath)` | Lee el `result.json` de una ejecución |
+| `saveExecution(orchId, projectPath, result)` | Escribe resultado y actualiza contadores |
 
 ---
 
 ## 12. Orquestaciones — Motor de ejecución (`orchestrator.js`)
 
-Implementa la ejecución secuencial de una orquestación, paso a paso. Extiende `EventEmitter` para emitir eventos de progreso que el servidor envía al renderer vía SSE.
-
-### Clase `OrchestrationExecutor`
-
-```js
-new OrchestrationExecutor(orchestration, project, temporalContextValues?)
-```
-
-- `orchestration` — objeto `Orchestration` completo.
-- `project` — objeto `Project` del config.
-- `temporalContextValues` — mapa `{ tempContextId: value }` con los valores recogidos del usuario antes de ejecutar.
+Implementa la ejecución secuencial de una orquestación, paso a paso. Extiende `EventEmitter` para emitir eventos de progreso vía SSE.
 
 ### Eventos emitidos
 
-| Evento | Payload | Descripción |
-|---|---|---|
-| `step-start` | `{ stepIndex, agentName, totalSteps }` | Comienza un paso |
-| `step-progress` | `{ stepIndex, message }` | Progreso interno (lectura de archivos, etc.) |
-| `step-complete` | `{ stepIndex, result: StepResult }` | Paso completado con éxito |
-| `step-error` | `{ stepIndex, error }` | Error en un paso |
-| `complete` | `ExecutionResult` | Ejecución completa |
-| `error` | `{ message }` | Error fatal antes de comenzar |
-
-### Flujo de ejecución
-
-```
-executor.execute()
-  │
-  ├── validate()                            ← comprueba agentes, nodos, paths y ficheros de contexto
-  │   └── si hay errores → emite 'error'
-  │
-  ├── takeSnapshot()                        ← crea snapshot del filesystem para rollback
-  │
-  └── para cada agente (i = 0..n-1):
-      ├── emit 'step-start'
-      ├── _buildSystemPrompt(i)             ← system prompt del agente
-      ├── _buildUserMessage(i)              ← salida del paso anterior + contexto fijo + temporal
-      ├── callAI() / callAIWithSubsystemCLI()
-      ├── detecta ficheros modificados
-      ├── emit 'step-complete'
-      └── si error y stopOnError → romper bucle
-  │
-  └── emit 'complete' con ExecutionResult
-```
-
-### Protocolo HANDOFF entre agentes
-
-Para minimizar los tokens de contexto entre pasos, el orquestador usa un protocolo estructurado de salida. Cada agente no-final recibe al final de su system prompt (inyectado por `prompts.agentHandoffInstruction()`) la instrucción de terminar su respuesta con una línea JSON:
-
-```
-HANDOFF: {"done":"<qué lograste, máx 15 palabras>","changed":["<ruta/relativa.ext>"],"issues":["<problema crítico>"],"next":"<instrucción concreta para el siguiente agente, máx 20 palabras>"}
-```
-
-**Funciones de soporte en `orchestrator.js`:**
-
-- `extractHandoff(response)` — busca la línea con `/^HANDOFF:\s*(\{.+\})\s*$/m`, parsea el JSON y devuelve `{ done, changed, issues, next }` o `null` si el agente no emitió handoff.
-- `stripHandoff(response)` — elimina la línea `HANDOFF:` del texto almacenado para que la UI muestre respuestas limpias sin ruido de protocolo.
-
-**Almacenamiento por paso:** `agentOutputs[i]` guarda `{ response: cleanResponse, handoff, filesModified }`. El `stepResult.output` incluye `{ response: cleanResponse, handoff: handoff || undefined }`.
-
-### Construcción del prompt del paso (`_buildUserMessage`)
-
-- **Paso 0**: incluye los **contextos temporales** definidos en el nodo de entrada (inputs del usuario al lanzar), el texto de la tarea fija si existe, o un mensaje por defecto describiendo el rol del agente.
-- **Pasos i > 0**:
-  1. **Handoff del agente anterior** — si el agente anterior emitió un `HANDOFF` válido, se formatea con `prompts.formatHandoffAsInput(handoff, fromAgent)`. Resultado: ~4 líneas, ~200 chars. Si no hay handoff (fallback), se pasan los primeros 400 chars del prose en lugar del handoff estructurado.
-  2. **Archivos modificados** — si `dataFlow.filesModified === true`, lista de paths (el contenido se lee si el agente lo solicita vía herramientas).
-  3. **Contextos temporales** — inputs específicos definidos para esa conexión en el editor.
-
-### Integración con Navegador (CDP)
-
-Si un agente tiene herramientas `browser_*`, el orquestador:
-1. Comprueba si hay un navegador con CDP abierto. Si no, intenta lanzar el preferido.
-2. **Pausa la ejecución**: emite un evento `browser-required` vía SSE y espera a que el usuario pulse "Continuar" (permitiendo login manual).
-3. **Inyecta contexto**: extrae URL, título, cookies de sesión y contenido de la página para inyectarlo en el prompt del agente, permitiéndole usar esas cookies en herramientas como `WebFetch` o comandos `curl`.
-
-El formato del handoff es ~7-10x más compacto que pasar el prose completo del paso anterior (200 chars vs. 1500 chars anteriores).
-
-### Construcción del system prompt (`_buildSystemPrompt`)
-
-Para agentes no-finales (`stepIndex < agents.length - 1`), se añade al final del system prompt el bloque devuelto por `prompts.agentHandoffInstruction()`. El último agente no recibe esta instrucción — su respuesta es la respuesta final de la orquestación.
-
-**Inyección del archivo de contexto del proyecto:**
-
-El contenido de `CLAUDE.md` o `copilot-instructions.md` se añade al system prompt del agente en estas condiciones:
-
-- **Paso 0 (primer agente):** siempre, salvo que `inputNode.dataFlow.projectContext === false`.
-- **Pasos 1+ (agentes siguientes):** solo si `dataFlow.projectContext === true` en el nodo que alimenta ese paso. Como el frontend no expone este campo en los nodos inter-agente, en la práctica nunca se inyecta para pasos 2 en adelante — el agente debe leerlo explícitamente desde su system prompt o configurar ficheros de contexto fijo en el nodo.
-
-**Lógica de selección del archivo (`_getContextFile`):**
-
-Usa `project.aiProvider` (formato de contexto del proyecto), no `cfg.aiProvider` (motor de IA de ejecución):
-
-| `project.aiProvider` | Archivo leído |
+| Evento | Payload |
 |---|---|
-| `claude` | `CLAUDE.md` / `.claude/CLAUDE.md` |
-| `github` | `.github/copilot-instructions.md` |
-| `both` | `CLAUDE.md` primero; si no existe, `copilot-instructions.md` |
+| `step-start` | `{ stepIndex, agentName, totalSteps }` |
+| `step-input` | `{ stepIndex, agentName, userMessage }` |
+| `step-done` | `{ stepIndex, result: StepResult }` |
+| `step-warning` | `{ stepIndex, issues }` |
+| `gate-open` | `{ stepIndex, agentName, executionId }` — gate HITL activo |
+| `browser-required` | `{ stepIndex, agentName, executionId }` |
+| `browser-continued` | `{ executionId }` |
+| `complete` | `ExecutionResult` |
+| `cancelled` | `{ executionId }` |
+| `error` | `{ message }` |
+| `log` | `{ timestamp, level, message, data? }` — persiste en `logs.jsonl` |
 
-Sin fallbacks cruzados: si el archivo del formato configurado no existe, devuelve cadena vacía.
+### Protocolo HANDOFF
 
-### Snapshot y rollback
+Cada agente no-final recibe la instrucción de terminar con:
 
-Antes de ejecutar se crea un snapshot JSON en:
 ```
-{projectPath}/.agent-hub/executions/{timestamp}-{orchId}/snapshot.json
+HANDOFF: {"done":"...","changed":["ruta"],"issues":["..."],"next":"..."}
 ```
 
-El snapshot contiene el contenido de todos los ficheros de texto del proyecto (hasta `MAX_SNAPSHOT_FILES = 500`, máximo `MAX_FILE_SIZE_BYTES = 256 KB` por fichero). Se usa para poder revertir si la ejecución falla.
+`extractHandoff(response)` extrae y parsea. `stripHandoff(response)` lo elimina del texto visible en la UI.
 
-### Validación previa (`validate`)
+### Construcción del prompt del paso
 
-Comprueba:
-- La orquestación tiene al menos 2 agentes.
-- Todos los agentes existen en disco (`agents/global/`, `agents/section-*`, etc.).
-- El número de nodos es correcto (`agents.length - 1`).
-- Cada nodo tiene índices `from`/`to` consecutivos válidos.
-- Cada nodo transmite al menos una información (`agentOutput || filesModified || claudeMd`).
-- Los ficheros de contexto fijo existen en disco (rutas absolutas o relativas al proyecto).
-- El directorio del proyecto existe.
-- `executionConfig.timeout >= 5000`.
+- **Paso 0**: contextos temporales del nodo de entrada + tarea fija. Incluye `CLAUDE.md` si `dataFlow.projectContext !== false`.
+- **Pasos i > 0**: handoff del agente anterior + archivos modificados + contextos temporales del nodo.
+- **Skills de agente**: si el agente tiene `skills[]` en su frontmatter, su contenido se concatena al system prompt antes de la llamada.
+- **Límite**: `maxContextChars` (defecto 4 000) trunca el mensaje de usuario si supera el límite.
 
-### Timeout global de la orquestación
+### Timeout global
 
-El `timeout` de `executionConfig` se aplica a **toda la orquestación**, no por paso. Antes de cada agente el orquestador calcula `remaining = orchTimeout - elapsed` y lo pasa al paso. Si quedan menos de 5 s antes de empezar un paso, el bucle se corta sin marcar ese paso como error — el `status` final refleja los pasos completados.
+El `timeout` de `executionConfig` aplica a **toda la orquestación**. El tiempo restante se pasa a cada paso. **El tiempo de espera en gates HITL no descuenta del reloj global** — el `startTime` se incrementa con la duración de la pausa.
 
-Ese `remaining` llega también hasta `callAIRaw` (y por tanto a `callAIChatWithTokens`) para que cada llamada individual al modelo respete el tiempo disponible, en lugar del timeout fijo de 60 s.
+### Scripts determinísticos
 
-### Ejecución con CLI vs. API/GitHub
+Si `agentName` comienza por `__script:`, el paso se delega a `scripts-registry.js` en lugar de llamar a la IA. Los scripts son sincrónicos, no consumen tokens y siempre producen un `StepResult` con `tokensUsed: { input: 0, output: 0 }`. Ver §12b.
 
-- **CLI** (`aiProvider: 'cli'`): usa `callAIRich(prompt, { cwd, timeout: remaining, extraArgs })` — proceso nativo de Claude Code; el timeout mata el proceso si supera el tiempo restante.
-- **API / GitHub**: usa `callAIWithSubsystemCLI(prompt, systemPrompt, { projectPath, projectContext, provider, maxTurns, timeout: remaining })` — loop multi-turno con el Subsistema CLI. Si el subsystem-cli agota sus turnos pero tiene respuesta parcial (`finalResponse` no vacío), el orquestador registra un warning y usa esa respuesta en vez de fallar el paso.
+### Quality Score automático
+
+Tras completar cada paso IA, el orquestador ejecuta el script `quality-score` y adjunta el resultado a `stepResult.qualityScore`. No es bloqueante — un error al calcularlo no falla el paso.
+
+### Gates HITL (`gateAfter`)
+
+Si `orchestration.nodes[i].gateAfter === true` y no es el último paso:
+1. Se escribe el estado `paused_gate` en `execution-state.json`.
+2. Se emite `gate-open`.
+3. La ejecución se bloquea en `_waitForGate(executionId, stepIndex)` hasta que el servidor recibe `POST /executions/:execId/gate`.
+4. Decisiones: `approve` → continúa, `revise` → revierte al snapshot y re-ejecuta el paso con feedback, `cancel` → rompe el loop.
+
+### Reanudación de ejecuciones
+
+`_resumeFromStep` se establece antes de llamar a `execute()`. Los pasos `i < _resumeFromStep` se restauran desde `_executionState.steps[i]` sin llamar a la IA. La ejecución continúa normalmente desde el punto de interrupción.
+
+### Ejecución CLI vs. API/GitHub
+
+- **CLI nativo** (`cli`, `gemini-cli`, `aider-cli`…): `callAIRich` con `cwd` del proyecto y timeout restante.
+- **API/GitHub/Custom**: `callAIWithSubsystemCLI` con loop multi-turno.
+- Si el agente usa herramientas `browser_*`: el CLI nativo lanza el navegador CDP automáticamente; el subsistema CLI inyecta las cookies y el contenido de la página activa en el prompt.
 
 ---
+
+## 12b. Scripts determinísticos (`scripts-registry.js`)
+
+Módulo de scripts Node.js sin llamadas a IA para usar como pasos en orquestaciones.
+
+### Contrato de un script
+
+```js
+async function script({ projectPath, orchestration, stepIndex, prevResult, agentOutputs }) {
+  return { output: string, filesModified: string[], data: any };
+}
+```
+
+### Scripts incluidos
+
+| Nombre | Descripción |
+|---|---|
+| `prepare-context` | Analiza el proyecto (lenguaje, framework, tests, convenciones). Guarda `canonical.json` en `.agent-hub/context/`. |
+| `generate-file-index` | Lista todos los archivos del proyecto con tamaño, extensión y fecha. Devuelve JSON estructurado. |
+| `diff-since-step` | Compara el filesystem actual con los archivos modificados en un paso de referencia. |
+| `validate-json` | Verifica que el output del paso anterior es JSON válido. Devuelve `{ valid, error? }`. |
+| `quality-score` | Calcula puntuación 0–100 del paso anterior: respuesta producida, JSON válido, archivos modificados, longitud. Grade: verde ≥75, ámbar ≥50, rojo <50. |
+| `validate-output` | Valida el output según reglas configurables. Devuelve `{ passed, issues[] }`. |
+
+### API pública
+
+| Función | Descripción |
+|---|---|
+| `isScript(agentName)` | `true` si `agentName` empieza por `__script:` |
+| `getScriptName(agentName)` | Extrae el nombre del script del identificador |
+| `hasScript(name)` | `true` si el script está registrado |
+| `run(name, context)` | Ejecuta el script y devuelve `ScriptResult` |
+| `listScripts()` | Devuelve el catálogo completo con `name`, `label` y `description` |
+
+---
+
+## 12c. Git Checkpointer (`git-checkpointer.js`)
+
+Realiza commits automáticos tras cada paso completado cuando `project.gitEnabled === true` y el directorio es un repositorio git.
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `isGitRepo(projectPath)` | `true` si existe `.git/` en el directorio |
+| `checkpoint(projectPath, message)` | `git add -A` + `git commit --author="AgentHub <agenthub@local>"`. Devuelve el SHA del commit o `null` si no había cambios. |
+| `rollbackToSha(projectPath, sha)` | `git reset --hard {sha}` — restaura el estado exacto de ese commit |
+
+### Integración en el orquestador
+
+- Tras cada paso exitoso: `checkpoint(project.path, "[orchName] paso N/M: agentName")` → el SHA se guarda en `stepResult.gitCommitSha`.
+- En rollback: si `stepResult.gitCommitSha` existe, se usa `rollbackToSha` en lugar del snapshot JSON.
+
+---
+
+## 12d. Ops Ledger (`ops-ledger.js`)
+
+Registro append-only de operaciones atómicas (modificaciones de fichero) por orquestación. Persiste en `{projectPath}/.agent-hub/ops/{orchId}-ledger.json`.
+
+### Estructura de una entrada
+
+```json
+{
+  "id": "op-a1b2c3d4",
+  "executionId": "exec-...",
+  "orchestrationId": "orch-...",
+  "stepIndex": 1,
+  "agentName": "refactor-expert",
+  "kind": "modify",
+  "filePath": "src/utils.ts",
+  "status": "applied",
+  "createdAt": "2026-06-03T10:00:00Z"
+}
+```
+
+`status` puede ser `applied` o `reverted` (con campo `revertedAt` adicional).
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `readLedger(projectPath, orchId)` | Lee el ledger completo; devuelve `{ ops: [] }` si no existe |
+| `appendOps(projectPath, orchId, newOps[])` | Añade operaciones al ledger de forma atómica (tmp → rename) |
+| `markOpReverted(projectPath, orchId, opId)` | Cambia el `status` de una op a `reverted` y registra `revertedAt` |
+
+---
+
+## 13. Bandeja del sistema (`tray.js`)
 
 Icono en la bandeja de Windows. Click izquierdo muestra la ventana; click derecho abre menú con "Abrir", "Reiniciar" y "Salir". `destroyTray()` se llama desde `app.on('before-quit')`.
 
@@ -1123,90 +946,37 @@ Icono en la bandeja de Windows. Click izquierdo muestra la ventana; click derech
 
 ## 13b. Automatización de navegador vía CDP (`browser.js`)
 
-Gestiona la conexión Playwright a un navegador con `--remote-debugging-port` activo. Proporciona las operaciones `browser_get`, `browser_action` y `browser_screenshot` que el Subsistema CLI traduce a acciones sobre el DOM.
+Gestiona la conexión Playwright a un navegador con `--remote-debugging-port` activo.
 
 ### Navegadores soportados
 
-| Clave | Nombre | Motor |
-|---|---|---|
-| `chrome` | Google Chrome | Chromium (CDP completo) |
-| `edge` | Microsoft Edge | Chromium (CDP completo) |
-| `brave` | Brave Browser | Chromium (CDP completo) |
-| `firefox` | Mozilla Firefox | Protocolo propio (parcial) |
-
-`findBrowserExecutable(key)` recorre las rutas estándar de cada navegador y devuelve el primer ejecutable encontrado.
-
-### Estado en memoria
-
-```js
-let _browser      = null;   // instancia Playwright Browser
-let _page         = null;   // Page activa
-let _connected    = false;
-let _launchedPid  = null;   // PID del proceso lanzado por launchBrowserWithCdp
-```
-
-### Conexión manual (`connectCdp`)
-
-`connectCdp(port?, browserKey?)` usa `playwright.chromium.connectOverCDP('http://localhost:{port}')`. Si la conexión tiene éxito, guarda `_browser` y `_page` y marca `_connected = true`.
-
-### Lanzamiento con perfil CDP dedicado (`launchBrowserWithCdp`)
-
-Para garantizar que el navegador abre con `--remote-debugging-port` activo (Chrome/Edge usan modelo single-instance y ignorarían el flag si ya están corriendo), `launchBrowserWithCdp` usa un perfil de usuario independiente:
-
-```
-~/.agent-hub-cdp-profile/   ← perfil separado del navegador personal del usuario
-```
-
-Secuencia:
-
-1. Cierra la conexión Playwright existente (`_browser.close()`).
-2. Mata el PID anterior lanzado por la app (`_launchedPid`) y espera 800 ms.
-3. Lanza el ejecutable con `--remote-debugging-port={port} --user-data-dir=~/.agent-hub-cdp-profile` (más flags para suprimir diálogos de primera vez en Chrome/Edge).
-4. Sondea el puerto CDP hasta 10 veces (1 s entre intentos) hasta confirmar que responde.
-5. Devuelve `{ launched, exe, pid, warning? }` — si tras 10 s el puerto aún no responde, incluye `warning` pero no lanza error.
-
-Firefox usa `--no-remote --profile` en lugar de `--user-data-dir`.
+| Clave | Motor |
+|---|---|
+| `chrome` | Chromium (CDP completo) |
+| `edge` | Chromium (CDP completo) |
+| `brave` | Chromium (CDP completo) |
+| `firefox` | Protocolo propio (parcial) |
 
 ### Funciones exportadas
 
 | Función | Descripción |
 |---|---|
-| `getBrowserStatus()` | Snapshot del estado en memoria para `GET /api/browser/status` |
-| `getInstalledBrowsers()` | Lista los navegadores encontrados en el sistema |
-| `connectCdp(port?, browserKey?)` | Conecta Playwright al puerto CDP indicado |
-| `disconnectCdp()` | Cierra la conexión (navegador permanece abierto) |
+| `getBrowserStatus()` | Snapshot del estado en memoria |
+| `getInstalledBrowsers()` | Lista navegadores encontrados en el sistema |
+| `connectCdp(port?, browserKey?)` | Conecta Playwright al puerto CDP |
+| `disconnectCdp()` | Cierra la conexión (navegador sigue abierto) |
 | `launchBrowserWithCdp(browserKey, port?)` | Lanza navegador con perfil dedicado y puerto CDP |
-| `getBrowserTabs()` | Lista pestañas abiertas (título + URL) |
-| `getActivePage()` | Devuelve `_page` o lanza error si no hay conexión |
-| `browserGet(url, selector?, format?)` | Navega a URL y extrae texto/HTML |
-| `browserAction(action, selector?, value?, script?)` | Interactúa con el DOM (click, fill, evaluate…) |
+| `getBrowserTabs()` | Lista pestañas abiertas |
+| `getActivePage()` | Devuelve `_page` o lanza error |
+| `browserGet(url, selector?, format?)` | Navega y extrae texto/HTML |
+| `browserAction(action, selector?, value?, script?)` | Interactúa con el DOM |
 | `browserScreenshot(selector?)` | Captura de pantalla (base64 PNG) |
-
-### Protocolo de herramientas (para `subsystem-cli.js`)
-
-```
-TOOL: browser_get
-URL: https://example.com/page
-[SELECTOR: #content]        ← opcional: esperar elemento
-[FORMAT: text|html|both]    ← defecto: text
-
-TOOL: browser_action
-ACTION: click|fill|select|hover|screenshot|wait|evaluate
-SELECTOR: #btn-submit
-[VALUE: "texto"]
-[SCRIPT: document.title]    ← solo para evaluate
-
-TOOL: browser_screenshot
-[SELECTOR: #panel]          ← opcional: recorte de elemento
-```
 
 ---
 
 ## 14. Bridge IPC (`preload.js`)
 
-`contextBridge.exposeInMainWorld('api', {...})` expone `window.api` al renderer. El renderer **nunca** usa `require` ni accede directamente a Node.
-
-### API expuesta
+`contextBridge.exposeInMainWorld('api', {...})` expone `window.api` al renderer.
 
 ```ts
 window.api = {
@@ -1219,7 +989,7 @@ window.api = {
   openExternal(url)        → void
   openVSCode(p)            → Promise<{ ok: boolean; error?: string }>
   pickFolder()             → Promise<string | null>
-  pickFile()               → Promise<string | null>   // selector de fichero individual
+  pickFile()               → Promise<string | null>
   onCloseRequested(cb)     → void
   closeResponse(action, remember) → void
   checkForUpdate()         → Promise<any>
@@ -1236,34 +1006,13 @@ window.api = {
 
 ## 15. Agentes por defecto (`defaults.js`)
 
-`DEFAULT_AGENTS` está vacío (`{}`). Los agentes ya no se seedean desde código: provienen del Directorio de Agentes externo descargado en el arranque. El fichero se conserva para no romper la importación en `agents.js`, pero no define ningún agente.
+`DEFAULT_AGENTS` está vacío. Los agentes provienen del Directorio de Agentes externo descargado en el arranque. El fichero se conserva para no romper la importación en `agents.js`.
 
 ---
 
 ## 16. Plantillas de contexto (`templates.js`)
 
-Genera el contenido inicial de `CLAUDE.md` y `.github/copilot-instructions.md` al crear un proyecto.
-
-### `getTemplate(categoryId, techId, projectName)`
-
-Plantillas específicas por combinación categoría-tecnología:
-
-| Combinación | Stack documentado |
-|---|---|
-| `games-unity` | Unity 2023 LTS, URP, C# |
-| `games-godot` | Godot 4, GDScript |
-| `web-react` | React 18, Vite, TypeScript, TailwindCSS, Zustand |
-| `web-fullstack` | React + Express + PostgreSQL + Prisma |
-| `web-nextjs` | Next.js 14 App Router, Prisma, NextAuth |
-| `mobile-react-native` | Expo + Expo Router, Reanimated 3 |
-| `mobile-pwa` | Vite + Workbox, Lighthouse 90+ |
-| `docs` | Docusaurus 3, MDX |
-
-Si no hay plantilla específica, devuelve una plantilla genérica mínima.
-
-### `getGitHubTemplate(categoryId, techId, projectName)`
-
-Misma lógica adaptada para Copilot: sustituye "Rules" → "Coding standards" y elimina referencias a Claude Code.
+Genera el contenido inicial de `CLAUDE.md` al crear un proyecto. Sin plantillas específicas por tecnología (el stack se documenta en el contexto del proyecto y en las skills).
 
 ---
 
@@ -1274,126 +1023,48 @@ Misma lógica adaptada para Copilot: sustituye "Rules" → "Coding standards" y 
 ```
 main.js: app.whenReady()
   │
-  ├── bootstrapDirectories()
-  ├── migrateAgentFiles()
-  ├── startServer()                      ← Express levantado
-  ├── createWindow()                     ← ventana visible
-  │
-  └── agentsSync.triggerSync(url, isFirst=true)  ← async, no bloquea
-        │
-        ├── fetchHeadSHA()               ← 1 req a GitHub API
-        ├── fetchTree()                  ← 1 req a GitHub API
+  ├── bootstrapDirectories()  ← crea agents/global/, agents/skills/, etc.
+  ├── startServer()           ← Express levantado
+  ├── createWindow()          ← ventana visible
+  └── agentsSync.triggerSync(url, isFirst=true)
+        ├── fetchHeadSHA()
+        ├── fetchTree()
         └── para cada .md:
-            └── downloadRaw()            ← raw.githubusercontent.com
-                writeFile()
+            ├── si skills/ → escribe en agents/skills/
+            ├── si global|section → escribe en agents/{nivel}/
+            └── resto → agents/uncategorized/
 
   Renderer: GET /api/agents-directory/status → { firstSync: true, syncing: true }
-    └── muestra overlay de progreso
-    └── polling cada 600ms
-    └── cuando syncing=false → recarga agentes, quita overlay
-```
-
-### Sync manual desde Settings
-
-```
-Usuario: botón "Sincronizar ahora"
-Frontend: POST /api/agents-directory/sync
-  │
-  server.js → agentsSync.triggerSync(url, false)  ← fire and forget
-  ← { ok: true }
-  │
-  Frontend: polling de GET /api/agents-directory/status cada 600ms
-    └── cuando syncing=false → toast con resultado
-```
-
-### Resolución de conflictos
-
-```
-Sync detecta: remoteSHA cambió + diskSHA ≠ meta.localSHA
-  └── conflict encola en syncState.pendingConflicts
-
-Renderer: GET /api/agents-directory/status → pendingConflicts.length > 0
-  └── muestra modal de conflicto
-
-Usuario elige:
-  ├── "Mantener mi versión"
-  │   → POST /resolve-conflict { action: 'keep' }
-  │   → meta.localSHA = diskSHA actual (no descarga nada)
-  │
-  └── "Actualizar desde directorio"
-      → POST /resolve-conflict { action: 'update' }
-      → downloadRaw() + writeFile() + actualizar meta
+    └── overlay de progreso → polling 600ms → recarga al terminar
 ```
 
 ### Crear un proyecto nuevo
 
 ```
-Frontend: POST /api/projects { name, categoryId, techId, path, aiProviders }
+Frontend: POST /api/projects { name, categoryId, skills, aiProviders }
   │
   server.js → projects.createProject(data)
     ├── makeProjectId()
     ├── fs.mkdirSync(path, recursive)
     ├── escribe CONTEXTO.md y replica a CLAUDE.md, etc.
     ├── syncProject(id)
-    │   └── getApplicableAgents(project)  → global + section + tech
-    │       para cada agente → adapta para cada p en aiProviders → save
+    │   └── getApplicableAgents(categoryId)  → global + section
+    │       para cada agente → adapta y guarda en {project}/
     └── writeConfig(cfg con nuevo proyecto)
   ← { project }
 ```
 
-### Sync de un agente actualizado
+### Ejecución de agente con skills inyectadas
 
 ```
-Usuario edita agente global en la UI
-Frontend: PUT /api/agents { level:'global', agent }
-  │
-  agents.updateAgent() → sobreescribe agents/global/nombre.md
-  │
-  Frontend: POST /api/projects/:id/sync
-    │
-    projects.syncProject(id)
-      ├── hashAgent(agente modificado) ≠ project.agentHashes['nombre']
-      └── para cada p en aiProviders:
-          └── adapta y guarda en {project}/.{p}/agents/nombre.md
-  ← { added: 0, updated: 1, skipped: N }
-```
-
-### Ejecución directa de un agente sobre un proyecto
-
-```
-Frontend: GET /api/projects/:id/context?type=auto
-  │
-  server.js → projects.getContextAuto(project, cfg.aiProvider)
-    ├── detecta grupo del proyecto y del proveedor global
-    ├── si grupos difieren → mismatch: true
-    ├── lee CONTEXTO.md (o fallback a CLAUDE.md)
-    └── devuelve ProjectContextInfo { content, type, label, mismatch, isEmpty, isDefault, sizeBytes }
-  ← ProjectContextInfo
-
-Frontend: POST /api/projects/:id/execute-task { agent }
+POST /api/projects/:id/execute-task { agent }
   │
   server.js:
     ├── getContextAuto() → leer contexto
-    ├── deriveAgentTask(agent) → inferir tarea predefinida
-    ├── buildSystemPrompt = agent.system + '\n\nProyecto: ...\nRuta: ...\n\n' + contextContent
-    └── callAIChat([{ role:'user', content: task }], systemPrompt, {
-          extraArgs: ['--dangerously-skip-permissions', '--max-turns', '10'],
-          cwd: project.path,
-          timeout: 300_000
-        })
-  ← { result: string, task: string, durationMs: number }
-```
-
-### Chat con contexto de agentes
-
-```
-Frontend: POST /api/chat { messages, systemPrompt }
-  │
-  ai.callAIChat(messages, systemPrompt)
-    ├── 'cli'    → texto aplanado → spawn claude --print
-    ├── 'api'    → anthropic.messages.create({ system, messages })
-    └── 'github' → fetch Azure inference endpoint
-  ← { reply: string }
+    ├── cargar project.skills[] → leer contenido de cada .md de skills
+    ├── buildSystemPrompt = agent.system + skillsBlock + contextContent
+    └── callAIChat([{ role:'user', content: task }], systemPrompt, opts)
+  ← { result, task, durationMs }
 ```
 
 ---
@@ -1402,27 +1073,23 @@ Frontend: POST /api/chat { messages, systemPrompt }
 
 ### Dashboard (`GET /api/dashboard`)
 
-`buildDashboardNotifications(cfg)` recorre todos los proyectos activos y todos los agentes para generar oportunidades de mejora:
+`buildDashboardNotifications(cfg)` genera `DashboardNotification[]`:
 
 **Para cada agente:**
-- **Optimization**: si no tiene herramientas configuradas (`tools: []`).
-- **Optimization**: si el prompt no ha sido optimizado con IA (`!agent.optimized` y `system.length > 30`).
+- **Optimization**: sin herramientas configuradas (`tools: []`).
+- **Optimization**: prompt no optimizado con IA.
 
 **Para cada proyecto activo:**
-- **Critical**: proyecto sin `CLAUDE.md` (si `needsClaude`) o sin `copilot-instructions.md` (si `needsGithub`).
-- **Optimization**: fichero de contexto existe pero tiene menos de 80 caracteres.
-- **Optimization**: agentes pendientes de sync (si `pendingUpdates > 0`).
+- **Critical**: sin `CLAUDE.md` o `copilot-instructions.md`.
+- **Optimization**: fichero de contexto < 80 caracteres.
+- **Optimization**: agentes pendientes de sync.
 
 ### Notificaciones — dismiss vs. snooze
 
-- `dismissedDashboardNotifications: string[]` en `config.json` — lista permanente de ids descartados.
-- `snoozedDashboardNotifications: Record<string, string>` en `config.json` — mapa `{ id: isoDate }` con fecha de expiración. Se limpia automáticamente al expirar.
-- El endpoint de dashboard filtra las notificaciones aplicando ambas listas. La respuesta incluye `hiddenDismissed` y `hiddenSnoozed` por separado.
-- `POST /restore` borra ambos campos (dismissed + snoozed).
+- `dismissedDashboardNotifications: string[]` — descartados permanentemente.
+- `snoozedDashboardNotifications: Record<string, string>` — aplazados con fecha de expiración.
 
 ### Salud de proyectos (`buildProjectHealth`)
-
-Analiza cada proyecto activo y devuelve un estado resumen:
 
 | Estado | Condición |
 |---|---|
@@ -1430,22 +1097,6 @@ Analiza cada proyecto activo y devuelve un estado resumen:
 | `warning` | Sync desactualizado, contexto delgado, o agentes sin herramientas |
 | `critical` | Ruta no encontrada, contexto ausente, o agentes corruptos |
 
-Detecta: ruta inexistente, agentes pendientes de sync, sync estancado (> 3 días), estado del fichero de contexto (`ok / thin / missing`), y problemas en los ficheros `.md` del proyecto (frontmatter inválido, herramientas vacías, prompt muy corto).
-
 ### Seguimiento de uso (`ai.js`)
 
-Fichero de persistencia: `cache/ai-usage.json`
-
-```json
-{
-  "inputTokens": 12345,
-  "outputTokens": 6789,
-  "estimatedCostUSD": 0.1234,
-  "calls": 42,
-  "since": "2026-05-01T00:00:00Z"
-}
-```
-
-Solo `cumulative` se persiste; `session` vive en memoria y se pierde al cerrar la app.
-
-**Cambio de proveedor** (`PUT /api/config` con nuevo `aiProvider`): llama `resetAllUsage()` para que los contadores reflejen únicamente el uso del proveedor activo.
+Fichero de persistencia: `cache/ai-usage.json`. Solo `cumulative` se persiste; `session` vive en memoria.

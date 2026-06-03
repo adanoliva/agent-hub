@@ -17,7 +17,10 @@ async function isGitRepo(projectPath) {
 async function checkpoint(projectPath, message) {
   await execAsync('git add -A', { cwd: projectPath });
   try {
-    await execAsync(`git commit -m "${message.replace(/"/g, "'")}"`, { cwd: projectPath });
+    await execAsync(
+      `git commit --author="AgentHub <agenthub@local>" -m "${message.replace(/"/g, "'")}"`,
+      { cwd: projectPath }
+    );
   } catch (e) {
     if (!e.message.includes('nothing to commit') && !e.stderr?.includes('nothing to commit')) throw e;
     return null;

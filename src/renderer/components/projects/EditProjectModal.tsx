@@ -35,15 +35,14 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
   const config   = useStore((s) => s.config);
   const toast    = useToast();
   const cats     = config?.categories ?? [];
-  const cat      = cats.find((c) => c.id === p.categoryId);
-  const techs    = cat?.technologies ?? [];
   const origProvs = p.aiProviders || ['claude'];
 
   const [name,        setName]        = useState(p.name);
   const [desc,        setDesc]        = useState(p.description ?? '');
   const [status,      setStatus]      = useState(p.status);
-  const [techId,      setTechId]      = useState(p.techId ?? '');
+  const [catId,       setCatId]       = useState(p.categoryId);
   const [aiProviders, setAiProviders] = useState<string[]>(origProvs);
+  const [gitEnabled,  setGitEnabled]  = useState(p.gitEnabled ?? false);
 
   const warn = getProviderWarning(origProvs, aiProviders);
 
@@ -53,7 +52,7 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
 
     const result = await req<{ migration?: { added: string[]; removed: string[]; agentsMigrated: number } }>(
       'PUT', `/projects/${p.id}`,
-      { name: name.trim(), description: desc.trim(), status, techId: techId || null, aiProviders }
+      { name: name.trim(), description: desc.trim(), status, categoryId: catId, aiProviders, gitEnabled }
     );
     const m = result.migration;
     if (m && (m.added.length || m.removed.length)) {
@@ -77,7 +76,7 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
   return (
     <Modal
       title="Editar proyecto"
-      sub="Actualiza configuración, tecnología y ecosistemas IA"
+      sub="Actualiza configuración y ecosistemas IA"
       modalClassName="project-edit-modal"
       bodyClassName="project-edit-body"
       onConfirm={handleConfirm}
@@ -105,10 +104,9 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
         </div>
 
         <div className="field project-edit-col-span-2">
-          <label>Tecnología</label>
-          <select value={techId} onChange={(e) => setTechId(e.target.value)}>
-            <option value="">— Sin tecnología específica —</option>
-            {techs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          <label>Categoría</label>
+          <select value={catId} onChange={(e) => setCatId(e.target.value)}>
+            {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
 
@@ -150,6 +148,26 @@ export function EditProjectModal({ project: p, onClose, onUpdated }: Props) {
               style={{ marginTop: 12, fontSize: 11, background: 'rgba(217,119,6,0.1)', color: 'var(--amber)', padding: 10, borderRadius: 8, border: '1px solid rgba(217,119,6,0.2)' }}
               dangerouslySetInnerHTML={{ __html: `<i class="ti ti-alert-triangle"></i> ${warn}` }}
             />
+          )}
+        </div>
+
+        <div className="field project-edit-col-span-2">
+          <label>Configuración avanzada</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 0' }}>
+            <input
+              type="checkbox"
+              checked={gitEnabled}
+              onChange={(e) => setGitEnabled(e.target.checked)}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text1)' }}>
+              <i className="ti ti-git-commit" style={{ marginRight: 5, color: 'var(--green)' }} />
+              Checkpoint git tras cada paso de orquestación
+            </span>
+          </label>
+          {gitEnabled && (
+            <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, paddingLeft: 26 }}>
+              Hace un commit automático después de cada agente. Requiere que el proyecto sea un repositorio git.
+            </div>
           )}
         </div>
       </div>

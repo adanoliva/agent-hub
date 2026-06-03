@@ -25,13 +25,23 @@ export function AgentsCenter({
 }: Props) {
   const config   = useStore((s) => s.config);
   const projects = useStore((s) => s.projects);
-  const { catName, techName } = useCategoryHelpers();
+  const { catName, catColor } = useCategoryHelpers();
+
+  function agentOriginLabel(a: Agent) {
+    if (a.level === 'global')        return { label: 'Global',   color: 'var(--green)' };
+    if (a.level === 'section')       return { label: catName(a.categoryId ?? ''), color: catColor(a.categoryId ?? '') };
+    if (a.level === 'project') {
+      const p = projects.find((x) => x.id === a.projectId);
+      return { label: p?.name ?? 'Proyecto', color: 'var(--amber)' };
+    }
+    if (a.level === 'uncategorized') return { label: 'Sin categoría', color: 'var(--text3)' };
+    return null;
+  }
 
   const isProject = node.level === 'project';
 
   const title = (() => {
     if (node.level === 'section') return catName(node.categoryId ?? '');
-    if (node.level === 'tech')    return `${catName(node.categoryId ?? '')} → ${techName(node.categoryId ?? '', node.techId ?? '')}`;
     if (node.level === 'project') return projects.find((p) => p.id === node.projectId)?.name ?? 'Proyecto';
     if (node.level === 'uncategorized') return 'Sin categoría';
     return 'Global';
@@ -44,6 +54,11 @@ export function AgentsCenter({
       <div className="agents-panel-head">
         <span className="agents-panel-title">
           {searchActive ? <><i className="ti ti-search" style={{ marginRight: 6, color: 'var(--text2)' }} />Resultados de búsqueda</> : title}
+          {!searchActive && agents.length > 0 && (
+            <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+              {agents.length}
+            </span>
+          )}
         </span>
         {!searchActive && (
           <div style={{ display: 'flex', gap: 6 }}>
@@ -70,16 +85,34 @@ export function AgentsCenter({
           </div>
         ) : (
           <div className="agents-grid">
-            {agents.map((a) => (
-              <AgentCard
-                key={a.name}
-                agent={a}
-                node={node}
-                selected={selectedAgent === a.name}
-                onClick={() => onSelectAgent(a)}
-                onChatWith={onChatWithAgent}
-              />
-            ))}
+            {agents.map((a) => {
+              const origin = searchActive ? agentOriginLabel(a) : null;
+              const cardNode = searchActive && a.level
+                ? { level: a.level as any, categoryId: a.categoryId ?? null, projectId: a.projectId ?? null }
+                : node;
+              return (
+                <div key={a.name} style={{ position: 'relative' }}>
+                  {origin && (
+                    <span style={{
+                      position: 'absolute', top: 7, right: 7, zIndex: 1,
+                      fontSize: 9, fontFamily: 'var(--mono)', letterSpacing: '.04em',
+                      background: 'var(--bg3)', border: '1px solid var(--border2)',
+                      borderRadius: 4, padding: '1px 5px', color: origin.color,
+                      pointerEvents: 'none',
+                    }}>
+                      {origin.label}
+                    </span>
+                  )}
+                  <AgentCard
+                    agent={a}
+                    node={cardNode}
+                    selected={selectedAgent === a.name}
+                    onClick={() => onSelectAgent(a)}
+                    onChatWith={onChatWithAgent}
+                  />
+                </div>
+              );
+            })}
 
             {!suggestionsLoading && suggestions.length > 0 && (
               <>

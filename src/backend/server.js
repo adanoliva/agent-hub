@@ -306,24 +306,21 @@ app.get('/api/agents', (req, res) => {
   }
 });
 
-// GET /api/agents/applicable?projectId= OR ?categoryId=&techId=
+// GET /api/agents/applicable?projectId= OR ?categoryId=
 app.get('/api/agents/applicable', (req, res) => {
-  let { categoryId, techId, projectId } = req.query;
-  if (projectId && (!categoryId || !techId)) {
+  let { categoryId, projectId } = req.query;
+  if (projectId && !categoryId) {
     const project = readConfig().projects.find(p => p.id === projectId);
-    if (project) {
-      categoryId = categoryId || project.categoryId;
-      techId     = techId     || project.techId;
-    }
+    if (project) categoryId = project.categoryId;
   }
-  res.json(getApplicableAgents(categoryId, techId));
+  res.json(getApplicableAgents(categoryId));
 });
 
 app.post('/api/agents', (req, res) => {
-  const { level, categoryId, techId, agent } = req.body;
+  const { level, categoryId, agent } = req.body;
   if (!level || !agent) return res.status(400).json({ error: 'level and agent required' });
   try {
-    const result = createAgent(level, categoryId, techId, agent);
+    const result = createAgent(level, categoryId, null, agent);
     if (level === 'global') syncGlobalAgentsToClaudeDir();
     res.json(result);
   } catch (e) {
@@ -332,10 +329,10 @@ app.post('/api/agents', (req, res) => {
 });
 
 app.put('/api/agents', (req, res) => {
-  const { level, categoryId, techId, oldName, agent } = req.body;
+  const { level, categoryId, oldName, agent } = req.body;
   if (!level || !oldName || !agent) return res.status(400).json({ error: 'level, oldName and agent required' });
   try {
-    const result = updateAgent(level, categoryId, techId, oldName, agent);
+    const result = updateAgent(level, categoryId, null, oldName, agent);
     if (level === 'global') syncGlobalAgentsToClaudeDir();
     res.json(result);
   } catch (e) {
@@ -344,9 +341,9 @@ app.put('/api/agents', (req, res) => {
 });
 
 app.delete('/api/agents', (req, res) => {
-  const { level, categoryId, techId, name } = req.body;
+  const { level, categoryId, name } = req.body;
   if (!level || !name) return res.status(400).json({ error: 'level and name required' });
-  deleteAgent(level, categoryId, techId, name);
+  deleteAgent(level, categoryId, null, name);
   if (level === 'global') syncGlobalAgentsToClaudeDir();
   res.json({ ok: true });
 });
@@ -401,24 +398,24 @@ app.get('/api/projects', (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents } = req.body;
+  const { name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(await createProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }));
+    res.json(await createProject({ name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills }));
   } catch (e) {
     res.status(e.message.includes('already exists') ? 409 : 500).json({ error: e.message });
   }
 });
 
 app.post('/api/projects/import', async (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents } = req.body;
+  const { name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(await importProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }));
+    res.json(await importProject({ name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills }));
   } catch (e) {
     res.status(e.message.includes('not exist') ? 404 : 409).json({ error: e.message });
   }
@@ -611,7 +608,6 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
     const existingReadme = safeRead(path.join(project.path, 'README.md'), 2000) || safeRead(path.join(project.path, 'readme.md'), 2000);
 
     const cat  = (cfg.categories || []).find(c => c.id === project.categoryId);
-    const tech = (cat?.technologies || []).find(t => t.id === project.techId);
     const fileLabel = `${config.contextFile} (${config.label})`;
 
     const contextFilePath = getContextFilePath(project, ctxType);
@@ -619,7 +615,6 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 
     const projectInfo = `**Nombre:** ${project.name}
 **Categoría:** ${cat?.name || project.categoryId || 'N/A'}
-**Tecnología:** ${tech?.name || project.techId || 'N/A'}
 **Lenguajes:** ${detectedLanguages.join(', ')}
 **Librerías:** ${mainLibraries.slice(0, 8).join(', ') || 'No detectadas'}
 **Testing:** ${testingFramework} · **Build:** ${buildTool} · **Lint:** ${lintingTool}
@@ -635,7 +630,7 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
     });
 
     const { callAI } = require('./ai');
-    const content = await callAI(analysisPrompt);
+    const content = await callAI(analysisPrompt, { cwd: project.path });
     res.json({ content });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -672,23 +667,15 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
   const notifications = [];
 
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || id || 'N/A';
-  const techName = (catId, techId) => {
-    const cat = categories.find((c) => c.id === catId);
-    return cat?.technologies?.find((t) => t.id === techId)?.name || techId || 'N/A';
-  };
   const agentScopeLabel = (agent) => {
     if (agent.level === 'global') return 'Global';
     if (agent.level === 'section') return `Categoría: ${categoryName(agent.categoryId)}`;
-    if (agent.level === 'tech') {
-      return `Tecnología: ${categoryName(agent.categoryId)} / ${techName(agent.categoryId, agent.techId)}`;
-    }
     if (agent.level === 'uncategorized') return 'Sin categoría';
     return agent.level || 'Desconocido';
   };
   const agentScopeKey = (agent) => [
     agent.level || 'unknown',
     agent.categoryId || 'none',
-    agent.techId || 'none',
   ].join('-');
 
   for (const agent of allAgents) {
@@ -703,11 +690,7 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
         action:     'open-agent',
         level:      agent.level,
         categoryId: agent.categoryId || null,
-        techId:     agent.techId     || null,
       };
-      if (agent.name === 'readme') {
-        console.log(`📬 Created notification for 'readme':`, {level: notif.level, categoryId: notif.categoryId, techId: notif.techId});
-      }
       notifications.push(notif);
     }
     if (!agent.optimized && agent.system && agent.system.length > 30) {
@@ -721,7 +704,6 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
         action:     'optimize-agent',
         level:      agent.level,
         categoryId: agent.categoryId || null,
-        techId:     agent.techId     || null,
       });
     }
   }
@@ -1199,6 +1181,19 @@ app.post('/api/ai/generate-prompt', async (req, res) => {
   }
 });
 
+// POST /api/ai/generate-skill — generate skill content from name + description
+app.post('/api/ai/generate-skill', async (req, res) => {
+  const { name, description, language = 'en' } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  try {
+    const prompt = prompts.skillContent({ name, description, language });
+    const content = await callAI(prompt);
+    res.json({ content });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/ai/optimize-agent — rewrite & improve an existing agent system prompt
 app.post('/api/ai/optimize-agent', async (req, res) => {
   const { name, description, system, tools = [], model = 'sonnet', language = 'en' } = req.body;
@@ -1328,8 +1323,7 @@ async function getProjectSuggestionsImpl(projectId, force = false, alreadySugges
   const providers = project.aiProviders || ['claude'];
   const provider  = providers.includes('github') ? 'github' : providers[0];
   const ctx       = getContextFile(project, provider);
-  const cat       = (cfg.categories || []).find(c => c.id === project.categoryId);
-  const tech      = (cat?.technologies || []).find(t => t.id === project.techId);
+  const cat         = (cfg.categories || []).find(c => c.id === project.categoryId);
   const existing    = listProjectAgents(project.path, providers).map(a => a.name);
   const allExcluded = [...new Set([...existing, ...alreadySuggested])];
 
@@ -1337,7 +1331,7 @@ async function getProjectSuggestionsImpl(projectId, force = false, alreadySugges
     project,
     contextContent: ctx.content || '',
     categoryName:   cat?.name || project.categoryId || '',
-    techName:       tech?.name || project.techId || '',
+    techName:       '',
     existingAgents: allExcluded,
   });
 
@@ -1438,15 +1432,12 @@ app.delete('/api/chat/history', (req, res) => {
 app.get('/api/agents/flat', (req, res) => {
   const cfg = readConfig();
   const all = [];
-  const collect = (level, catId, techId) => {
-    try { all.push(...listAgentsByLevel(level, catId, techId)); } catch {}
+  const collect = (level, catId) => {
+    try { all.push(...listAgentsByLevel(level, catId)); } catch {}
   };
   collect('global');
   collect('uncategorized');
-  for (const cat of (cfg.categories || [])) {
-    collect('section', cat.id);
-    for (const tech of (cat.technologies || [])) collect('tech', cat.id, tech.id);
-  }
+  for (const cat of (cfg.categories || [])) collect('section', cat.id);
   res.json(all);
 });
 
@@ -1724,8 +1715,11 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
   }
 
   const onLog             = (log)    => send('message', log);
+  const onStepStart       = (data)   => send('step-start',       { type: 'step-start',       data });
   const onStepInput       = (data)   => send('step-input',       { type: 'step-input',       data });
   const onStepDone        = (result) => send('step-done',        { type: 'step-done',        data: result });
+  const onStepWarning     = (data)   => send('step-warning',     { type: 'step-warning',     data });
+  const onGateOpen        = (data)   => send('gate-open',        { type: 'gate-open',        data });
   const onBrowserRequired = (data)   => send('browser-required', { type: 'browser-required', data });
   const onBrowserContinued= (data)   => send('browser-continued',{ type: 'browser-continued',data });
   const onCancelled       = (data)   => { send('cancelled', { type: 'cancelled', data }); cleanup(); res.end(); };
@@ -1742,8 +1736,11 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
 
   const cleanup = () => {
     executor.off('log',              onLog);
+    executor.off('step-start',       onStepStart);
     executor.off('step-input',       onStepInput);
     executor.off('step-done',        onStepDone);
+    executor.off('step-warning',     onStepWarning);
+    executor.off('gate-open',        onGateOpen);
     executor.off('browser-required', onBrowserRequired);
     executor.off('browser-continued',onBrowserContinued);
     executor.off('cancelled',        onCancelled);
@@ -1752,8 +1749,11 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
   };
 
   executor.on('log',              onLog);
+  executor.on('step-start',       onStepStart);
   executor.on('step-input',       onStepInput);
   executor.on('step-done',        onStepDone);
+  executor.on('step-warning',     onStepWarning);
+  executor.on('gate-open',        onGateOpen);
   executor.on('browser-required', onBrowserRequired);
   executor.on('browser-continued',onBrowserContinued);
   executor.on('cancelled',        onCancelled);
@@ -1825,41 +1825,40 @@ app.post('/api/orchestrations/:id/executions/:executionId/rollback', async (req,
 });
 
 // ── Skills endpoints ──────────────────────────────────────────────────────────
+// Skills are flat (no level/category/tech) — referenced by name from agents.
 
-// GET /api/skills/flat — todos los skills (para selector en AgentEditor)
+// GET /api/skills  |  GET /api/skills/flat — lista todos los skills
 app.get('/api/skills/flat', (req, res) => {
-  try { res.json(skills.listAllSkills()); }
+  try { res.json(skills.listSkills()); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/skills?level=&categoryId=&techId= → Skill[]
 app.get('/api/skills', (req, res) => {
-  const { level = 'global', categoryId, techId } = req.query;
-  try { res.json(skills.listSkillsByLevel(level, categoryId, techId)); }
+  try { res.json(skills.listSkills()); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/skills — crea skill
 app.post('/api/skills', (req, res) => {
-  const { level = 'global', categoryId, techId, skill } = req.body;
+  const { skill } = req.body;
   if (!skill?.name) return res.status(400).json({ error: 'name requerido' });
-  try { skills.createSkill(level, categoryId, techId, skill); res.json({ ok: true }); }
+  try { skills.createSkill(skill); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT /api/skills — actualiza skill
 app.put('/api/skills', (req, res) => {
-  const { level = 'global', categoryId, techId, skill } = req.body;
+  const { skill } = req.body;
   if (!skill?.name) return res.status(400).json({ error: 'name requerido' });
-  try { skills.updateSkill(level, categoryId, techId, skill); res.json({ ok: true }); }
+  try { skills.updateSkill(skill); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/skills?level=&name=&categoryId=&techId=
+// DELETE /api/skills?name=
 app.delete('/api/skills', (req, res) => {
-  const { level = 'global', name, categoryId, techId } = req.query;
+  const { name } = req.query;
   if (!name) return res.status(400).json({ error: 'name requerido' });
-  try { skills.deleteSkill(level, categoryId, techId, name); res.json({ ok: true }); }
+  try { skills.deleteSkill(name); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 

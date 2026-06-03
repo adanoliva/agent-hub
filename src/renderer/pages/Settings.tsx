@@ -6,16 +6,15 @@ import { req } from '../api';
 import { useToast } from '../hooks/useToast';
 import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
-import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomAIProvider, Skill } from '../types';
+import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomAIProvider } from '../types';
 
-type Tab = 'general' | 'cats' | 'ext-agents' | 'skills';
+type Tab = 'general' | 'cats' | 'ext-agents';
 
 type CLICheck = { found: boolean; path: string | null };
 
 // ── Modals state types ─────────────────────────────────────────────────────────
 
 interface AddCatForm  { id: string; name: string; color: string }
-interface AddTechForm { catId: string; catName: string; id: string; name: string }
 interface ImportAgentReview {
   agent: Partial<Agent>;
   dest: string;
@@ -101,7 +100,6 @@ export function Settings() {
 
   // modals
   const [addCat,      setAddCat]      = useState<AddCatForm | null>(null);
-  const [addTech,     setAddTech]     = useState<AddTechForm | null>(null);
   const [importReview,setImportReview]= useState<ImportAgentReview | null>(null);
 
   // import review local form
@@ -274,24 +272,6 @@ export function Settings() {
     toast('Categoría eliminada');
   }
 
-  async function handleAddTech() {
-    if (!addTech) return;
-    const { catId, id, name } = addTech;
-    const cleanId = id.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!cleanId || !name.trim()) { toast('Rellena ID y nombre', 'err'); throw new Error('validation'); }
-    await req('POST', `/categories/${catId}/technologies`, { id: cleanId, name: name.trim() });
-    await refreshConfig();
-    toast(`Tecnología "${name.trim()}" añadida`);
-    setAddTech(null);
-  }
-
-  async function deleteTech(catId: string, techId: string) {
-    if (!confirm('¿Eliminar esta tecnología?')) return;
-    await req('DELETE', `/categories/${catId}/technologies/${techId}`);
-    await refreshConfig();
-    toast('Tecnología eliminada');
-  }
-
   // ── agents directory ─────────────────────────────────────────────────────────
 
   async function saveDirConfig() {
@@ -345,11 +325,10 @@ export function Settings() {
 
   async function confirmImport() {
     if (!irName.trim()) { toast('El nombre es obligatorio', 'err'); throw new Error('validation'); }
-    let level = 'global', categoryId: string | undefined, techId: string | undefined;
-    if (irDest.startsWith('tech:'))    { const [, c, t] = irDest.split(':'); level = 'tech';    categoryId = c; techId = t; }
-    else if (irDest.startsWith('section:')) { const [, c] = irDest.split(':'); level = 'section'; categoryId = c; }
+    let level = 'global', categoryId: string | undefined;
+    if (irDest.startsWith('section:')) { const [, c] = irDest.split(':'); level = 'section'; categoryId = c; }
     await req('POST', '/agents', {
-      level, categoryId, techId,
+      level, categoryId,
       agent: { name: irName.trim(), description: irDesc.trim(), model: irModel, tools: irTools, system: irSystem.trim() },
     });
     toast(`Agente "${irName.trim()}" importado`);
@@ -433,13 +412,7 @@ export function Settings() {
   // Destination options for import modal
   const destOptions: { value: string; label: string }[] = [
     { value: 'global', label: 'Global (disponible en todos los proyectos)' },
-    ...cats.flatMap((cat) => [
-      { value: `section:${cat.id}`, label: `Sección: ${cat.name}` },
-      ...(cat.technologies ?? []).map((tech) => ({
-        value: `tech:${cat.id}:${tech.id}`,
-        label: `Tech: ${cat.name} › ${tech.name}`,
-      })),
-    ]),
+    ...cats.map((cat) => ({ value: `section:${cat.id}`, label: `Sección: ${cat.name}` })),
   ];
 
   return (
@@ -451,9 +424,9 @@ export function Settings() {
       <div className="settings-view">
         {/* Tabs */}
         <div className="drawer-tabs" style={{ margin: '-32px -32px 24px', paddingLeft: 32 }}>
-          {(['general', 'cats', 'ext-agents', 'skills'] as Tab[]).map((t) => (
+          {(['general', 'cats', 'ext-agents'] as Tab[]).map((t) => (
             <div key={t} className={`drawer-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : t === 'ext-agents' ? 'Directorio de Agentes' : 'Skills'}
+              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : 'Directorio de Agentes'}
             </div>
           ))}
         </div>
@@ -838,37 +811,25 @@ export function Settings() {
         {/* ── Tab: Categorías ── */}
         {tab === 'cats' && (
           <div className="settings-section">
-            <div className="settings-head">Categorías y tecnologías</div>
+            <div className="settings-head">Categorías</div>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 0, marginBottom: 12 }}>
+              Las categorías agrupan agentes por dominio. La especificidad tecnológica se define mediante skills en cada proyecto.
+            </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
               <button className="btn sm" onClick={() => setAddCat({ id: '', name: '', color: '#7c6af7' })}>
                 <i className="ti ti-plus" /> Nueva categoría
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
               {cats.map((cat) => (
                 <div key={cat.id} className="cat-item">
                   <div className="cat-item-head">
                     <div className="cat-dot" style={{ background: cat.color }} />
+                    <i className={`ti ${cat.icon || 'ti-folder'}`} style={{ color: cat.color, fontSize: 14 }} />
                     <span className="cat-item-name">{cat.name}</span>
-                    <button className="btn ghost sm" onClick={() => setAddTech({ catId: cat.id, catName: cat.name, id: '', name: '' })}>
-                      <i className="ti ti-plus" /> Tech
-                    </button>
                     <button className="btn ghost sm danger" onClick={() => deleteCat(cat.id)}>
                       <i className="ti ti-trash" />
                     </button>
-                  </div>
-                  <div className="tech-pills">
-                    {(cat.technologies ?? []).map((t) => (
-                      <span key={t.id} className="tech-pill">
-                        {t.name}
-                        <span className="del" onClick={() => deleteTech(cat.id, t.id)} title="Eliminar">
-                          <i className="ti ti-x" />
-                        </span>
-                      </span>
-                    ))}
-                    {!(cat.technologies ?? []).length && (
-                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sin tecnologías</span>
-                    )}
                   </div>
                 </div>
               ))}
@@ -1017,20 +978,6 @@ export function Settings() {
           <div className="field">
             <label>Color</label>
             <input type="color" value={addCat.color} onChange={(e) => setAddCat({ ...addCat, color: e.target.value })} style={{ height: 36, padding: 2 }} />
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Modal: Nueva tecnología ── */}
-      {addTech && (
-        <Modal title={`Nueva tecnología en ${addTech.catName}`} confirmLabel="Añadir" onConfirm={handleAddTech} onClose={() => setAddTech(null)}>
-          <div className="field">
-            <label>ID (único dentro de la categoría)</label>
-            <input value={addTech.id} onChange={(e) => setAddTech({ ...addTech, id: e.target.value })} placeholder="python" />
-          </div>
-          <div className="field">
-            <label>Nombre</label>
-            <input value={addTech.name} onChange={(e) => setAddTech({ ...addTech, name: e.target.value })} placeholder="Python" />
           </div>
         </Modal>
       )}

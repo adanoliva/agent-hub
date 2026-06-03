@@ -19,7 +19,7 @@ export function Projects() {
   const pendingAction     = useStore((s) => s.pendingAction);
   const setPendingAction  = useStore((s) => s.setPendingAction);
   const toast             = useToast();
-  const { catName, techName } = useCategoryHelpers();
+  const { catName } = useCategoryHelpers();
 
   const [drawerProject,   setDrawerProject]   = useState<Project | null>(null);
   const [editProjectId,   setEditProjectId]   = useState<string | null>(null);
@@ -154,7 +154,7 @@ export function Projects() {
                         key={p.id}
                         project={p}
                         catName={catName(p.categoryId)}
-                        techName={p.techId ? techName(p.categoryId, p.techId) : ''}
+                        techName={''}
                         onOpen={() => setDrawerProject(p)}
                         onSync={handleSync}
                         onVSCode={handleOpenVSCode}
@@ -177,7 +177,7 @@ export function Projects() {
                       key={p.id}
                       project={p}
                       catName={catName(p.categoryId)}
-                      techName={p.techId ? techName(p.categoryId, p.techId) : ''}
+                      techName={''}
                       onOpen={() => setDrawerProject(p)}
                       onSync={handleSync}
                       onVSCode={handleOpenVSCode}

@@ -204,24 +204,23 @@ function listAgentsInDir(dir) {
   return parsed;
 }
 
-function listAgentsByLevel(level, categoryId, techId) {
-  const dir = getAgentDir(level, categoryId, techId);
+function listAgentsByLevel(level, categoryId) {
+  const dir = getAgentDir(level, categoryId);
   if (!dir) return [];
-  return listAgentsInDir(dir).map(a => ({ ...a, level, categoryId: categoryId || null, techId: techId || null }));
+  return listAgentsInDir(dir).map(a => ({ ...a, level, categoryId: categoryId || null }));
 }
 
-function getApplicableAgents(categoryId, techId) {
+function getApplicableAgents(categoryId) {
   return [
     ...listAgentsByLevel('global'),
     ...listAgentsByLevel('section', categoryId),
-    ...(techId ? listAgentsByLevel('tech', categoryId, techId) : []),
   ];
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
-function createAgent(level, categoryId, techId, agentData) {
-  const dir = getAgentDir(level, categoryId, techId);
+function createAgent(level, categoryId, _techId, agentData) {
+  const dir = getAgentDir(level, categoryId);
   if (!dir) throw new Error(`Invalid level: ${level}`);
   ensureDir(dir);
 
@@ -231,11 +230,11 @@ function createAgent(level, categoryId, techId, agentData) {
   }
 
   fs.writeFileSync(filePath, serializeAgent(agentData), 'utf8');
-  return { ...parseAgentFile(filePath), level, categoryId, techId };
+  return { ...parseAgentFile(filePath), level, categoryId };
 }
 
-function updateAgent(level, categoryId, techId, oldName, agentData) {
-  const dir = getAgentDir(level, categoryId, techId);
+function updateAgent(level, categoryId, _techId, oldName, agentData) {
+  const dir = getAgentDir(level, categoryId);
   if (!dir) throw new Error(`Invalid level: ${level}`);
 
   const oldPath = path.join(dir, `${oldName}.md`);
@@ -250,11 +249,11 @@ function updateAgent(level, categoryId, techId, oldName, agentData) {
   fs.writeFileSync(newPath, serializeAgent(agentData), 'utf8');
   if (oldName !== agentData.name) fs.unlinkSync(oldPath);
 
-  return { ...parseAgentFile(newPath), level, categoryId, techId };
+  return { ...parseAgentFile(newPath), level, categoryId };
 }
 
-function deleteAgent(level, categoryId, techId, name) {
-  const dir      = getAgentDir(level, categoryId, techId);
+function deleteAgent(level, categoryId, _techId, name) {
+  const dir      = getAgentDir(level, categoryId);
   const filePath = path.join(dir, `${name}.md`);
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }

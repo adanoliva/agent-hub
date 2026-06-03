@@ -62,9 +62,11 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
   const draggingRef = useRef<{ type: 'palette' | 'node'; payload: string | number } | null>(null);
   const [errors,      setErrors]      = useState<string[]>([]);
 
-  const [allAgents,   setAllAgents]   = useState<Agent[]>([]);
-  const [agentSearch, setAgentSearch] = useState('');
-  const [scripts,     setScripts]     = useState<Array<{ name: string; label: string; description: string }>>([]);
+  const [allAgents,      setAllAgents]      = useState<Agent[]>([]);
+  const [agentSearch,    setAgentSearch]    = useState('');
+  const [scripts,        setScripts]        = useState<Array<{ name: string; label: string; description: string }>>([]);
+  const [paletteTab,     setPaletteTab]     = useState<'agents' | 'scripts'>('agents');
+  const [paletteOpen,    setPaletteOpen]    = useState(true);
 
 
   // Load available scripts from the registry
@@ -89,7 +91,10 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
       // If either call failed we keep the canvas as-is to avoid losing valid agents.
       if (!canPurge) return;
       const existingNames = new Set(merged.map(a => a.name));
-      const cleaned = currentAgents.filter(name => existingNames.has(name));
+      const cleaned = currentAgents.filter(name => {
+        if (name.startsWith('__script:')) return true; // Scripts are not part of the agents list
+        return existingNames.has(name);
+      });
       if (cleaned.length !== currentAgents.length) {
         setAgents(cleaned);
         setNodes(rebuildNodes(cleaned, currentNodes));
@@ -190,7 +195,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     let newAgents = [...agents];
     if (drag.type === 'palette') {
       const agentName = drag.payload as string;
-      if (agents.includes(agentName)) return;
+      if (!agentName.startsWith('__script:') && agents.includes(agentName)) return;
       newAgents.splice(zone, 0, agentName);
     } else {
       const fromIdx = drag.payload as number;
@@ -252,12 +257,21 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     )
   );
 
-  const agentModels: Record<string, string> = {};
+  const availableScripts = scripts;
+
+  const agentModels: Record<string, string>       = {};
+  const agentDescriptions: Record<string, string> = {};
+
   for (const a of allAgents) {
     const m = a.model || '';
     if (m.includes('haiku'))  agentModels[a.name] = 'haiku';
     else if (m.includes('opus'))   agentModels[a.name] = 'opus';
     else if (m.includes('sonnet')) agentModels[a.name] = 'sonnet';
+    agentDescriptions[a.name] = a.description || '';
+  }
+
+  for (const s of scripts) {
+    agentDescriptions[`__script:${s.name}__`] = s.description || '';
   }
 
   function modelShort(m: string): string {
@@ -370,83 +384,158 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
 
       {/* Body */}
       <div className="orch-editor-body" onDragEnd={handleDragEnd}>
-        {/* Left: Agent palette */}
-        <div className="orch-palette-panel">
-          <div className="orch-panel-title">
-            <i className="ti ti-package" /> Agentes
-            {agents.length > 0 && (
-              <span className="orch-palette-used-count">{agents.length} en uso</span>
-            )}
-          </div>
-          <div className="orch-picker-search">
-            <i className="ti ti-search" />
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={agentSearch}
-              onChange={e => setAgentSearch(e.target.value)}
-            />
-          </div>
-          <div className="orch-palette-list">
-            {filteredAgents.length === 0 ? (
-              <div className="orch-picker-empty">
-                {agentSearch
-                  ? 'Sin resultados'
-                  : agents.length > 0 && allAgents.length > 0 && allAgents.every(a => agents.includes(a.name))
-                    ? <><i className="ti ti-checks" style={{ fontSize: 22, marginBottom: 6, display: 'block' }} />Todos los agentes están en el flujo</>
-                    : 'Sin agentes disponibles'
-                }
-              </div>
-            ) : (
-              filteredAgents.map(a => (
-                <div
-                  key={a.name}
-                  className="orch-palette-card"
-                  draggable
-                  onDragStart={e => handlePaletteDragStart(a.name, e)}
-                  title="Arrastra al canvas para añadir"
-                >
-                  <div className="orch-palette-card-icon">
-                    <i className={`ti ${getAgentIcon(a.name)}`} />
-                  </div>
-                  <div className="orch-palette-info">
-                    <div className="orch-palette-name">{a.name}</div>
-                    {a.description && <div className="orch-palette-desc">{a.description}</div>}
-                    {modelShort(a.model) && (
-                      <span className={`orch-palette-model model-${modelShort(a.model)}`}>{modelShort(a.model)}</span>
-                    )}
-                  </div>
-                  <i className="ti ti-grip-vertical orch-palette-grip" />
-                </div>
-              ))
-            )}
-          </div>
-
-          {scripts.length > 0 && (
-            <div className="orch-palette-scripts">
-              <div className="orch-palette-scripts-title">
-                <i className="ti ti-terminal-2" /> Scripts
-              </div>
-              {scripts
-                .filter(s => !agents.includes(`__script:${s.name}__`))
-                .map(s => (
-                  <div
-                    key={s.name}
-                    className="orch-palette-card orch-palette-card-script"
-                    draggable
-                    onDragStart={e => handlePaletteDragStart(`__script:${s.name}__`, e)}
-                    title="Script determinístico — sin IA"
+        {/* Left: palette — collapsible, tabbed agents/scripts */}
+        <div className={`orch-palette-panel${paletteOpen ? '' : ' collapsed'}`}>
+          {paletteOpen ? (
+            <>
+              {/* Tab header */}
+              <div className="orch-palette-header">
+                <div className="orch-palette-tabs">
+                  <button
+                    className={`orch-palette-tab${paletteTab === 'agents' ? ' active' : ''}`}
+                    onClick={() => setPaletteTab('agents')}
                   >
-                    <div className="orch-palette-card-icon orch-palette-card-icon-script">
-                      <i className="ti ti-terminal-2" />
+                    <i className="ti ti-cpu" />
+                    Agentes
+                    {filteredAgents.length > 0 && (
+                      <span className="orch-palette-tab-count">{filteredAgents.length}</span>
+                    )}
+                  </button>
+                  <button
+                    className={`orch-palette-tab${paletteTab === 'scripts' ? ' active' : ''}`}
+                    onClick={() => setPaletteTab('scripts')}
+                  >
+                    <i className="ti ti-terminal-2" />
+                    Scripts
+                    {availableScripts.length > 0 && (
+                      <span className="orch-palette-tab-count">{availableScripts.length}</span>
+                    )}
+                  </button>
+                </div>
+                <button
+                  className="orch-palette-collapse-btn"
+                  onClick={() => setPaletteOpen(false)}
+                  title="Colapsar paleta"
+                >
+                  <i className="ti ti-layout-sidebar-left-collapse" />
+                </button>
+              </div>
+
+              {/* Search — solo en tab agentes */}
+              {paletteTab === 'agents' && (
+                <div className="orch-picker-search">
+                  <i className="ti ti-search" />
+                  <input
+                    type="text"
+                    placeholder="Buscar agente…"
+                    value={agentSearch}
+                    onChange={e => setAgentSearch(e.target.value)}
+                  />
+                  {agentSearch && (
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 0, display: 'flex' }} onClick={() => setAgentSearch('')}>
+                      <i className="ti ti-x" style={{ fontSize: 11 }} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* List */}
+              <div className="orch-palette-list">
+                {paletteTab === 'agents' ? (
+                  filteredAgents.length === 0 ? (
+                    <div className="orch-picker-empty">
+                      {agentSearch
+                        ? 'Sin resultados'
+                        : agents.filter(a => !a.startsWith('__script:')).length > 0
+                            && allAgents.length > 0
+                            && allAgents.every(a => agents.includes(a.name))
+                          ? <><i className="ti ti-checks" style={{ fontSize: 22, marginBottom: 6, display: 'block' }} />Todos los agentes están en el flujo</>
+                          : 'Sin agentes disponibles'
+                      }
                     </div>
-                    <div className="orch-palette-info">
-                      <div className="orch-palette-name">{s.label}</div>
-                      {s.description && <div className="orch-palette-desc">{s.description}</div>}
-                    </div>
-                    <i className="ti ti-grip-vertical orch-palette-grip" />
-                  </div>
-                ))}
+                  ) : (
+                    filteredAgents.map(a => (
+                      <div
+                        key={a.name}
+                        className="orch-palette-card"
+                        draggable
+                        onDragStart={e => handlePaletteDragStart(a.name, e)}
+                        title={a.description || 'Arrastra al canvas para añadir'}
+                      >
+                        <div className="orch-palette-card-icon">
+                          <i className={`ti ${getAgentIcon(a.name)}`} />
+                        </div>
+                        <div className="orch-palette-info">
+                          <div className="orch-palette-name">{a.name}</div>
+                          {a.description && <div className="orch-palette-desc">{a.description}</div>}
+                          {modelShort(a.model) && (
+                            <span className={`orch-palette-model model-${modelShort(a.model)}`}>{modelShort(a.model)}</span>
+                          )}
+                        </div>
+                        <i className="ti ti-grip-vertical orch-palette-grip" />
+                      </div>
+                    ))
+                  )
+                ) : (
+                  availableScripts.length === 0 ? (
+                    <div className="orch-picker-empty">Sin scripts disponibles</div>
+                  ) : (
+                    availableScripts.map(s => (
+                      <div
+                        key={s.name}
+                        className="orch-palette-card orch-palette-card-script"
+                        draggable
+                        onDragStart={e => handlePaletteDragStart(`__script:${s.name}__`, e)}
+                        title={s.description || 'Script determinístico — sin IA'}
+                      >
+                        <div className="orch-palette-card-icon orch-palette-card-icon-script">
+                          <i className="ti ti-terminal-2" />
+                        </div>
+                        <div className="orch-palette-info">
+                          <div className="orch-palette-name">{s.label}</div>
+                          {s.description && <div className="orch-palette-desc">{s.description}</div>}
+                          <span className="orch-palette-script-badge">sin IA · determinístico</span>
+                        </div>
+                        <i className="ti ti-grip-vertical orch-palette-grip" />
+                      </div>
+                    ))
+                  )
+                )}
+              </div>
+
+              {/* Footer: en uso */}
+              {agents.length > 0 && (
+                <div className="orch-palette-inuse">
+                  <i className="ti ti-layout-list" />
+                  {agents.length} en el flujo
+                </div>
+              )}
+            </>
+          ) : (
+            /* Collapsed strip */
+            <div className="orch-palette-strip">
+              <button
+                className="orch-palette-strip-btn"
+                onClick={() => setPaletteOpen(true)}
+                title="Expandir paleta"
+              >
+                <i className="ti ti-layout-sidebar-left-expand" />
+              </button>
+              <div className="orch-palette-strip-divider" />
+              <button
+                className={`orch-palette-strip-btn${paletteTab === 'agents' ? ' active' : ''}`}
+                onClick={() => { setPaletteTab('agents'); setPaletteOpen(true); }}
+                title={`Agentes (${filteredAgents.length} disponibles)`}
+              >
+                <i className="ti ti-cpu" />
+              </button>
+              <button
+                className={`orch-palette-strip-btn${paletteTab === 'scripts' ? ' active' : ''}`}
+                onClick={() => { setPaletteTab('scripts'); setPaletteOpen(true); }}
+                title={`Scripts (${scripts.length})`}
+              >
+                <i className="ti ti-terminal-2" />
+              </button>
             </div>
           )}
         </div>
@@ -477,6 +566,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
             draggingNodeIdx={draggingNodeIdx}
             onRemoveAgent={removeAgent}
             agentModels={agentModels}
+            agentDescriptions={agentDescriptions}
           />
         </div>
 

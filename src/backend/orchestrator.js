@@ -13,7 +13,7 @@ const { EventEmitter } = require('events');
 
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
-const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS } = require('./ai');
+const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS, CLI_PROVIDERS } = require('./ai');
 const prompts           = require('./prompts');
 const scriptsRegistry   = require('./scripts-registry');
 const gitCheckpointer   = require('./git-checkpointer');
@@ -790,6 +790,11 @@ class OrchestrationExecutor extends EventEmitter {
       if (scriptsRegistry.isScript(agentName)) {
         const scriptName = scriptsRegistry.getScriptName(agentName);
         this._log('info', `Paso ${i + 1}: ejecutando script determinístico "${scriptName}"`);
+
+        const systemPrompt = this._buildSystemPrompt(i);
+        const userMessage  = this._buildUserMessage(i);
+        this.emit('step-input', { stepIndex: i, agentName, userMessage });
+
         try {
           const scriptResult = await scriptsRegistry.run(scriptName, {
             projectPath:   this.project.path,

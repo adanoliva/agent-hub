@@ -15,6 +15,7 @@ interface Props {
   draggingNodeIdx: number | null;
   onRemoveAgent:   (idx: number) => void;
   agentModels?:    Record<string, string>;
+  agentDescriptions?: Record<string, string>;
 }
 
 export function getAgentIcon(name: string): string {
@@ -73,6 +74,7 @@ export function NodeCanvas({
   agents, nodes, inputNode, selectedNode, onSelectNode,
   onNodeDragStart, onDropAtZone, dragOverZone, onDragOverZone,
   isDragging, draggingNodeIdx, onRemoveAgent, agentModels = {},
+  agentDescriptions = {},
 }: Props) {
   const n = agents.length;
 
@@ -221,13 +223,15 @@ export function NodeCanvas({
       {agents.map((agentName, i) => {
         const model    = agentModels[agentName] || '';
         const isScript = agentName.startsWith('__script:');
-        const label    = isScript ? getScriptLabel(agentName) : agentName;
+        const label       = isScript ? getScriptLabel(agentName) : agentName;
+        const description = agentDescriptions[agentName] || '';
         return (
           <div
             key={i}
             className={`orch-node-agent${isScript ? ' orch-node-script' : ''}${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
             draggable
             onDragStart={e => onNodeDragStart(i, e)}
+            title={description || label}
             style={{
               position: 'absolute',
               top:      yNodeTop(i),
@@ -241,7 +245,7 @@ export function NodeCanvas({
             <div className="orch-node-index">{i + 1}</div>
             <div className="orch-node-icon"><i className={`ti ${getAgentIcon(agentName)}`} /></div>
             <div className="orch-node-info">
-              <div className="orch-node-name" title={agentName}>{label}</div>
+              <div className="orch-node-name">{label}</div>
               {isScript
                 ? <span className="orch-node-model model-script">script</span>
                 : model && <span className={`orch-node-model model-${model}`}>{model}</span>

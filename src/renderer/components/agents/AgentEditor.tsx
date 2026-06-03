@@ -42,8 +42,10 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   }, [initial, isNew]);
 
   useEffect(() => {
-    req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
-  }, []);
+    if (node.level === 'project') {
+      req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
+    }
+  }, [node.level]);
 
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
 
@@ -57,7 +59,6 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const levelPath = (() => {
     if (node.level === 'global')  return '~/.claude/agents/global/';
     if (node.level === 'section') return `agents/section-${node.categoryId}/`;
-    if (node.level === 'tech')    return `agents/tech-${node.categoryId}-${node.techId}/`;
     const p = projects.find((x) => x.id === node.projectId);
     return p ? `${p.path}\\.claude\\agents\\` : '';
   })();
@@ -71,7 +72,6 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         name:        a.name || 'agent',
         level:       node.level,
         categoryId:  node.categoryId,
-        techId:      node.techId,
         tools:       a.tools ?? [],
         language:    lang,
         existingAgents: [],
@@ -110,8 +110,8 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
       } else {
         await req(isNew ? 'POST' : 'PUT', '/agents',
           isNew
-            ? { level: node.level, categoryId: node.categoryId, techId: node.techId, agent: agentToSave }
-            : { level: node.level, categoryId: node.categoryId, techId: node.techId, oldName: initial.name, agent: agentToSave });
+            ? { level: node.level, categoryId: node.categoryId, agent: agentToSave }
+            : { level: node.level, categoryId: node.categoryId, oldName: initial.name, agent: agentToSave });
       }
       toast(`Agente "${agentToSave.name}" guardado`);
       onSaved(agentToSave);
@@ -125,7 +125,7 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
       if (node.level === 'project') {
         await req('DELETE', `/projects/${node.projectId}/agents/${a.name}`);
       } else {
-        await req('DELETE', '/agents', { level: node.level, categoryId: node.categoryId, techId: node.techId, name: a.name });
+        await req('DELETE', '/agents', { level: node.level, categoryId: node.categoryId, name: a.name });
       }
       toast(`Agente "${a.name}" eliminado`);
       onDeleted();
@@ -219,8 +219,8 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
           </div>
         </div>
 
-        {/* Skills */}
-        {allSkills.length > 0 && (
+        {/* Skills — solo en agentes de proyecto */}
+        {node.level === 'project' && allSkills.length > 0 && (
           <div className="field">
             <label>Skills asociadas</label>
             <div className="agent-skills-selector">

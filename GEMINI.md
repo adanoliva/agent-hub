@@ -1,6 +1,6 @@
 # Agent Hub — Project Instructions (GEMINI.md)
 
-> Current Version: **1.9.4** · Update this field on every release.
+> Current Version: **2.1.0** · Update this field on every release.
 
 This file provides project-specific instructions, conventions, and workflows for Gemini CLI.
 
@@ -8,9 +8,29 @@ This file provides project-specific instructions, conventions, and workflows for
 
 **Agent Hub** is a desktop application (**Electron + Express + React 19 + TypeScript**) for managing AI agents and development projects. It generates a portable `.exe` for Windows x64.
 
-It allows organizing projects by categories, creating and synchronizing Claude Code agents (`.md` with YAML frontmatter), chatting with AI (CLI / Anthropic API / GitHub Copilot), generating project context, and executing agents directly on a project.
+It allows organizing projects by categories, creating and synchronizing Claude Code agents (`.md` with YAML frontmatter), managing **skills** (technology context blocks injected into agent prompts at execution time), chatting with AI (CLI / Anthropic API / GitHub Copilot), generating project context, and executing agents directly on a project.
 
 Full technical documentation: [`docs/backend.md`](docs/backend.md), [`docs/frontend.md`](docs/frontend.md) and [`docs/visual_styles.md`](docs/visual_styles.md).
+
+## Key architectural changes (v2.1.0)
+
+### Orchestrations — advanced pipeline features
+
+- **Deterministic scripts**: nodes prefixed `__script:{name}__` execute Node.js logic without AI calls. Available scripts: `prepare-context`, `generate-file-index`, `diff-since-step`, `validate-json`, `quality-score`, `validate-output`. Zero token consumption.
+- **HITL gates**: `node.gateAfter = true` pauses execution after that step. SSE event `gate-open` triggers frontend review UI. Actions: `approve` (continue), `revise` (revert + re-run with feedback text), `cancel`. Gate wait time does NOT count against the global timeout.
+- **Quality Score**: calculated automatically after each AI step without AI calls. Score 0–100 with green/amber/red grade. Stored in `stepResult.qualityScore`.
+- **Git Checkpointer** (`git-checkpointer.js`): when `project.gitEnabled === true` and the project is a git repo, commits each completed step automatically. SHA stored in `stepResult.gitCommitSha` for precise rollback via `git reset --hard`.
+- **Ops Ledger** (`ops-ledger.js`): append-only record of every atomic file operation per orchestration. Persists in `.agent-hub/ops/{orchId}-ledger.json`. Each entry tracks file, agent, step, and status (`applied`/`reverted`). Accessible via `GET /api/orchestrations/:id/ops`.
+- **Resume interrupted executions**: execution state persisted after each step in `execution-state.json`. `POST /executions/:execId/resume` restores completed steps from state and continues from the interruption point.
+- **Skills injected in orchestration agents**: agents with `skills[]` in their frontmatter have skill content appended to their system prompt automatically.
+- **`maxContextChars`**: new `executionConfig` field (default 4 000) limits user message size per step to avoid token window overflow.
+
+### Previous changes (v1.9.5)
+
+- **Skills system**: replaces the removed `tech` hierarchy level. Skills are Markdown blocks in `agents/skills/*.md` injected into agent system prompts at execution.
+- **No `techId`**: projects no longer have `techId`. Technology specificity comes from `project.skills[]`.
+- **Agent hierarchy**: global → section → project (no `tech` level).
+- **Unified search**: agents and skills searchable by name+description with 250ms debounce.
 
 ## Tech Stack
 

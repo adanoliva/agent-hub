@@ -30,6 +30,13 @@ const STATUS_ICONS: Record<string, string> = {
   failed:  'ti-circle-x',
 };
 
+function fmtAgentName(name: string): string {
+  if (name.startsWith('__script:')) {
+    return name.replace('__script:', '').replace('__', '').replace(/-/g, ' ');
+  }
+  return name;
+}
+
 function QualityBadge({ qs }: { qs: QualityScore }) {
   const [expanded, setExpanded] = React.useState(false);
   const colorMap = { green: 'green', amber: 'amber', red: 'coral' } as const;
@@ -77,8 +84,9 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [logs,        setLogs]        = useState<ExecutionLog[]>([]);
   const [result,      setResult]      = useState<ExecutionResult | null>(null);
   const [executionId, setExecutionId] = useState<string | null>(null);
-  const [stepsDone,      setStepsDone]      = useState<StepResult[]>([]);
-  const [stepInputs,     setStepInputs]     = useState<StepInput[]>([]);
+  const [stepsDone,        setStepsDone]        = useState<StepResult[]>([]);
+  const [stepInputs,       setStepInputs]       = useState<StepInput[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(-1);
   const [rollingBack,    setRollingBack]     = useState<number | null>(null);
   const [cancelling,     setCancelling]      = useState(false);
   const [browserPause,   setBrowserPause]    = useState<{ stepIndex: number; agentName: string } | null>(null);
@@ -251,6 +259,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
     setResult(null);
     setStepsDone([]);
     setStepInputs([]);
+    setCurrentStepIndex(0);
     setCancelling(false);
     setIsOrchestrating(true);
 
@@ -269,6 +278,14 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         try { setLogs(prev => [...prev, JSON.parse(e.data)]); } catch {}
       });
 
+      es.addEventListener('step-start', e => {
+        try {
+          const payload = JSON.parse(e.data);
+          const data = payload.data || payload;
+          setCurrentStepIndex(data.stepIndex);
+        } catch {}
+      });
+
       es.addEventListener('step-input', e => {
         try {
           const payload = JSON.parse(e.data);
@@ -282,6 +299,14 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
           const payload = JSON.parse(e.data);
           const step: StepResult = payload.data || payload;
           setStepsDone(prev => [...prev, step]);
+        } catch {}
+      });
+
+      es.addEventListener('step-warning', e => {
+        try {
+          const payload = JSON.parse(e.data);
+          const data = payload.data || payload;
+          addToast(`Advertencia en paso ${data.stepIndex + 1}: ${JSON.stringify(data.issues)}`, 'warn');
         } catch {}
       });
 
@@ -625,7 +650,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                 <div>
                   <div className="orch-browser-pause-title">Autenticación requerida</div>
                   <div className="orch-browser-pause-sub">
-                    Paso {browserPause.stepIndex + 1}: <strong>{browserPause.agentName}</strong>
+                    Paso {browserPause.stepIndex + 1}: <strong>{fmtAgentName(browserPause.agentName)}</strong>
                   </div>
                 </div>
               </div>
@@ -712,7 +737,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             {orchestration.agents.map((agentName, i) => {
               const done    = stepsDone.find(s => s.stepIndex === i);
               const input   = stepInputs.find(s => s.stepIndex === i);
-              const isActive = !done && i === stepsDone.length;
+              const isActive = !done && i === currentStepIndex;
               return (
                 <div key={i} className={`orch-step-flow-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
                   <div className="orch-step-flow-head">
@@ -725,7 +750,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                         <span>{i + 1}</span>
                       )}
                     </div>
-                    <span className="orch-step-name">{agentName}</span>
+                    <span className="orch-step-name">{fmtAgentName(agentName)}</span>
                     {done && <span className="orch-step-dur">{fmtDuration(done.duration)}</span>}
                   </div>
 
@@ -874,7 +899,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                 <div className="orch-step-result-header">
                   <div className="orch-step-result-title">
                     <span className="orch-step-num">{i + 1}</span>
-                    <span className="orch-step-result-name">{step.agentName}</span>
+                    <span className="orch-step-result-name">{fmtAgentName(step.agentName)}</span>
                     <span className={`orch-step-badge ${step.status}`}>
                       {step.status === 'success' && <><i className="ti ti-check" /> Exitoso</>}
                       {step.status === 'error'   && <><i className="ti ti-x" /> Error</>}
@@ -985,7 +1010,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                     <div key={op.id} className={`orch-exec-op-row${op.status === 'reverted' ? ' reverted' : ''}`}>
                       <i className={`ti ${op.kind === 'add' ? 'ti-file-plus' : op.kind === 'remove' ? 'ti-file-minus' : 'ti-file-pencil'}`} />
                       <span className="orch-exec-op-path">{op.filePath}</span>
-                      <span className="orch-exec-op-agent">{op.agentName}</span>
+                      <span className="orch-exec-op-agent">{fmtAgentName(op.agentName)}</span>
                       <span className={`badge ${op.status === 'reverted' ? 'gray' : 'green'}`}>{op.status}</span>
                       {op.status === 'applied' && (
                         <button

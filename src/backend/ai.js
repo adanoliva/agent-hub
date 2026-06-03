@@ -988,7 +988,7 @@ async function generateProjectSuggestions({ project, contextContent, categoryNam
 
   const prompt = prompts.projectSuggestions({ project, contextSection, existing, categoryName, techName });
 
-  const raw    = await callAI(prompt, { maxTokens: 900 });
+  const raw    = await callAI(prompt, { maxTokens: 900, cwd: project.path });
   const parsed = parseJSONSafely(raw);
   if (!Array.isArray(parsed)) throw new Error('AI returned invalid suggestions format');
 
@@ -1260,7 +1260,11 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     timeout:        opts.timeout        || 300_000,
     useBrowser:     opts.useBrowser     || false,
     callAIRaw: (messages, systemPrompt, callOpts = {}) =>
-      callAIChatWithTokens(messages, systemPrompt, { provider, timeout: callOpts.timeout }),
+      callAIChatWithTokens(messages, systemPrompt, { 
+        provider, 
+        timeout: callOpts.timeout,
+        cwd: opts.projectPath
+      }),
   });
 
   return result;

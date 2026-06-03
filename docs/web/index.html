@@ -22,6 +22,7 @@
         <a href="#features">Funcionalidades</a>
         <a href="#how">Cómo funciona</a>
         <a href="#orchestrations">Orquestaciones</a>
+        <a href="#novedades">Novedades v2.1</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#collab">Repositorio</a>
       </div>
@@ -31,7 +32,7 @@
   <!-- HERO -->
   <section class="hero">
     <div class="hero-badge">
-      <i class="ti ti-sparkles"></i> v1.9.4 disponible
+      <i class="ti ti-sparkles"></i> v2.1.0 disponible — Orquestaciones avanzadas
     </div>
     <h1 class="hero-title">
       Gestiona tus agentes de IA<br />
@@ -77,7 +78,7 @@
           <i class="ti ti-git-commit agent-icon"></i>
           <div>
             <div class="agent-name">commit-writer</div>
-            <div class="agent-level tech">tech · react</div>
+            <div class="agent-level section">categoría · frontend</div>
           </div>
           <div class="model-pill haiku"><i class="ti ti-leaf"></i> haiku</div>
         </div>
@@ -213,6 +214,31 @@
           <h3>Subsistema CLI</h3>
           <p>Cualquier proveedor de IA opera sobre el filesystem del proyecto con las mismas capacidades que una CLI nativa. Sin dependencias extra.</p>
         </div>
+        <div class="feature-card accent">
+          <i class="ti ti-user-check"></i>
+          <h3>Gates HITL</h3>
+          <p>Puntos de revisión humana entre pasos de una orquestación. Aprueba, pide que rehaga con feedback, o cancela — el tiempo de espera no consume timeout.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-terminal-2"></i>
+          <h3>Scripts determinísticos</h3>
+          <p>Nodos sin IA: analiza el proyecto, genera índices de archivos, valida JSON, calcula quality scores. Instantáneos y sin consumo de tokens.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-chart-bar"></i>
+          <h3>Quality Score automático</h3>
+          <p>Puntuación 0–100 calculada tras cada paso IA: respuesta producida, archivos modificados, JSON válido. Verde / ámbar / rojo sin llamar a la IA.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-git-commit"></i>
+          <h3>Git Checkpointer</h3>
+          <p>Commits automáticos tras cada paso cuando <code>gitEnabled</code> está activo. Rollback exacto vía <code>git reset --hard</code> a cualquier punto de la ejecución.</p>
+        </div>
+        <div class="feature-card">
+          <i class="ti ti-list-check"></i>
+          <h3>Ops Ledger</h3>
+          <p>Registro append-only de cada operación atómica: qué fichero cambió, qué agente lo hizo, en qué paso, con estado <em>applied</em> o <em>reverted</em>.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -244,7 +270,7 @@
           <div class="step-num">03</div>
           <div class="step-body">
             <h3>Asignas</h3>
-            <p>Eliges el nivel: global, categoría, tecnología o proyecto específico.</p>
+            <p>Eliges el nivel: global, categoría o proyecto. La especificidad tecnológica se añade con <em>skills</em> inyectadas.</p>
           </div>
         </div>
         <div class="step-arrow"><i class="ti ti-arrow-right"></i></div>
@@ -271,31 +297,39 @@
   <section class="hierarchy">
     <div class="container">
       <div class="section-label">Arquitectura de agentes</div>
-      <h2>Organización en cuatro niveles</h2>
-      <p class="section-desc">Cada agente aplica al scope correcto. Sin duplicar, sin perder contexto.</p>
+      <h2>Organización en niveles + skills</h2>
+      <p class="section-desc">Cada agente aplica al scope correcto. La especificidad tecnológica se aporta con <strong>skills</strong> inyectadas en el system prompt.</p>
       <div class="levels">
         <div class="level global-level">
           <i class="ti ti-world"></i>
-          <div class="level-name">Global</div>
-          <div class="level-desc">Aplica a todos los proyectos</div>
+          <div>
+            <div class="level-name">Global</div>
+            <div class="level-desc">Aplica a todos los proyectos</div>
+          </div>
         </div>
         <div class="level-arrow"><i class="ti ti-arrow-down"></i></div>
         <div class="level section-level">
           <i class="ti ti-folder"></i>
-          <div class="level-name">Categoría</div>
-          <div class="level-desc">Juegos, Web, Mobile, Docs…</div>
-        </div>
-        <div class="level-arrow"><i class="ti ti-arrow-down"></i></div>
-        <div class="level tech-level">
-          <i class="ti ti-code"></i>
-          <div class="level-name">Tecnología</div>
-          <div class="level-desc">React, Unity, React Native…</div>
+          <div>
+            <div class="level-name">Categoría</div>
+            <div class="level-desc">Juegos, Frontend, Mobile, DevOps…</div>
+          </div>
         </div>
         <div class="level-arrow"><i class="ti ti-arrow-down"></i></div>
         <div class="level project-level">
           <i class="ti ti-layout-grid"></i>
-          <div class="level-name">Proyecto</div>
-          <div class="level-desc">Un proyecto concreto</div>
+          <div>
+            <div class="level-name">Proyecto</div>
+            <div class="level-desc">Agentes exclusivos de ese proyecto</div>
+          </div>
+        </div>
+        <div class="level-arrow"><i class="ti ti-plus"></i></div>
+        <div class="level tech-level">
+          <i class="ti ti-puzzle"></i>
+          <div>
+            <div class="level-name">Skills</div>
+            <div class="level-desc">React, PostgreSQL, Docker, TypeScript… contexto tecnológico inyectado</div>
+          </div>
         </div>
       </div>
     </div>
@@ -406,6 +440,68 @@
     </div>
   </section>
 
+  <!-- NOVEDADES v2.1.0 -->
+  <section class="novedades" id="novedades">
+    <div class="container">
+      <div class="section-label">Novedades v2.1.0</div>
+      <h2>Orquestaciones de <span class="gradient-text">siguiente nivel</span></h2>
+      <p class="section-desc">La versión 2.1.0 convierte las orquestaciones en pipelines de producción con control humano, trazabilidad total y ejecución resiliente.</p>
+
+      <div class="novedades-grid">
+
+        <div class="novedad-card highlight">
+          <div class="novedad-badge"><i class="ti ti-terminal-2"></i> Scripts determinísticos</div>
+          <h3>Nodos sin IA en el workflow</h3>
+          <p>Intercala scripts Node.js entre agentes: analiza el proyecto, genera índices de archivos, valida JSON, calcula quality scores… sin gastar un solo token. 6 scripts incluidos.</p>
+          <div class="novedad-tags">
+            <span>prepare-context</span>
+            <span>generate-file-index</span>
+            <span>validate-json</span>
+            <span>quality-score</span>
+            <span>diff-since-step</span>
+            <span>validate-output</span>
+          </div>
+        </div>
+
+        <div class="novedad-card highlight">
+          <div class="novedad-badge amber"><i class="ti ti-user-check"></i> Gates HITL</div>
+          <h3>Revisión humana entre pasos</h3>
+          <p>Activa un gate en cualquier conexión y la orquestación se pausa para que revises lo que hizo el agente. Aprueba, pide que lo rehaga con feedback (revertiendo automáticamente) o cancela. El tiempo de espera no descuenta del timeout.</p>
+          <div class="novedad-pills">
+            <span class="pill green"><i class="ti ti-check"></i> Aprobar</span>
+            <span class="pill amber"><i class="ti ti-refresh"></i> Revisar + rehacer</span>
+            <span class="pill coral"><i class="ti ti-x"></i> Cancelar</span>
+          </div>
+        </div>
+
+        <div class="novedad-card">
+          <div class="novedad-badge green"><i class="ti ti-chart-bar"></i> Quality Score</div>
+          <h3>Puntuación automática por paso</h3>
+          <p>Tras cada paso IA, Agent Hub calcula un score 0–100 sin llamar a la IA: respuesta producida, JSON válido, archivos modificados, longitud sustancial. Badge verde / ámbar / rojo en la UI.</p>
+        </div>
+
+        <div class="novedad-card">
+          <div class="novedad-badge accent"><i class="ti ti-git-commit"></i> Git Checkpointer</div>
+          <h3>Commits automáticos por paso</h3>
+          <p>Con <code>gitEnabled</code> activo, cada paso genera un commit firmado por AgentHub. El rollback usa <code>git reset --hard</code> al SHA exacto — más preciso que cualquier snapshot.</p>
+        </div>
+
+        <div class="novedad-card">
+          <div class="novedad-badge blue"><i class="ti ti-list-check"></i> Ops Ledger</div>
+          <h3>Trazabilidad total de cambios</h3>
+          <p>Registro append-only de cada operación atómica: qué fichero, qué agente, en qué paso, con estado <em>applied</em> o <em>reverted</em>. Persiste entre ejecuciones. Accesible desde la UI y vía API.</p>
+        </div>
+
+        <div class="novedad-card">
+          <div class="novedad-badge green"><i class="ti ti-player-play"></i> Reanudar ejecuciones</div>
+          <h3>Continúa donde lo dejaste</h3>
+          <p>Ejecuciones interrumpidas por error de red, cierre de la app o timeout parcial pueden reanudarse desde el último paso completado. El estado se persiste tras cada paso automáticamente.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   <!-- DASHBOARD PREVIEW -->
   <section class="dash-section" id="dashboard">
     <div class="container">
@@ -430,7 +526,7 @@
             <div class="dash-subs">
               <span><i class="ti ti-circle-filled" style="color:var(--accent);font-size:7px"></i> Global: 8</span>
               <span><i class="ti ti-circle-filled" style="color:var(--blue);font-size:7px"></i> Categoría: 6</span>
-              <span><i class="ti ti-circle-filled" style="color:var(--green);font-size:7px"></i> Tecnología: 10</span>
+              <span><i class="ti ti-circle-filled" style="color:var(--green);font-size:7px"></i> Proyecto: 10</span>
             </div>
           </div>
           <div class="dash-sep"></div>
@@ -586,24 +682,33 @@
   <!-- ORQUESTACIONES -->
   <section class="how" id="orchestrations" style="background:var(--bg1)">
     <div class="container">
-      <div class="section-label">Nuevo en v1.9.4</div>
+      <div class="section-label">Ampliado en v2.1.0</div>
       <h2>Orquestaciones multiagente</h2>
-      <p class="section-desc">Encadena agentes en workflows secuenciales. El output de cada paso alimenta al siguiente — con acceso real al filesystem, rollback granular y logs en tiempo real.</p>
+      <p class="section-desc">Encadena agentes en workflows secuenciales con scripts determinísticos, gates de revisión humana, quality scores automáticos y checkpointing git. El output de cada paso alimenta al siguiente.</p>
 
-      <!-- Mock orquestación -->
+      <!-- Mock orquestación con nuevas capacidades -->
       <div class="orch-flow">
+        <div class="orch-node" style="border-color:rgba(59,130,246,.35)">
+          <div class="orch-step-label" style="color:var(--blue)">Script</div>
+          <div class="orch-agent-name">prepare-context</div>
+          <div class="orch-agent-sub">Analiza el proyecto · 0 tokens</div>
+        </div>
+        <div class="orch-arrow"><i class="ti ti-arrow-right"></i><span>índice</span></div>
         <div class="orch-node step1">
           <div class="orch-step-label">Paso 1</div>
           <div class="orch-agent-name">code-reviewer</div>
           <div class="orch-agent-sub">Analiza el código</div>
         </div>
-        <div class="orch-arrow"><i class="ti ti-arrow-right"></i><span>output</span></div>
+        <div class="orch-arrow" style="flex-direction:column;align-items:center;gap:2px">
+          <i class="ti ti-arrow-right" style="color:var(--accent)"></i>
+          <span style="font-size:9px;color:var(--amber);font-family:var(--mono)">⏸ GATE</span>
+        </div>
         <div class="orch-node step2">
           <div class="orch-step-label">Paso 2</div>
           <div class="orch-agent-name">refactor-expert</div>
           <div class="orch-agent-sub">Refactoriza según análisis</div>
         </div>
-        <div class="orch-arrow"><i class="ti ti-arrow-right"></i><span>archivos + output</span></div>
+        <div class="orch-arrow"><i class="ti ti-arrow-right"></i><span>archivos</span></div>
         <div class="orch-node step3">
           <div class="orch-step-label">Paso 3</div>
           <div class="orch-agent-name">test-writer</div>
@@ -612,17 +717,23 @@
       </div>
 
       <div class="orch-log">
-        <div class="orch-log-head"><i class="ti ti-terminal-2"></i> Ejecución en curso &mdash; paso 2 / 3</div>
-        <div class="orch-log-line ok"><i class="ti ti-circle-check"></i> [paso 1] code-reviewer completado &mdash; 3 ficheros analizados</div>
+        <div class="orch-log-head"><i class="ti ti-terminal-2"></i> Ejecución en curso &mdash; paso 2 / 3 &nbsp;·&nbsp; <span style="color:var(--accent);font-weight:600">QS 87/100 ●</span></div>
+        <div class="orch-log-line ok"><i class="ti ti-circle-check"></i> [script] prepare-context completado &mdash; 124 archivos indexados (0 tokens)</div>
+        <div class="orch-log-line ok"><i class="ti ti-circle-check"></i> [paso 1] code-reviewer completado &mdash; QS 87/100 · git checkpoint abc1234</div>
+        <div class="orch-log-line" style="color:var(--amber)"><i class="ti ti-user-check"></i> [gate] Esperando revisión humana antes del paso 2…</div>
         <div class="orch-log-line running"><i class="ti ti-player-play"></i> [paso 2] refactor-expert ejecutando...</div>
         <div class="orch-log-line pending"><i class="ti ti-circle-dashed"></i> [paso 3] test-writer pendiente</div>
       </div>
 
-      <div class="orch-features">
-        <div class="orch-feat"><i class="ti ti-cpu" style="color:var(--accent)"></i><div><strong>Cualquier proveedor</strong><p>Subsistema CLI emula el CLI nativo para cualquier proveedor de IA (API, CLI o servicios en la nube).</p></div></div>
-        <div class="orch-feat"><i class="ti ti-history" style="color:var(--green)"></i><div><strong>Rollback granular</strong><p>Backup automático antes de cada paso. Revierte cualquier ejecución.</p></div></div>
+      <div class="orch-features" style="grid-template-columns:repeat(4,1fr)">
+        <div class="orch-feat"><i class="ti ti-terminal-2" style="color:var(--blue)"></i><div><strong>Scripts sin IA</strong><p>Analiza el proyecto, valida JSON, calcula quality scores. Instantáneos y sin tokens.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-user-check" style="color:var(--amber)"></i><div><strong>Gates HITL</strong><p>Pausa para revisión humana. Aprueba, revisa con feedback o cancela. El timeout no corre.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-chart-bar" style="color:var(--green)"></i><div><strong>Quality Score</strong><p>Puntuación 0–100 automática por paso. Verde / ámbar / rojo sin llamar a la IA.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-git-commit" style="color:var(--accent)"></i><div><strong>Git Checkpointer</strong><p>Commit automático tras cada paso. Rollback exacto por SHA. Ops Ledger de cada cambio.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-player-play" style="color:var(--blue)"></i><div><strong>Reanudar ejecuciones</strong><p>Reinicia desde el último paso completado. Estado persistido entre reinicios de la app.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-history" style="color:var(--green)"></i><div><strong>Rollback granular</strong><p>Snapshot antes de cada paso. Revierte paso a paso sin tocar los anteriores.</p></div></div>
         <div class="orch-feat"><i class="ti ti-activity" style="color:var(--blue)"></i><div><strong>Logs en tiempo real</strong><p>Stream SSE por paso. Ve exactamente qué hace cada agente.</p></div></div>
-        <div class="orch-feat"><i class="ti ti-list-check" style="color:var(--amber)"></i><div><strong>Auditoría completa</strong><p>Historial de ejecuciones con cambios, tokens y duración.</p></div></div>
+        <div class="orch-feat"><i class="ti ti-list-check" style="color:var(--amber)"></i><div><strong>Ops Ledger</strong><p>Registro append-only de cada fichero modificado, por agente y paso. Trazabilidad completa.</p></div></div>
       </div>
     </div>
   </section>
@@ -647,7 +758,7 @@
       <div class="nav-logo">
         <img src="logo.png" alt="Agent Hub" style="height:22px;display:block;">
       </div>
-      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante. · v1.9.4</p>
+      <p class="footer-copy">Construida con IA. Para la IA. Con manos humanas al volante. · v2.1.0</p>
     </div>
   </footer>
 

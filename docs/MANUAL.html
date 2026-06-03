@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Hub — Manual de uso v1.9.4</title>
+<title>Agent Hub — Manual de uso v2.1.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -186,6 +186,26 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 .chat-bubble .mention{color:var(--accent);font-family:var(--mono)}
 .chat-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .chat-action-btn{font-size:11px;padding:4px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--border2);color:var(--text1);cursor:default;display:flex;align-items:center;gap:5px}
+
+/* ── Script node mockup ── */
+.mock-script-node{background:var(--bg3);border:1px solid var(--border2);border-left:2px solid var(--blue);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;font-size:11px;font-family:var(--mono)}
+.mock-script-badge{font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.25);color:var(--blue);font-family:var(--mono)}
+
+/* ── Gate HITL mockup ── */
+.mock-gate{background:var(--amber-dim);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text0);margin-bottom:8px}
+.mock-gate-title{font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.mock-gate-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.mock-gate-btn{font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text1);cursor:default}
+.mock-gate-btn.approve{background:var(--green-dim);border-color:rgba(52,211,153,0.3);color:var(--green)}
+.mock-gate-btn.revise{background:var(--amber-dim);border-color:rgba(251,191,36,0.3);color:var(--amber)}
+.mock-gate-btn.cancel{background:var(--coral-dim);border-color:rgba(251,113,133,0.3);color:var(--coral)}
+
+/* ── Quality Score ── */
+.qs-bar{height:6px;border-radius:3px;margin-top:6px;overflow:hidden;background:var(--bg4)}
+.qs-fill{height:100%;border-radius:3px;transition:width .3s}
+.qs-fill.green{background:var(--green)}
+.qs-fill.amber{background:var(--amber)}
+.qs-fill.red{background:var(--coral)}
 </style>
 </head>
 <body>
@@ -195,7 +215,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 <nav class="nav">
   <div class="nav-logo">
     <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Agent Hub</div>
-    <div class="nav-logo-sub">Manual de uso · v1.9.4</div>
+    <div class="nav-logo-sub">Manual de uso · v2.1.0</div>
   </div>
 
   <div class="nav-section">Primeros pasos</div>
@@ -208,8 +228,14 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <a class="nav-item" href="#dashboard"><i class="ti ti-chart-bar" aria-hidden="true"></i> Vista Dashboard</a>
   <a class="nav-item" href="#proyectos"><i class="ti ti-layout-grid" aria-hidden="true"></i> Vista Proyectos</a>
   <a class="nav-item" href="#agentes"><i class="ti ti-cpu" aria-hidden="true"></i> Vista Agentes</a>
+  <a class="nav-item" href="#skills"><i class="ti ti-puzzle" aria-hidden="true"></i> Skills</a>
   <a class="nav-item" href="#chat"><i class="ti ti-message-chatbot" aria-hidden="true"></i> Vista Chat</a>
   <a class="nav-item" href="#orquestaciones"><i class="ti ti-circuit-diode" aria-hidden="true"></i> Vista Orquestaciones</a>
+  <a class="nav-item" href="#scripts-deterministicos"><i class="ti ti-terminal-2" aria-hidden="true"></i> Scripts determinísticos</a>
+  <a class="nav-item" href="#gates-hitl"><i class="ti ti-user-check" aria-hidden="true"></i> Gates HITL</a>
+  <a class="nav-item" href="#quality-score"><i class="ti ti-chart-bar" aria-hidden="true"></i> Quality Score</a>
+  <a class="nav-item" href="#git-checkpointer"><i class="ti ti-git-commit" aria-hidden="true"></i> Git Checkpointer</a>
+  <a class="nav-item" href="#ops-ledger"><i class="ti ti-list-check" aria-hidden="true"></i> Ops Ledger</a>
   <a class="nav-item" href="#ajustes"><i class="ti ti-settings" aria-hidden="true"></i> Vista Ajustes</a>
   <a class="nav-item" href="#jerarquia"><i class="ti ti-sitemap" aria-hidden="true"></i> Jerarquía de niveles</a>
 
@@ -217,6 +243,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <a class="nav-item" href="#crear-proyecto"><i class="ti ti-folder-plus" aria-hidden="true"></i> Crear / importar proyecto</a>
   <a class="nav-item" href="#drawer-proyecto"><i class="ti ti-layout-sidebar-right" aria-hidden="true"></i> Drawer de proyecto</a>
   <a class="nav-item" href="#crear-agente"><i class="ti ti-plus" aria-hidden="true"></i> Crear un agente</a>
+  <a class="nav-item" href="#crear-skill"><i class="ti ti-puzzle" aria-hidden="true"></i> Crear una skill</a>
+  <a class="nav-item" href="#reanudar-orquestacion"><i class="ti ti-player-play" aria-hidden="true"></i> Reanudar ejecución</a>
   <a class="nav-item" href="#optimizar-agente"><i class="ti ti-sparkles" aria-hidden="true"></i> Optimizar agente con IA</a>
   <a class="nav-item" href="#sync"><i class="ti ti-refresh" aria-hidden="true"></i> Sincronizar cambios</a>
   <a class="nav-item" href="#sugerencias"><i class="ti ti-bulb" aria-hidden="true"></i> Sugerencias de IA</a>
@@ -241,9 +269,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- Hero                   -->
   <!-- ══════════════════════ -->
   <div class="hero" id="inicio">
-    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v1.9.4</div>
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.1.0</div>
     <h1 class="hero-title">Agent <span>Hub</span></h1>
-    <p class="hero-sub">Guía completa para gestionar tus agentes de Claude Code, organizar proyectos y mantener contexto por proyecto — todo desde una interfaz visual.</p>
+    <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
     <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
   </div>
 
@@ -445,7 +473,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
     <h4>Estado General</h4>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Contadores de agentes desglosados por nivel (Global, Categoría, Tecnología y Sin categoría) y de proyectos por estado (Activos, Pausados, Archivados). Haz clic en la fila de Agentes o Proyectos para navegar directamente a esa vista.
+      Contadores de agentes desglosados por nivel (Global, Categoría y Sin categoría) y de proyectos por estado (Activos, Pausados, Archivados). Haz clic en la fila de Agentes o Proyectos para navegar directamente a esa vista.
     </p>
 
     <h4>Sincronización</h4>
@@ -641,9 +669,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
           <div class="mock-tree">
             <div><span class="mock-tree grn sel">● Global</span></div>
             <div style="padding-left:8px"><i class="ti ti-chevron-right" style="font-size:10px"></i> Categorías</div>
-            <div style="padding-left:16px"><span class="mock-tree blu">⬡ Web</span></div>
-            <div style="padding-left:24px"><span class="mock-tree dim">⟨⟩ React</span></div>
-            <div style="padding-left:16px"><span class="mock-tree amb">⬡ Juegos</span></div>
+            <div style="padding-left:16px"><span class="mock-tree blu">⬡ Frontend</span></div>
+            <div style="padding-left:16px"><span class="mock-tree amb">⬡ Games</span></div>
             <div style="padding-left:8px"><i class="ti ti-chevron-right" style="font-size:10px"></i> Proyectos</div>
           </div>
         </div>
@@ -668,7 +695,10 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
     <h4>Árbol de navegación</h4>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Tres secciones: <strong>Global</strong> (nivel 1), <strong>Categorías</strong> con sus tecnologías anidadas (niveles 2 y 3) y <strong>Proyectos</strong> (nivel 4). Haz clic en cualquier nodo para cargar sus agentes en la cuadrícula. Los nodos con actualizaciones pendientes muestran el badge <span class="chip amber">↑N</span>. Al entrar en la vista, todas las categorías aparecen desplegadas por defecto.
+      Tres secciones: <strong>Global</strong>, <strong>Categorías</strong> (planas, sin sub-nodos de tecnología) y <strong>Proyectos</strong>. Haz clic en cualquier nodo para cargar sus agentes en la cuadrícula. Los nodos con actualizaciones pendientes muestran el badge <span class="chip amber">↑N</span>. Al entrar en la vista, todas las secciones están desplegadas por defecto.
+    </p>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      El toggle <strong>Agentes / Skills</strong> en la parte superior del panel izquierdo cambia entre la vista de agentes y la de skills. Al cambiar a Skills aparece el buscador y el panel central muestra el catálogo de skills.
     </p>
 
     <h4>Cuadrícula de agentes</h4>
@@ -723,6 +753,102 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="callout-body">
         <div class="callout-title">Tarea inferida automáticamente</div>
         <div class="callout-text">Agent Hub deduce la tarea del agente a partir de su nombre y descripción (keywords: <em>review</em>, <em>test</em>, <em>doc</em>, <em>security</em>, <em>debug</em>…). La tarea termina siempre con una instrucción para que el agente implemente los cambios sin pedir confirmación previa.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Skills                 -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="skills">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title"><span>Skills</span></h2>
+    <p class="section-intro">Las skills son bloques de contexto tecnológico que Agent Hub inyecta automáticamente en el system prompt de un agente cuando se ejecuta en un proyecto que las tiene configuradas. Sustituyen al antiguo nivel "Tecnología" de la jerarquía.</p>
+
+    <div class="callout note">
+      <i class="ti ti-puzzle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Por qué skills en lugar de agentes por tecnología</div>
+        <div class="callout-text">Un agente como <strong>front-coder</strong> sabe implementar componentes UI, pero no conoce los detalles de tu stack concreto. La skill <strong>react</strong> le aporta ese contexto: React 18 con hooks, estado con Zustand, estilos con TailwindCSS… El agente se mantiene genérico y las skills aportan la especificidad. Puedes combinar varias skills por proyecto.</div>
+      </div>
+    </div>
+
+    <h4>Cómo funciona la inyección</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Cuando ejecutas un agente sobre un proyecto (desde el panel de ejecución, una orquestación o el Subsistema CLI), Agent Hub también inyecta las skills configuradas en el propio agente (campo <code>skills[]</code> del frontmatter para agentes de proyecto). La secuencia es:
+    </p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num green">1</div>
+        <div class="step-body">
+          <div class="step-title">Lee las skills del proyecto</div>
+          <div class="step-desc">Lee el array <code>skills[]</code> del proyecto (ej: <code>["react", "tailwind", "typescript"]</code>).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">2</div>
+        <div class="step-body">
+          <div class="step-title">Carga los bloques de contenido</div>
+          <div class="step-desc">Lee el contenido Markdown de cada fichero <code>agents/skills/{nombre}.md</code>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">3</div>
+        <div class="step-body">
+          <div class="step-title">Concatena al system prompt</div>
+          <div class="step-desc">Añade el bloque de cada skill al final del system prompt del agente antes de llamar a la IA. El agente "ve" el contexto tecnológico como parte de sus instrucciones.</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Catálogo de skills incluidas</h4>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card blue-l">
+        <div class="card-title">Frontend</div>
+        <div class="card-body">React, Vue, Angular, Svelte, Next.js, Nuxt.js, TailwindCSS, Vanilla JS, MUI, shadcn/ui, Chakra UI, Ant Design</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-title">Backend</div>
+        <div class="card-body">Node.js+Express, FastAPI, Django, .NET, Spring Boot, Go, Rust, Laravel</div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-title">Bases de datos</div>
+        <div class="card-body">PostgreSQL, MySQL, MongoDB, SQLite, Redis, Prisma</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title">Mobile</div>
+        <div class="card-body">React Native+Expo, Flutter, Swift/SwiftUI, Kotlin/Compose</div>
+      </div>
+      <div class="card coral-l">
+        <div class="card-title">DevOps</div>
+        <div class="card-body">Docker, Kubernetes, GitHub Actions, Terraform, AWS</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Videojuegos</div>
+        <div class="card-body">Unity 6, Unreal Engine 5, Godot 4, Defold</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Global</div>
+        <div class="card-body">TypeScript estricto, Monorepo (Turborepo/Nx), Jest, Vitest, Conventional Commits</div>
+      </div>
+    </div>
+
+    <h4>Asignar skills a un proyecto</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Abre el drawer de un proyecto → footer → <strong>Editar</strong>. En el modal de edición encontrarás el selector de skills donde puedes añadir o quitar skills de la lista del proyecto.
+    </p>
+
+    <h4>Idioma de las skills</h4>
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="card green-l">
+        <div class="card-title">Inglés — skills de código</div>
+        <div class="card-body">React, PostgreSQL, Docker, TypeScript… El contexto técnico va en inglés porque los agentes de código también están en inglés.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Español — skills de documentación</div>
+        <div class="card-body">Si creas una skill de convenciones de documentación o estilos de escritura del equipo, puedes generarla en español.</div>
       </div>
     </div>
   </div>
@@ -822,15 +948,15 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- Vista Orquestaciones   -->
   <!-- ══════════════════════ -->
   <div class="section" id="orquestaciones">
-    <div class=”section-badge”>La aplicación</div>
-    <h2 class=”section-title”>Vista <span>Orquestaciones</span></h2>
-    <p class=”section-intro”>Crea y ejecuta workflows de múltiples agentes en secuencia sobre tu proyecto. El output de cada agente se inyecta como contexto al siguiente, con control granular del flujo de datos, contexto estático y dinámico, rollback paso a paso y auditoría completa de ejecución.</p>
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Vista <span>Orquestaciones</span></h2>
+    <p class="section-intro">Crea y ejecuta workflows de múltiples agentes en secuencia sobre tu proyecto. El output de cada agente se inyecta como contexto al siguiente, con control granular del flujo de datos, contexto estático y dinámico, rollback paso a paso y auditoría completa de ejecución.</p>
 
-    <div class=”callout note”>
-      <i class=”ti ti-topology-ring-2” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>Por qué es la función más potente de Agent Hub</div>
-        <div class=”callout-text”>Un agente solo puede hacer una cosa a la vez, y cuando termina su contexto desaparece. Las orquestaciones encadenan agentes en un pipeline inteligente: el reviewer analiza, el refactorizador actúa sobre ese análisis, el test-writer genera tests para los cambios resultantes — todo de forma automática, sin intervención manual entre pasos, con los ficheros reales del proyecto como base de trabajo.</div>
+    <div class="callout note">
+      <i class="ti ti-topology-ring-2" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Por qué es la función más potente de Agent Hub</div>
+        <div class="callout-text">Un agente solo puede hacer una cosa a la vez, y cuando termina su contexto desaparece. Las orquestaciones encadenan agentes en un pipeline inteligente: el reviewer analiza, el refactorizador actúa sobre ese análisis, el test-writer genera tests para los cambios resultantes — todo de forma automática, sin intervención manual entre pasos, con los ficheros reales del proyecto como base de trabajo.</div>
       </div>
     </div>
 
@@ -843,32 +969,32 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         </div>
 
     <h4>Conceptos clave</h4>
-    <div class=”grid2” style=”margin-bottom:16px”>
-      <div class=”card accent-l”>
-        <div class=”card-icon”><i class=”ti ti-topology-ring-2” style=”color:var(--accent)”></i></div>
-        <div class=”card-title”>Orquestación</div>
-        <div class=”card-body”>Definición persistente de un workflow: lista ordenada de agentes + configuración de cada conexión entre ellos + configuración de ejecución. Se guarda como JSON en <code>.agent-hub/orchestrations/</code> dentro del proyecto.</div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-icon"><i class="ti ti-topology-ring-2" style="color:var(--accent)"></i></div>
+        <div class="card-title">Orquestación</div>
+        <div class="card-body">Definición persistente de un workflow: lista ordenada de agentes + configuración de cada conexión entre ellos + configuración de ejecución. Se guarda como JSON en <code>.agent-hub/orchestrations/</code> dentro del proyecto.</div>
       </div>
-      <div class=”card blue-l”>
-        <div class=”card-icon”><i class=”ti ti-arrows-transfer-down” style=”color:var(--blue)”></i></div>
-        <div class=”card-title”>Conexión (nodo)</div>
-        <div class=”card-body”>El enlace entre dos agentes consecutivos. En cada conexión defines qué información fluye del agente anterior al siguiente: su respuesta, los ficheros que modificó, el CLAUDE.md del proyecto, y contexto extra.</div>
+      <div class="card blue-l">
+        <div class="card-icon"><i class="ti ti-arrows-transfer-down" style="color:var(--blue)"></i></div>
+        <div class="card-title">Conexión (nodo)</div>
+        <div class="card-body">El enlace entre dos agentes consecutivos. En cada conexión defines qué información fluye del agente anterior al siguiente: su respuesta, los ficheros que modificó, el CLAUDE.md del proyecto, y contexto extra.</div>
       </div>
-      <div class=”card green-l”>
-        <div class=”card-icon”><i class=”ti ti-database” style=”color:var(--green)”></i></div>
-        <div class=”card-title”>Contexto fijo</div>
-        <div class=”card-body”>Texto libre o ficheros del proyecto que se incluyen siempre en una conexión concreta, independientemente de lo que haya ocurrido antes. Se configura una sola vez al editar la orquestación.</div>
+      <div class="card green-l">
+        <div class="card-icon"><i class="ti ti-database" style="color:var(--green)"></i></div>
+        <div class="card-title">Contexto fijo</div>
+        <div class="card-body">Texto libre o ficheros del proyecto que se incluyen siempre en una conexión concreta, independientemente de lo que haya ocurrido antes. Se configura una sola vez al editar la orquestación.</div>
       </div>
-      <div class=”card amber-l”>
-        <div class=”card-icon”><i class=”ti ti-forms” style=”color:var(--amber)”></i></div>
-        <div class=”card-title”>Contexto temporal</div>
-        <div class=”card-body”>Campos dinámicos (texto o fichero) que Agent Hub solicita al usuario justo antes de cada ejecución. Útil para pasar un ticket, un mensaje de commit o una rama como contexto fresco en cada run.</div>
+      <div class="card amber-l">
+        <div class="card-icon"><i class="ti ti-forms" style="color:var(--amber)"></i></div>
+        <div class="card-title">Contexto temporal</div>
+        <div class="card-body">Campos dinámicos (texto o fichero) que Agent Hub solicita al usuario justo antes de cada ejecución. Útil para pasar un ticket, un mensaje de commit o una rama como contexto fresco en cada run.</div>
       </div>
     </div>
 
     <!-- ── Lista de orquestaciones ── -->
     <h4>Lista de orquestaciones</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Al entrar en la vista Orquestaciones, ves las tarjetas de todas las orquestaciones del proyecto seleccionado en el topbar. Cada tarjeta muestra: nombre, descripción, estado de la última ejecución, número total de ejecuciones y fecha de la última.
     </p>
 
@@ -880,28 +1006,28 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
     </div>
 
-    <div class=”grid3” style=”margin-bottom:16px”>
-      <div class=”card green-l”>
-        <div class=”card-title”><span class=”chip green”><i class=”ti ti-circle-check” style=”font-size:10px”></i> success</span></div>
-        <div class=”card-body”>La última ejecución completó todos los pasos sin errores.</div>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card green-l">
+        <div class="card-title"><span class="chip green"><i class="ti ti-circle-check" style="font-size:10px"></i> success</span></div>
+        <div class="card-body">La última ejecución completó todos los pasos sin errores.</div>
       </div>
-      <div class=”card amber-l”>
-        <div class=”card-title”><span class=”chip amber”><i class=”ti ti-alert-triangle” style=”font-size:10px”></i> partial</span></div>
-        <div class=”card-body”>Algunos pasos se completaron pero hubo errores. Los pasos exitosos no se revierten.</div>
+      <div class="card amber-l">
+        <div class="card-title"><span class="chip amber"><i class="ti ti-alert-triangle" style="font-size:10px"></i> partial</span></div>
+        <div class="card-body">Algunos pasos se completaron pero hubo errores. Los pasos exitosos no se revierten.</div>
       </div>
-      <div class=”card coral-l”>
-        <div class=”card-title”><span class=”chip” style=”background:var(--coral-dim);border-color:rgba(251,113,133,0.25);color:var(--coral)”><i class=”ti ti-x” style=”font-size:10px”></i> failed</span></div>
-        <div class=”card-body”>La ejecución falló. Si <code>stopOnError</code> estaba activo, se detuvo en el primer error.</div>
+      <div class="card coral-l">
+        <div class="card-title"><span class="chip" style="background:var(--coral-dim);border-color:rgba(251,113,133,0.25);color:var(--coral)"><i class="ti ti-x" style="font-size:10px"></i> failed</span></div>
+        <div class="card-body">La ejecución falló. Si <code>stopOnError</code> estaba activo, se detuvo en el primer error.</div>
       </div>
     </div>
 
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:20px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:20px">
       Las acciones de cada tarjeta son: <strong>Editar</strong> (abre el editor visual), <strong>Ejecutar</strong> (abre el panel de ejecución directamente) y <strong>Eliminar</strong> (con confirmación modal — borra el JSON de la orquestación pero no el historial de ejecuciones).
     </p>
 
     <!-- ── Editor visual ── -->
     <h4>Editor visual — los tres paneles</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Al crear o editar una orquestación, la vista cambia a un editor de tres paneles en paralelo.
     </p>
 
@@ -913,167 +1039,175 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
     </div>
 
-    <div class=”grid3” style=”margin-bottom:20px”>
-      <div class=”card accent-l”>
-        <div class=”card-icon”><i class=”ti ti-list” style=”color:var(--accent)”></i></div>
-        <div class=”card-title”>Panel izquierdo — Paleta</div>
-        <div class=”card-body”>Listado buscable de todos los agentes disponibles (global, sección, tecnología y proyecto). Arrastra cualquier agente al lienzo central para añadirlo al workflow.</div>
+    <div class="grid3" style="margin-bottom:20px">
+      <div class="card accent-l">
+        <div class="card-icon"><i class="ti ti-list" style="color:var(--accent)"></i></div>
+        <div class="card-title">Panel izquierdo — Paleta</div>
+        <div class="card-body">Listado buscable de todos los agentes disponibles (global, sección, tecnología y proyecto). Arrastra cualquier agente al lienzo central para añadirlo al workflow.</div>
       </div>
-      <div class=”card blue-l”>
-        <div class=”card-icon”><i class=”ti ti-layout-kanban” style=”color:var(--blue)”></i></div>
-        <div class=”card-title”>Panel central — Lienzo</div>
-        <div class=”card-body”>Visualización vertical del workflow. Los agentes aparecen como nodos conectados por líneas. Las conexiones son clicables para abrir su configurador. Los nodos son arrastrables para reordenar.</div>
+      <div class="card blue-l">
+        <div class="card-icon"><i class="ti ti-layout-kanban" style="color:var(--blue)"></i></div>
+        <div class="card-title">Panel central — Lienzo</div>
+        <div class="card-body">Visualización vertical del workflow. Los agentes aparecen como nodos conectados por líneas. Las conexiones son clicables para abrir su configurador. Los nodos son arrastrables para reordenar.</div>
       </div>
-      <div class=”card green-l”>
-        <div class=”card-icon”><i class=”ti ti-adjustments” style=”color:var(--green)”></i></div>
-        <div class=”card-title”>Panel derecho — Configurador</div>
-        <div class=”card-body”>Aparece al hacer clic en una conexión del lienzo. Muestra los controles de DataFlow, contexto fijo, contexto temporal y configuración de ejecución. Auto-guarda al cambiar de conexión.</div>
+      <div class="card green-l">
+        <div class="card-icon"><i class="ti ti-adjustments" style="color:var(--green)"></i></div>
+        <div class="card-title">Panel derecho — Configurador</div>
+        <div class="card-body">Aparece al hacer clic en una conexión del lienzo. Muestra los controles de DataFlow, contexto fijo, contexto temporal y configuración de ejecución. Auto-guarda al cambiar de conexión.</div>
       </div>
     </div>
 
-    <div class=”callout tip”>
-      <i class=”ti ti-drag-drop” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>Drag &amp; drop para construir el flujo</div>
-        <div class=”callout-text”>Arrastra agentes desde la paleta izquierda a cualquier posición del lienzo. Para reordenar, arrastra el icono de grip (<i class=”ti ti-grip-vertical” style=”font-size:11px”></i>) del nodo a la posición deseada. Las conexiones se regeneran automáticamente preservando su configuración.</div>
+    <div class="callout tip">
+      <i class="ti ti-drag-drop" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Drag &amp; drop para construir el flujo</div>
+        <div class="callout-text">Arrastra agentes desde la paleta izquierda a cualquier posición del lienzo. Para reordenar, arrastra el icono de grip (<i class="ti ti-grip-vertical" style="font-size:11px"></i>) del nodo a la posición deseada. Las conexiones se regeneran automáticamente preservando su configuración.</div>
       </div>
     </div>
 
     <!-- ── DataFlow ── -->
     <h4>DataFlow — qué se pasa entre agentes</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       En cada conexión defines exactamente qué información del agente anterior recibe el siguiente. Activa o desactiva cada canal con un checkbox en el configurador:
     </p>
-    <div class=”grid2” style=”margin-bottom:16px”>
-      <div class=”card accent-l”>
-        <div class=”card-title”><i class=”ti ti-message” style=”margin-right:6px;color:var(--accent)”></i>Output del agente anterior</div>
-        <div class=”card-body”>El texto completo de respuesta que generó el agente anterior. Es el canal más habitual: el reviewer escribe su análisis y el refactorizador lo lee como punto de partida.</div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-message" style="margin-right:6px;color:var(--accent)"></i>Output del agente anterior</div>
+        <div class="card-body">El texto completo de respuesta que generó el agente anterior. Es el canal más habitual: el reviewer escribe su análisis y el refactorizador lo lee como punto de partida.</div>
       </div>
-      <div class=”card blue-l”>
-        <div class=”card-title”><i class=”ti ti-files” style=”margin-right:6px;color:var(--blue)”></i>Ficheros modificados</div>
-        <div class=”card-body”>Lista de rutas de todos los ficheros que el paso anterior creó o modificó. El agente receptor los recibe en su contexto para trabajar sobre ellos. El contenido lo puede solicitar vía herramientas.</div>
-      </div>
-    </div>
-    <div class=”callout info”>
-      <i class=”ti ti-info-circle” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>El contexto del proyecto lo gestiona el propio agente</div>
-        <div class=”callout-text”>El checkbox de <code>CLAUDE.md</code> fue eliminado del DataFlow. Si un agente necesita las reglas del proyecto, debe declararlo en su system prompt e incluir la herramienta <code>Read</code> para leer el fichero directamente en tiempo de ejecución.</div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-files" style="margin-right:6px;color:var(--blue)"></i>Ficheros modificados</div>
+        <div class="card-body">Lista de rutas de todos los ficheros que el paso anterior creó o modificó. El agente receptor los recibe en su contexto para trabajar sobre ellos. El contenido lo puede solicitar vía herramientas.</div>
       </div>
     </div>
-    <div class=”callout warn”>
-      <i class=”ti ti-alert-triangle” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>Al menos un canal debe estar activo</div>
-        <div class=”callout-text”>La validación previa a la ejecución rechaza conexiones donde ningún canal de DataFlow está activado: el agente receptor no tendría ningún contexto relevante del paso anterior y ejecutaría “en vacío”.</div>
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El contexto del proyecto lo gestiona el propio agente</div>
+        <div class="callout-text">El checkbox de <code>CLAUDE.md</code> fue eliminado del DataFlow. Si un agente necesita las reglas del proyecto, debe declararlo en su system prompt e incluir la herramienta <code>Read</code> para leer el fichero directamente en tiempo de ejecución.</div>
+      </div>
+    </div>
+    <div class="callout warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Al menos un canal debe estar activo</div>
+        <div class="callout-text">La validación previa a la ejecución rechaza conexiones donde ningún canal de DataFlow está activado: el agente receptor no tendría ningún contexto relevante del paso anterior y ejecutaría "en vacío".</div>
       </div>
     </div>
 
     <!-- ── Contexto fijo y temporal ── -->
     <h4>Contexto fijo y contexto temporal</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Además del DataFlow, cada conexión puede incluir contexto adicional que se suma al mensaje del agente receptor.
     </p>
-    <div class=”grid2” style=”margin-bottom:16px”>
-      <div class=”card green-l”>
-        <div class=”card-icon”><i class=”ti ti-database” style=”color:var(--green)”></i></div>
-        <div class=”card-title”>Contexto fijo</div>
-        <div class=”card-body”>
-          <p style=”margin-bottom:6px”>Se configura en el editor y siempre se incluye en esa conexión:</p>
-          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:3px”>
-            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Texto libre</strong> — reglas adicionales, instrucciones extra, un fragmento de código de referencia.</li>
-            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Ficheros del proyecto</strong> — rutas absolutas o relativas que se leen en tiempo de ejecución. Selecciona con el selector de fichero nativo (<i class=”ti ti-folder” style=”font-size:11px”></i>).</li>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card green-l">
+        <div class="card-icon"><i class="ti ti-database" style="color:var(--green)"></i></div>
+        <div class="card-title">Contexto fijo</div>
+        <div class="card-body">
+          <p style="margin-bottom:6px">Se configura en el editor y siempre se incluye en esa conexión:</p>
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:3px">
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Texto libre</strong> — reglas adicionales, instrucciones extra, un fragmento de código de referencia.</li>
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Ficheros del proyecto</strong> — rutas absolutas o relativas que se leen en tiempo de ejecución. Selecciona con el selector de fichero nativo (<i class="ti ti-folder" style="font-size:11px"></i>).</li>
           </ul>
         </div>
       </div>
-      <div class=”card amber-l”>
-        <div class=”card-icon”><i class=”ti ti-forms” style=”color:var(--amber)”></i></div>
-        <div class=”card-title”>Contexto temporal</div>
-        <div class=”card-body”>
-          <p style=”margin-bottom:6px”>Campos que Agent Hub pide al usuario cada vez que se ejecuta la orquestación:</p>
-          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:3px”>
-            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Tipo texto</strong> — campo libre para introducir cualquier valor en cada run (mensaje de PR, número de ticket, rama de referencia…).</li>
-            <li style=”font-size:12px;color:var(--text1)”><strong style=”color:var(--text0)”>Tipo fichero</strong> — selector de fichero que se abre al inicio de cada ejecución.</li>
+      <div class="card amber-l">
+        <div class="card-icon"><i class="ti ti-forms" style="color:var(--amber)"></i></div>
+        <div class="card-title">Contexto temporal</div>
+        <div class="card-body">
+          <p style="margin-bottom:6px">Campos que Agent Hub pide al usuario cada vez que se ejecuta la orquestación:</p>
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:3px">
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Tipo texto</strong> — campo libre para introducir cualquier valor en cada run (mensaje de PR, número de ticket, rama de referencia…).</li>
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Tipo fichero</strong> — selector de fichero que se abre al inicio de cada ejecución.</li>
           </ul>
-          <p style=”margin-top:6px;font-size:12px;color:var(--text1)”>Los campos marcados como <strong>requeridos</strong> bloquean el inicio de la ejecución si están vacíos.</p>
+          <p style="margin-top:6px;font-size:12px;color:var(--text1)">Los campos marcados como <strong>requeridos</strong> bloquean el inicio de la ejecución si están vacíos.</p>
         </div>
       </div>
     </div>
 
     <!-- ── Config de ejecución ── -->
     <h4>Configuración de ejecución</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Aparece en la parte inferior del panel configurador al seleccionar cualquier conexión. Aplica a toda la orquestación:
     </p>
-    <div class=”grid2” style=”margin-bottom:16px”>
-      <div class=”card”>
-        <div class=”card-title”><code>stopOnError</code></div>
-        <div class=”card-body”>Si está activo (defecto: sí), la ejecución se detiene en el primer paso que falle. Si está desactivado, continúa con los pasos siguientes aunque alguno haya fallado.</div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-title"><code>stopOnError</code></div>
+        <div class="card-body">Si está activo (defecto: sí), la ejecución se detiene en el primer paso que falle. Si está desactivado, continúa con los pasos siguientes aunque alguno haya fallado.</div>
       </div>
-      <div class=”card”>
-        <div class=”card-title”><code>maxTurns</code></div>
-        <div class=”card-body”>Máximo de turnos del Subsistema CLI por paso (defecto: 10). Aumenta este valor si tus agentes necesitan muchas iteraciones para completar su tarea.</div>
+      <div class="card">
+        <div class="card-title"><code>maxTurns</code></div>
+        <div class="card-body">Máximo de turnos del Subsistema CLI por paso (defecto: 10). Aumenta este valor si tus agentes necesitan muchas iteraciones para completar su tarea.</div>
       </div>
-      <div class=”card”>
-        <div class=”card-title”><code>timeout</code></div>
-        <div class=”card-body”>Tiempo máximo por paso en milisegundos (defecto: 300 000 ms = 5 min). Si un paso supera este tiempo, se cancela y se registra como error.</div>
+      <div class="card">
+        <div class="card-title"><code>timeout</code></div>
+        <div class="card-body">Tiempo máximo global de toda la orquestación en milisegundos (defecto: 300 000 ms = 5 min). El tiempo restante se reparte entre los pasos. El tiempo de pausa en gates HITL <strong>no</strong> descuenta.</div>
       </div>
-      <div class=”card”>
-        <div class=”card-title”><code>validateAfterEachStep</code></div>
-        <div class=”card-body”>Reservado para versiones futuras. Actualmente sin efecto en la ejecución.</div>
+      <div class="card">
+        <div class="card-title"><code>validateAfterEachStep</code></div>
+        <div class="card-body">Si está activo, ejecuta <code>validate-output</code> tras cada paso IA. Si la validación falla, el paso se marca como advertencia. Útil para detectar outputs malformados sin detener la ejecución.</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><code>maxContextChars</code></div>
+        <div class="card-body">Límite de caracteres del mensaje de usuario en cada paso (defecto: 4 000). Si el contexto ensamblado supera este límite, se trunca con un aviso visible en el log. Aumenta este valor si usas modelos con ventana de contexto grande.</div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-user-check" style="margin-right:6px;color:var(--accent)"></i>Gate HITL (<code>gateAfter</code>)</div>
+        <div class="card-body">Toggle en el panel configurador de cada conexión. Cuando está activo, la ejecución se pausa tras el agente que precede a esa conexión para revisión humana. Ver sección <a href="#gates-hitl" style="color:var(--accent)">Gates HITL</a>.</div>
       </div>
     </div>
 
     <!-- ── Crear una orquestación ── -->
     <h4>Crear una orquestación paso a paso</h4>
-    <div class=”steps”>
-      <div class=”step”>
-        <div class=”step-num accent”>1</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Selecciona el proyecto en el topbar</div>
-          <div class=”step-desc”>El selector de proyecto en la barra superior de la vista Orquestaciones filtra las orquestaciones por proyecto. Si cambias de proyecto se descarta el editor en curso.</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Selecciona el proyecto en el topbar</div>
+          <div class="step-desc">El selector de proyecto en la barra superior de la vista Orquestaciones filtra las orquestaciones por proyecto. Si cambias de proyecto se descarta el editor en curso.</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num accent”>2</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Pulsa “Nueva orquestación”</div>
-          <div class=”step-desc”>Un modal pide nombre y descripción. Al aceptar, la orquestación se crea en disco (vacía, sin agentes) y el editor visual se abre directamente.</div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Nueva orquestación"</div>
+          <div class="step-desc">Un modal pide nombre y descripción. Al aceptar, la orquestación se crea en disco (vacía, sin agentes) y el editor visual se abre directamente.</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num accent”>3</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Arrastra agentes desde la paleta al lienzo</div>
-          <div class=”step-desc”>Busca en la paleta izquierda el primer agente del workflow y arrástralo al lienzo. Repite con el segundo, tercero… El lienzo los muestra en orden vertical con flechas de conexión entre ellos.</div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">Arrastra agentes desde la paleta al lienzo</div>
+          <div class="step-desc">Busca en la paleta izquierda el primer agente del workflow y arrástralo al lienzo. Repite con el segundo, tercero… El lienzo los muestra en orden vertical con flechas de conexión entre ellos.</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num accent”>4</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Haz clic en cada conexión para configurarla</div>
-          <div class=”step-desc”>La flecha entre dos agentes representa la conexión. Al hacer clic, el panel derecho muestra el configurador: activa los canales de DataFlow que necesites, añade contexto fijo si aplica y define campos temporales si quieres que te los pidan en cada run.</div>
+      <div class="step">
+        <div class="step-num accent">4</div>
+        <div class="step-body">
+          <div class="step-title">Haz clic en cada conexión para configurarla</div>
+          <div class="step-desc">La flecha entre dos agentes representa la conexión. Al hacer clic, el panel derecho muestra el configurador: activa los canales de DataFlow que necesites, añade contexto fijo si aplica y define campos temporales si quieres que te los pidan en cada run.</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num accent”>5</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Ajusta la configuración de ejecución</div>
-          <div class=”step-desc”>En el panel derecho, la sección inferior permite cambiar <code>stopOnError</code>, <code>maxTurns</code> y <code>timeout</code>. El botón “Aplicar cambios” guarda la conexión activa; al cambiar de conexión el auto-save lo hace automáticamente.</div>
+      <div class="step">
+        <div class="step-num accent">5</div>
+        <div class="step-body">
+          <div class="step-title">Ajusta la configuración de ejecución</div>
+          <div class="step-desc">En el panel derecho, la sección inferior permite cambiar <code>stopOnError</code>, <code>maxTurns</code> y <code>timeout</code>. El botón "Aplicar cambios" guarda la conexión activa; al cambiar de conexión el auto-save lo hace automáticamente.</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num accent”>6</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Ejecuta</div>
-          <div class=”step-desc”>Usa el botón <strong>Ejecutar</strong> en el topbar del editor para lanzar la orquestación directamente desde el editor, o vuelve al listado y usa el botón de ejecución de la tarjeta.</div>
+      <div class="step">
+        <div class="step-num accent">6</div>
+        <div class="step-body">
+          <div class="step-title">Ejecuta</div>
+          <div class="step-desc">Usa el botón <strong>Ejecutar</strong> en el topbar del editor para lanzar la orquestación directamente desde el editor, o vuelve al listado y usa el botón de ejecución de la tarjeta.</div>
         </div>
       </div>
     </div>
 
     <!-- ── Panel de ejecución ── -->
     <h4>Panel de ejecución</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       El panel de ejecución tiene tres fases secuenciales.
     </p>
 
@@ -1085,95 +1219,111 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
     </div>
 
-    <div class=”steps” style=”margin-bottom:20px”>
-      <div class=”step”>
-        <div class=”step-num amber”>1</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Formulario previo</div>
-          <div class=”step-desc”>Si la orquestación tiene campos de contexto temporal, Agent Hub los muestra antes de lanzar. Los campos requeridos bloquean el botón “Ejecutar”. Si algún agente usa herramientas de navegador (<code>browser_*</code>), aparece también la sección de <strong>Navegador CDP</strong> con el estado de conexión y la opción de lanzar un navegador dedicado. La ejecución no comienza hasta que el navegador esté conectado.</div>
+    <div class="steps" style="margin-bottom:20px">
+      <div class="step">
+        <div class="step-num amber">1</div>
+        <div class="step-body">
+          <div class="step-title">Formulario previo</div>
+          <div class="step-desc">Si la orquestación tiene campos de contexto temporal, Agent Hub los muestra antes de lanzar. Los campos requeridos bloquean el botón "Ejecutar". Si algún agente usa herramientas de navegador (<code>browser_*</code>), aparece también la sección de <strong>Navegador CDP</strong> con el estado de conexión y la opción de lanzar un navegador dedicado. La ejecución no comienza hasta que el navegador esté conectado.</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num amber”>2</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Ejecución en tiempo real</div>
-          <div class=”step-desc”>Los logs de cada paso se reciben en tiempo real vía SSE. Para cada paso se muestra: nombre del agente, estado (ejecutando / completado / error), ficheros modificados hasta ese momento y progreso general del workflow. Los eventos de tipo <code>step-progress</code> aparecen como líneas de log con su nivel (info / warn / error).</div>
+      <div class="step">
+        <div class="step-num amber">2</div>
+        <div class="step-body">
+          <div class="step-title">Ejecución en tiempo real</div>
+          <div class="step-desc">Los logs de cada paso se reciben en tiempo real vía SSE. Para cada paso se muestra: nombre del agente, estado (ejecutando / completado / error), ficheros modificados hasta ese momento y progreso general del workflow. Los eventos de tipo <code>step-progress</code> aparecen como líneas de log con su nivel (info / warn / error).</div>
         </div>
       </div>
-      <div class=”step”>
-        <div class=”step-num amber”>3</div>
-        <div class=”step-body”>
-          <div class=”step-title”>Resultado final</div>
-          <div class=”step-desc”>Al completar, se muestra: estado global (success / partial / failed), tarjeta por paso con respuesta del agente, ficheros modificados, tokens consumidos y duración. Los pasos con error muestran el mensaje de error y la categoría del fallo.</div>
+      <div class="step">
+        <div class="step-num amber">3</div>
+        <div class="step-body">
+          <div class="step-title">Resultado final</div>
+          <div class="step-desc">Al completar, se muestra: estado global (success / partial / failed), tarjeta por paso con respuesta del agente, ficheros modificados, tokens consumidos y duración. Los pasos con error muestran el mensaje de error y la categoría del fallo.</div>
         </div>
       </div>
     </div>
 
-    <div class=”grid3” style=”margin-bottom:16px”>
-      <div class=”card green-l”>
-        <div class=”card-icon”><i class=”ti ti-circle-check” style=”color:var(--green)”></i></div>
-        <div class=”card-title”>Paso completado</div>
-        <div class=”card-body”>El agente terminó sin errores. Se muestran los ficheros modificados, tokens de entrada/salida y duración del paso.</div>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card green-l">
+        <div class="card-icon"><i class="ti ti-circle-check" style="color:var(--green)"></i></div>
+        <div class="card-title">Paso completado</div>
+        <div class="card-body">El agente terminó sin errores. Se muestran los ficheros modificados, tokens de entrada/salida y duración del paso.</div>
       </div>
-      <div class=”card amber-l”>
-        <div class=”card-icon”><i class=”ti ti-loader” style=”color:var(--amber)”></i></div>
-        <div class=”card-title”>Paso ejecutando</div>
-        <div class=”card-body”>El log SSE muestra en tiempo real cada herramienta que invoca el agente (lectura de fichero, escritura, búsqueda…).</div>
+      <div class="card amber-l">
+        <div class="card-icon"><i class="ti ti-loader" style="color:var(--amber)"></i></div>
+        <div class="card-title">Paso ejecutando</div>
+        <div class="card-body">El log SSE muestra en tiempo real cada herramienta que invoca el agente (lectura de fichero, escritura, búsqueda…).</div>
       </div>
-      <div class=”card coral-l”>
-        <div class=”card-icon”><i class=”ti ti-alert-circle” style=”color:var(--coral)”></i></div>
-        <div class=”card-title”>Paso fallido</div>
-        <div class=”card-body”>El mensaje de error y su categoría se muestran en la tarjeta del paso. Si <code>stopOnError</code> está activo, los pasos posteriores aparecen como no ejecutados.</div>
+      <div class="card coral-l">
+        <div class="card-icon"><i class="ti ti-alert-circle" style="color:var(--coral)"></i></div>
+        <div class="card-title">Paso fallido</div>
+        <div class="card-body">El mensaje de error y su categoría se muestran en la tarjeta del paso. Si <code>stopOnError</code> está activo, los pasos posteriores aparecen como no ejecutados.</div>
       </div>
     </div>
 
     <!-- ── Rollback ── -->
     <h4>Rollback granular</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Antes de ejecutar la orquestación, Agent Hub toma un <strong>snapshot</strong> del estado del filesystem del proyecto (hasta 500 ficheros de texto, máx. 256 KB por fichero). Este snapshot se guarda en:
     </p>
-    <div class=”code-block” style=”margin-bottom:12px”>
-      <span class=”dim”>{ruta-del-proyecto}/</span><br>
-      <span class=”dim”>└── </span><span class=”acc”>.agent-hub/</span><br>
-      <span class=”dim”>    └── executions/</span><br>
-      <span class=”dim”>        └── </span><span class=”hi”>{timestamp}-{orchId}/</span><br>
-      <span class=”dim”>            ├── </span><span class=”grn”>result.json</span><span class=”dim”>      ← resultado completo de la ejecución</span><br>
-      <span class=”dim”>            └── </span><span class=”grn”>snapshot.json</span><span class=”dim”>    ← contenido previo del filesystem</span>
+    <div class="code-block" style="margin-bottom:12px">
+      <span class="dim">{ruta-del-proyecto}/</span><br>
+      <span class="dim">└── </span><span class="acc">.agent-hub/</span><br>
+      <span class="dim">    └── executions/</span><br>
+      <span class="dim">        └── </span><span class="hi">{timestamp}-{orchId}/</span><br>
+      <span class="dim">            ├── </span><span class="grn">result.json</span><span class="dim">      ← resultado completo de la ejecución</span><br>
+      <span class="dim">            └── </span><span class="grn">snapshot.json</span><span class="dim">    ← contenido previo del filesystem</span>
     </div>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Desde el resultado final puedes hacer rollback de cualquier paso individual pulsando el botón correspondiente en su tarjeta. El rollback restaura solo los ficheros que ese paso modificó, sin tocar lo que hicieron los demás pasos.
     </p>
-    <div class=”callout tip”>
-      <i class=”ti ti-history” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>Historial de ejecuciones</div>
-        <div class=”callout-text”>Cada ejecución queda registrada. Puedes ver el historial completo de una orquestación desde su tarjeta en el listado. El historial incluye fecha, duración, estado y el detalle completo de cada paso con posibilidad de rollback posterior.</div>
+    <div class="callout tip">
+      <i class="ti ti-history" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Historial de ejecuciones</div>
+        <div class="callout-text">Cada ejecución queda registrada. Puedes ver el historial completo de una orquestación desde su tarjeta en el listado. El historial incluye fecha, duración, estado y el detalle completo de cada paso con posibilidad de rollback posterior.</div>
+      </div>
+    </div>
+
+    <!-- ── Reanudar ejecución ── -->
+    <h4 id="reanudar-orquestacion">Reanudar ejecuciones interrumpidas</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Si una ejecución se interrumpió a mitad (error de red, cierre de la app, timeout parcial), Agent Hub permite reanudarla desde el paso donde se detuvo. Los pasos ya completados no se re-ejecutan — se cargan desde el estado guardado y la ejecución continúa desde el punto de interrupción.
+    </p>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card green-l">
+        <div class="card-title">Cómo reanudar</div>
+        <div class="card-body">En el historial de ejecuciones, las ejecuciones interrumpidas muestran el botón <strong>Reanudar</strong>. Al pulsarlo, el sistema carga el estado guardado en <code>execution-state.json</code> y continúa la ejecución desde el paso siguiente al último completado.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Estado de ejecución guardado</div>
+        <div class="card-body">Tras cada paso completado se persiste en <code>.agent-hub/executions/{id}/execution-state.json</code>: el índice del último paso completado, el estado de cada paso y los ficheros modificados. Este estado es la base para la reanudación.</div>
       </div>
     </div>
 
     <!-- ── Validación ── -->
     <h4>Validación previa</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Antes de lanzar cualquier ejecución, Agent Hub valida la orquestación. Si hay errores, los muestra en un banner coral y bloquea el inicio. Las comprobaciones son:
     </p>
-    <div class=”grid2” style=”margin-bottom:16px”>
-      <div class=”card”>
-        <div class=”card-body”>
-          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:5px”>
-            <li style=”font-size:12px;color:var(--text1)”>Al menos 2 agentes en la orquestación</li>
-            <li style=”font-size:12px;color:var(--text1)”>Todos los agentes existen en disco</li>
-            <li style=”font-size:12px;color:var(--text1)”>Número de nodos = agentes − 1</li>
-            <li style=”font-size:12px;color:var(--text1)”>Índices <code>from</code>/<code>to</code> consecutivos y válidos</li>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-body">
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:5px">
+            <li style="font-size:12px;color:var(--text1)">Al menos 2 agentes en la orquestación</li>
+            <li style="font-size:12px;color:var(--text1)">Todos los agentes existen en disco</li>
+            <li style="font-size:12px;color:var(--text1)">Número de nodos = agentes − 1</li>
+            <li style="font-size:12px;color:var(--text1)">Índices <code>from</code>/<code>to</code> consecutivos y válidos</li>
           </ul>
         </div>
       </div>
-      <div class=”card”>
-        <div class=”card-body”>
-          <ul style=”padding-left:14px;display:flex;flex-direction:column;gap:5px”>
-            <li style=”font-size:12px;color:var(--text1)”>Cada conexión tiene al menos un canal de DataFlow activo</li>
-            <li style=”font-size:12px;color:var(--text1)”>Los ficheros de contexto fijo existen en disco</li>
-            <li style=”font-size:12px;color:var(--text1)”>El directorio del proyecto existe</li>
-            <li style=”font-size:12px;color:var(--text1)”><code>timeout ≥ 5 000 ms</code></li>
+      <div class="card">
+        <div class="card-body">
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:5px">
+            <li style="font-size:12px;color:var(--text1)">Cada conexión tiene al menos un canal de DataFlow activo</li>
+            <li style="font-size:12px;color:var(--text1)">Los ficheros de contexto fijo existen en disco</li>
+            <li style="font-size:12px;color:var(--text1)">El directorio del proyecto existe</li>
+            <li style="font-size:12px;color:var(--text1)"><code>timeout ≥ 5 000 ms</code></li>
           </ul>
         </div>
       </div>
@@ -1181,73 +1331,367 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
     <!-- ── Casos de uso ── -->
     <h4>Casos de uso habituales</h4>
-    <div class=”grid3” style=”margin-bottom:16px”>
-      <div class=”card accent-l”>
-        <div class=”card-title”><i class=”ti ti-git-pull-request” style=”margin-right:6px;color:var(--accent)”></i>Review → Refactor → Tests</div>
-        <div class=”card-body”>El reviewer analiza el código y produce un informe. El refactorizador aplica mejoras basándose en ese informe. El test-writer genera tests para los cambios introducidos. DataFlow: output + ficheros modificados en ambas conexiones.</div>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-git-pull-request" style="margin-right:6px;color:var(--accent)"></i>Review → Refactor → Tests</div>
+        <div class="card-body">El reviewer analiza el código y produce un informe. El refactorizador aplica mejoras basándose en ese informe. El test-writer genera tests para los cambios introducidos. DataFlow: output + ficheros modificados en ambas conexiones.</div>
       </div>
-      <div class=”card blue-l”>
-        <div class=”card-title”><i class=”ti ti-shield-check” style=”margin-right:6px;color:var(--blue)”></i>Security Audit → Fix</div>
-        <div class=”card-body”>El auditor identifica vulnerabilidades con referencias a rutas concretas. El fixer aplica los patches sobre esas rutas. Contexto temporal: rama o versión del código a auditar.</div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-shield-check" style="margin-right:6px;color:var(--blue)"></i>Security Audit → Fix</div>
+        <div class="card-body">El auditor identifica vulnerabilidades con referencias a rutas concretas. El fixer aplica los patches sobre esas rutas. Contexto temporal: rama o versión del código a auditar.</div>
       </div>
-      <div class=”card green-l”>
-        <div class=”card-title”><i class=”ti ti-file-text” style=”margin-right:6px;color:var(--green)”></i>Análisis → Documentación</div>
-        <div class=”card-body”>El analizador extrae firmas, exportaciones y comentarios. El doc-writer genera el fichero de documentación. Contexto fijo en la segunda conexión: plantilla de formato que se debe usar.</div>
+      <div class="card green-l">
+        <div class="card-title"><i class="ti ti-file-text" style="margin-right:6px;color:var(--green)"></i>Análisis → Documentación</div>
+        <div class="card-body">El analizador extrae firmas, exportaciones y comentarios. El doc-writer genera el fichero de documentación. Contexto fijo en la segunda conexión: plantilla de formato que se debe usar.</div>
       </div>
-      <div class=”card amber-l”>
-        <div class=”card-title”><i class=”ti ti-bug” style=”margin-right:6px;color:var(--amber)”></i>Debug → Fix → Validate</div>
-        <div class=”card-body”>El debugger localiza la causa raíz de un bug. El fixer lo corrige. El validador ejecuta los tests y confirma la reparación. Contexto temporal en el primer paso: descripción del bug o fragmento de log.</div>
+      <div class="card amber-l">
+        <div class="card-title"><i class="ti ti-bug" style="margin-right:6px;color:var(--amber)"></i>Debug → Fix → Validate</div>
+        <div class="card-body">El debugger localiza la causa raíz de un bug. El fixer lo corrige. El validador ejecuta los tests y confirma la reparación. Contexto temporal en el primer paso: descripción del bug o fragmento de log.</div>
       </div>
-      <div class=”card coral-l”>
-        <div class=”card-title”><i class=”ti ti-arrows-transfer-up” style=”margin-right:6px;color:var(--coral)”></i>Refactor incremental</div>
-        <div class=”card-body”>Varias pasadas de refactorización con agentes especializados: primero renombrado y estructura, luego rendimiento, luego eliminación de código muerto. Cada paso recibe los ficheros del anterior como punto de partida.</div>
+      <div class="card coral-l">
+        <div class="card-title"><i class="ti ti-arrows-transfer-up" style="margin-right:6px;color:var(--coral)"></i>Refactor incremental</div>
+        <div class="card-body">Varias pasadas de refactorización con agentes especializados: primero renombrado y estructura, luego rendimiento, luego eliminación de código muerto. Cada paso recibe los ficheros del anterior como punto de partida.</div>
       </div>
-      <div class=”card”>
-        <div class=”card-title”><i class=”ti ti-git-commit” style=”margin-right:6px;color:var(--text2)”></i>Onboarding automático</div>
-        <div class=”card-body”>El analizador lee el proyecto y produce un resumen. El doc-writer genera el CLAUDE.md o README inicial. Contexto temporal: nombre del equipo o tech lead al que va dirigida la documentación.</div>
+      <div class="card">
+        <div class="card-title"><i class="ti ti-git-commit" style="margin-right:6px;color:var(--text2)"></i>Onboarding automático</div>
+        <div class="card-body">El analizador lee el proyecto y produce un resumen. El doc-writer genera el CLAUDE.md o README inicial. Contexto temporal: nombre del equipo o tech lead al que va dirigida la documentación.</div>
       </div>
     </div>
 
-    <div class=”callout tip”>
-      <i class=”ti ti-cpu” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>Funciona con cualquier proveedor de IA</div>
-        <div class=”callout-text”>El orquestador usa el Subsistema CLI para que los proveedores API Anthropic y GitHub Copilot puedan operar directamente sobre el filesystem del proyecto (leer, escribir, buscar ficheros) con las mismas capacidades que Claude CLI nativo. No necesitas tener la CLI instalada para ejecutar orquestaciones si usas API key o GitHub Copilot.</div>
+    <div class="callout tip">
+      <i class="ti ti-cpu" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Funciona con cualquier proveedor de IA</div>
+        <div class="callout-text">El orquestador usa el Subsistema CLI para que los proveedores API Anthropic y GitHub Copilot puedan operar directamente sobre el filesystem del proyecto (leer, escribir, buscar ficheros) con las mismas capacidades que Claude CLI nativo. No necesitas tener la CLI instalada para ejecutar orquestaciones si usas API key o GitHub Copilot.</div>
       </div>
     </div>
 
     <!-- ── Automatización de navegador ── -->
     <h4>Automatización de navegador (CDP)</h4>
-    <p style=”font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px”>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Si algún agente de la orquestación incluye herramientas con prefijo <code>browser_*</code>, Agent Hub activa el modo CDP (Chrome DevTools Protocol). Antes de ejecutar, el formulario previo muestra la sección de navegador:
     </p>
-    <div class=”grid3” style=”margin-bottom:12px”>
-      <div class=”card green-l”>
-        <div class=”card-title”><code>browser_get</code></div>
-        <div class=”card-body”>Navega a una URL y extrae texto o HTML. Puede esperar a un selector concreto antes de capturar el contenido.</div>
+    <div class="grid3" style="margin-bottom:12px">
+      <div class="card green-l">
+        <div class="card-title"><code>browser_get</code></div>
+        <div class="card-body">Navega a una URL y extrae texto o HTML. Puede esperar a un selector concreto antes de capturar el contenido.</div>
       </div>
-      <div class=”card blue-l”>
-        <div class=”card-title”><code>browser_action</code></div>
-        <div class=”card-body”>Interactúa con el DOM: click, rellenar un campo, seleccionar, hover, evaluar un script o esperar.</div>
+      <div class="card blue-l">
+        <div class="card-title"><code>browser_action</code></div>
+        <div class="card-body">Interactúa con el DOM: click, rellenar un campo, seleccionar, hover, evaluar un script o esperar.</div>
       </div>
-      <div class=”card amber-l”>
-        <div class=”card-title”><code>browser_screenshot</code></div>
-        <div class=”card-body”>Captura de pantalla de la página o de un elemento concreto. Devuelve imagen en base64.</div>
+      <div class="card amber-l">
+        <div class="card-title"><code>browser_screenshot</code></div>
+        <div class="card-body">Captura de pantalla de la página o de un elemento concreto. Devuelve imagen en base64.</div>
       </div>
     </div>
-    <div class=”callout warn”>
-      <i class=”ti ti-world” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>El navegador debe estar conectado antes de ejecutar</div>
-        <div class=”callout-text”>Agent Hub lanza un navegador dedicado con un perfil de usuario separado (<code>~/.agent-hub-cdp-profile</code>) y puerto CDP propio. Puedes hacer login manualmente en ese navegador antes de pulsar <strong>Continuar</strong> para que la sesión esté disponible para el agente. Navegadores soportados: Chrome, Edge, Brave y Firefox.</div>
+    <div class="callout warn">
+      <i class="ti ti-world" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El navegador debe estar conectado antes de ejecutar</div>
+        <div class="callout-text">Agent Hub lanza un navegador dedicado con un perfil de usuario separado (<code>~/.agent-hub-cdp-profile</code>) y puerto CDP propio. Puedes hacer login manualmente en ese navegador antes de pulsar <strong>Continuar</strong> para que la sesión esté disponible para el agente. Navegadores soportados: Chrome, Edge, Brave y Firefox.</div>
       </div>
     </div>
 
-    <div class=”callout warn”>
-      <i class=”ti ti-clock” aria-hidden=”true”></i>
-      <div class=”callout-body”>
-        <div class=”callout-title”>Las orquestaciones consumen más tiempo y tokens que un agente solo</div>
-        <div class=”callout-text”>Cada paso es una ejecución completa de un agente con acceso al filesystem. Una orquestación de 3 agentes con <code>maxTurns: 10</code> puede suponer hasta 30 turnos de IA en total. Ajusta <code>maxTurns</code> y <code>timeout</code> según la complejidad real de cada paso para no exceder límites de tu proveedor.</div>
+    <div class="callout warn">
+      <i class="ti ti-clock" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Las orquestaciones consumen más tiempo y tokens que un agente solo</div>
+        <div class="callout-text">Cada paso es una ejecución completa de un agente con acceso al filesystem. Una orquestación de 3 agentes con <code>maxTurns: 10</code> puede suponer hasta 30 turnos de IA en total. Ajusta <code>maxTurns</code> y <code>timeout</code> según la complejidad real de cada paso para no exceder límites de tu proveedor.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════════════ -->
+  <!-- Scripts determinísticos        -->
+  <!-- ══════════════════════════════ -->
+  <div class="section" id="scripts-deterministicos">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Scripts <span>determinísticos</span></h2>
+    <p class="section-intro">Los scripts son nodos especiales de una orquestación que ejecutan lógica Node.js predefinida sin llamar a la IA. Son instantáneos, reproducibles y no consumen tokens. Se identifican por el prefijo <code>__script:</code> y aparecen en el lienzo con un badge azul <span class="mock-script-badge">script</span>.</p>
+
+    <div class="callout note">
+      <i class="ti ti-terminal-2" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Para qué sirven</div>
+        <div class="callout-text">Intercalar un script entre dos agentes IA permite pasar contexto estructurado, validar outputs o calcular métricas sin gastar tokens. Por ejemplo: <em>analizar el proyecto antes del primer agente</em>, <em>validar que el output es JSON válido antes del segundo</em>, o <em>puntuar la calidad del paso anterior</em>.</div>
+      </div>
+    </div>
+
+    <h4>Scripts disponibles</h4>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-folder-search" style="margin-right:6px;color:var(--blue)"></i>prepare-context</div>
+        <div class="card-body">Analiza el proyecto: detecta lenguaje principal, framework, tests y convenciones. Guarda el resultado en <code>.agent-hub/context/canonical.json</code> y lo pasa al siguiente agente como contexto estructurado.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-list" style="margin-right:6px;color:var(--blue)"></i>generate-file-index</div>
+        <div class="card-body">Lista todos los archivos del proyecto con tamaño, extensión y fecha de modificación. Útil para que el siguiente agente tenga un mapa del proyecto sin necesitar leerlo por su cuenta.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-git-diff" style="margin-right:6px;color:var(--blue)"></i>diff-since-step</div>
+        <div class="card-body">Compara el estado actual del filesystem con el del paso de referencia y devuelve la lista de archivos modificados. Permite que el siguiente agente trabaje solo sobre lo que cambió.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-braces" style="margin-right:6px;color:var(--blue)"></i>validate-json</div>
+        <div class="card-body">Verifica que el output del agente anterior es JSON sintácticamente válido. Si no lo es, devuelve el error de parsing para que el siguiente paso pueda corregirlo o la orquestación se detenga.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-chart-bar" style="margin-right:6px;color:var(--blue)"></i>quality-score</div>
+        <div class="card-body">Calcula una puntuación 0–100 del paso anterior sin llamar a la IA: respuesta producida, JSON válido, archivos modificados, longitud sustancial. Devuelve el score y un grade verde/ámbar/rojo.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-circle-check" style="margin-right:6px;color:var(--blue)"></i>validate-output</div>
+        <div class="card-body">Valida el output del agente anterior según reglas configurables. Devuelve <code>{ passed, issues[] }</code> para que el siguiente paso o la lógica de <code>stopOnError</code> actúe en consecuencia.</div>
+      </div>
+    </div>
+
+    <h4>Cómo añadir un script al workflow</h4>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num blue">1</div>
+        <div class="step-body">
+          <div class="step-title">Despliega la sección "Scripts" en la paleta</div>
+          <div class="step-desc">En el panel izquierdo del editor de orquestaciones, además de los agentes IA, aparece la sección <strong>Scripts</strong> con la lista de scripts disponibles.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num blue">2</div>
+        <div class="step-body">
+          <div class="step-title">Arrastra el script al lienzo</div>
+          <div class="step-desc">El script aparece como un nodo con fondo azul claro y el badge <span class="mock-script-badge">script</span>. Puedes colocarlo antes o después de cualquier agente IA en el flujo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num blue">3</div>
+        <div class="step-body">
+          <div class="step-title">Configura las conexiones como con cualquier agente</div>
+          <div class="step-desc">Las conexiones de entrada y salida del script se configuran igual que entre agentes. El output del script (<code>{ output, filesModified, data }</code>) se pasa al siguiente nodo como "salida del paso anterior".</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Los scripts no consumen tokens ni requieren proveedor de IA</div>
+        <div class="callout-text">Son puro Node.js. Funcionan con cualquier proveedor configurado (CLI, API, GitHub Copilot…) y su duración es típicamente menor a 1 segundo. No se limitan por <code>maxTurns</code> ni <code>timeout</code> de la IA.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Gates HITL             -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="gates-hitl">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Gates <span>HITL</span></h2>
+    <p class="section-intro">Los gates <strong>Human In The Loop</strong> son puntos de control opcionales entre pasos de una orquestación. Cuando un gate está activo, la ejecución se pausa tras ese paso y espera una decisión del operador antes de continuar.</p>
+
+    <div class="callout note">
+      <i class="ti ti-user-check" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Por qué son útiles</div>
+        <div class="callout-text">En workflows de alto impacto (escribir código de producción, modificar ficheros críticos, enviar comunicaciones), no siempre quieres que la ejecución avance automáticamente. Con un gate puedes revisar lo que hizo el agente, aprobar si está bien o pedirle que lo rehaga con feedback antes de seguir.</div>
+      </div>
+    </div>
+
+    <h4>Activar un gate en el configurador</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Al editar una conexión en el panel configurador derecho, al final de la sección aparece el toggle <strong>Gate de revisión humana</strong>. Al activarlo, la ejecución se detendrá después del agente que precede a esa conexión.
+    </p>
+
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#febc2e"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <div class="mockup-title">Agent Hub · Gate HITL activo</div>
+      </div>
+      <div class="mockup-body">
+        <div class="mock-gate">
+          <div class="mock-gate-title"><i class="ti ti-user-check" style="color:var(--amber)"></i> Paso 2 completado — revisión requerida</div>
+          <p style="font-size:12px;color:var(--text1);margin-bottom:8px">El agente <strong>code-refactor</strong> ha terminado. Revisa los cambios antes de continuar con el siguiente paso.</p>
+          <div class="mock-gate-actions">
+            <button class="mock-gate-btn approve"><i class="ti ti-check" style="font-size:11px"></i> Aprobar y continuar</button>
+            <button class="mock-gate-btn revise"><i class="ti ti-refresh" style="font-size:11px"></i> Revisar y rehacer</button>
+            <button class="mock-gate-btn cancel"><i class="ti ti-x" style="font-size:11px"></i> Cancelar orquestación</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Las tres decisiones del gate</h4>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card green-l">
+        <div class="card-title"><i class="ti ti-check" style="margin-right:6px;color:var(--green)"></i>Aprobar y continuar</div>
+        <div class="card-body">La ejecución avanza al paso siguiente. Los cambios del paso actual quedan en disco.</div>
+      </div>
+      <div class="card amber-l">
+        <div class="card-title"><i class="ti ti-refresh" style="margin-right:6px;color:var(--amber)"></i>Revisar y rehacer</div>
+        <div class="card-body">Los cambios del paso se revierten al snapshot pre-paso. Se abre un campo de texto para escribir el feedback, y el agente se re-ejecuta con ese feedback añadido a su prompt. El tiempo de pausa no descuenta del timeout global.</div>
+      </div>
+      <div class="card coral-l">
+        <div class="card-title"><i class="ti ti-x" style="margin-right:6px;color:var(--coral)"></i>Cancelar orquestación</div>
+        <div class="card-body">La ejecución se detiene aquí. Los cambios de pasos anteriores permanecen a menos que hagas rollback manual desde el historial.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <i class="ti ti-clock-pause" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El tiempo de espera del gate no consume timeout</div>
+        <div class="callout-text">Cuando la orquestación está pausada en un gate, el reloj global del <code>timeout</code> se detiene. El tiempo que tardas en revisar y decidir se descuenta al reanudar, así que no hay prisa y el siguiente paso tiene todo su tiempo disponible.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Quality Score          -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="quality-score">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Quality <span>Score</span></h2>
+    <p class="section-intro">Tras completar cada paso IA de una orquestación, Agent Hub calcula automáticamente un <strong>Quality Score</strong> sin llamar a la IA. Es un indicador rápido de si el agente produjo un output razonable.</p>
+
+    <h4>Cómo se calcula</h4>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-title">Checks evaluados</div>
+        <div class="card-body">
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:4px">
+            <li style="font-size:12px;color:var(--text1)">El agente produjo alguna respuesta (no vacío)</li>
+            <li style="font-size:12px;color:var(--text1)">Si el output parece JSON, es JSON válido</li>
+            <li style="font-size:12px;color:var(--text1)">Si la tarea implicaba escribir archivos, se modificó al menos uno</li>
+            <li style="font-size:12px;color:var(--text1)">La respuesta tiene más de 100 caracteres (sustancial)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Puntuación y grades</div>
+        <div class="card-body">
+          <p style="font-size:12px;color:var(--text1);margin-bottom:8px">La puntuación es <code>(checks superados / total checks) × 100</code>.</p>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);margin-bottom:3px"><span style="color:var(--green)">verde</span><span style="color:var(--text2)">≥ 75 / 100</span></div>
+              <div class="qs-bar"><div class="qs-fill green" style="width:85%"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);margin-bottom:3px"><span style="color:var(--amber)">ámbar</span><span style="color:var(--text2)">50 – 74 / 100</span></div>
+              <div class="qs-bar"><div class="qs-fill amber" style="width:60%"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);margin-bottom:3px"><span style="color:var(--coral)">rojo</span><span style="color:var(--text2)">&lt; 50 / 100</span></div>
+              <div class="qs-bar"><div class="qs-fill red" style="width:30%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Dónde aparece</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      En el panel de ejecución, la tarjeta de resultado de cada paso muestra un badge <span class="chip green"><i class="ti ti-check" style="font-size:10px"></i> QS 85/100</span>. Al hacer clic en el badge se expanden los checks individuales con su estado. El Quality Score también queda registrado en el <code>result.json</code> de la ejecución.
+    </p>
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">El Quality Score no bloquea la ejecución</div>
+        <div class="callout-text">Es solo un indicador visual. Si quieres detener la ejecución cuando la calidad es baja, combina el script <code>quality-score</code> como paso explícito en el workflow con <code>stopOnError</code> activo y un agente posterior que interprete el resultado.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Git Checkpointer       -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="git-checkpointer">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Git <span>Checkpointer</span></h2>
+    <p class="section-intro">Cuando un proyecto tiene <code>gitEnabled: true</code> y es un repositorio git, Agent Hub realiza un commit automático tras cada paso completado de una orquestación. Esto permite rollback exacto a cualquier punto de la ejecución usando la historia git del proyecto.</p>
+
+    <h4>Activar el checkpointer</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Abre el drawer del proyecto, ve al footer y pulsa <strong>Editar</strong>. En el modal de edición encontrarás el toggle <strong>Git Checkpointing</strong>. El proyecto debe ser un repositorio git (debe existir <code>.git/</code> en la raíz).
+    </p>
+
+    <div class="code-block" style="margin-bottom:12px">
+<span class="dim"># Commits generados automáticamente tras cada paso</span><br>
+<span class="grn">AgentHub</span> <span class="amb">[orchName]</span> <span class="dim">paso</span> <span class="hi">1</span><span class="dim">/3: "</span><span class="acc">code-reviewer</span><span class="dim">"</span><br>
+<span class="grn">AgentHub</span> <span class="amb">[orchName]</span> <span class="dim">paso</span> <span class="hi">2</span><span class="dim">/3: "</span><span class="acc">refactor</span><span class="dim">"</span><br>
+<span class="grn">AgentHub</span> <span class="amb">[orchName]</span> <span class="dim">paso</span> <span class="hi">3</span><span class="dim">/3: "</span><span class="acc">test-writer</span><span class="dim">"</span>
+    </div>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card green-l">
+        <div class="card-title">Rollback vía git</div>
+        <div class="card-body">Si el rollback git está disponible (hay SHA del commit anterior), Agent Hub usa <code>git reset --hard {sha}</code> para restaurar exactamente el estado de ese paso. Más preciso que el snapshot de ficheros, ya que preserva también metadatos y permisos.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Fallback por snapshot</div>
+        <div class="card-body">Si el checkpointing git no está activo o no hay SHA disponible, el rollback usa el snapshot de ficheros JSON (siempre disponible como respaldo). Ambos mecanismos coexisten.</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Los commits se hacen con <code>git add -A</code></div>
+        <div class="callout-text">El checkpointer hace stage de todos los cambios del directorio de trabajo antes de cada commit. Si tienes cambios no relacionados en staging o en el worktree, también se incluirán en el commit del checkpoint. Usa el checkpointer solo en proyectos donde no estés trabajando activamente en paralelo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
+  <!-- Ops Ledger             -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="ops-ledger">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">Ops <span>Ledger</span></h2>
+    <p class="section-intro">El <strong>Ops Ledger</strong> es un registro append-only de cada operación atómica (modificación de fichero) realizada por una orquestación. Es la bitácora de qué cambió, cuándo y qué agente lo hizo. Persiste en <code>{proyecto}/.agent-hub/ops/{orchId}-ledger.json</code>.</p>
+
+    <h4>Qué registra el ledger</h4>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-body">
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:5px">
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">ID único</strong> por operación (<code>op-{hex}</code>)</li>
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">executionId</strong> y <code>orchestrationId</code> vinculados</li>
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">stepIndex</strong> y nombre del agente que lo hizo</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card accent-l">
+        <div class="card-body">
+          <ul style="padding-left:14px;display:flex;flex-direction:column;gap:5px">
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">filePath</strong> del archivo modificado</li>
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">status</strong>: <code>applied</code> o <code>reverted</code></li>
+            <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">timestamps</strong> de creación y reversión</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <h4>Acceder al ledger desde la UI</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      En el panel de ejecución (resultado final), las tarjetas de cada paso tienen una pestaña <strong>Ops</strong> que muestra las operaciones atómicas de ese paso. Puedes revertir operaciones individuales pulsando el botón de revertir en cada entrada.
+    </p>
+
+    <div class="callout info">
+      <i class="ti ti-history" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Ledger acumulativo por orquestación</div>
+        <div class="callout-text">El ledger es acumulativo: cada vez que ejecutas la misma orquestación, las nuevas operaciones se añaden al mismo fichero. Esto permite rastrear el historial completo de cambios de toda la vida de esa orquestación, no solo de la última ejecución. El endpoint <code>GET /api/orchestrations/:id/ops</code> devuelve el ledger completo.</div>
       </div>
     </div>
   </div>
@@ -1343,12 +1787,12 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
     <h4>Sección Cómo usar los agentes</h4>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Guías de integración por editor. El contenido se adapta automáticamente al proveedor configurado: instrucciones de Claude Code si el proveedor es CLI o API, instrucciones de GitHub Copilot si es <code>github</code>:
+      Guías de integración por editor. El contenido se adapta automáticamente al proveedor configurado en Ajustes:
     </p>
     <div class="grid3">
       <div class="card accent-l">
         <div class="card-title"><i class="ti ti-brand-vscode" style="margin-right:6px;color:var(--accent)"></i>VS Code</div>
-        <div class="card-body">Instrucciones para la extensión Claude Code o GitHub Copilot según el proveedor configurado.</div>
+        <div class="card-body">Instrucciones para el asistente configurado (Claude Code, GitHub Copilot, Gemini…) según el proveedor activo.</div>
       </div>
       <div class="card blue-l">
         <div class="card-title"><i class="ti ti-brand-kotlin" style="margin-right:6px;color:var(--blue)"></i>IntelliJ</div>
@@ -1376,21 +1820,21 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="step-num accent">1</div>
         <div class="step-body">
           <div class="step-title">Global</div>
-          <div class="step-desc">Aplica a todos los proyectos sin excepción. Estos agentes también se sincronizan automáticamente a <code>~/.claude/agents/</code> para que estén disponibles en cualquier proyecto desde la CLI de Claude Code, aunque no esté registrado en Agent Hub.</div>
+          <div class="step-desc">Aplica a todos los proyectos sin excepción. Si tienes Claude Code instalado, estos agentes también se sincronizan automáticamente a <code>~/.claude/agents/</code> para que estén disponibles en cualquier directorio desde la CLI, aunque el proyecto no esté registrado en Agent Hub.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">2</div>
         <div class="step-body">
           <div class="step-title">Categoría</div>
-          <div class="step-desc">Aplica a todos los proyectos de esa categoría (Juegos, Web, Móvil, Docs, etc.). Útil para agentes específicos del dominio pero no de una tecnología concreta.</div>
+          <div class="step-desc">Aplica a todos los proyectos de esa categoría (Juegos, Frontend, Mobile, DevOps…). Útil para agentes específicos del dominio pero no de una tecnología concreta. La especificidad tecnológica se gestiona ahora con <strong>skills</strong>.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">3</div>
         <div class="step-body">
-          <div class="step-title">Tecnología</div>
-          <div class="step-desc">Aplica solo a proyectos con esa tecnología dentro de la categoría (Unity, React, React Native, Next.js, etc.).</div>
+          <div class="step-title">Sin categoría</div>
+          <div class="step-desc">Agentes descargados del Directorio externo que no encajan en ninguna carpeta estándar. Aparecen en la sección "Sin categoría" del árbol. Puedes editarlos y moverlos a cualquier nivel.</div>
         </div>
       </div>
       <div class="step">
@@ -1636,6 +2080,56 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <div class="sep"></div>
 
   <!-- ══════════════════════ -->
+  <!-- Crear una skill        -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="crear-skill">
+    <div class="section-badge">Tareas frecuentes</div>
+    <h2 class="section-title">Crear una <span>skill</span></h2>
+    <p class="section-intro">Las skills son bloques de contexto tecnológico que se inyectan en el system prompt del agente al ejecutarlo. Desde la vista Agentes, activa el modo <strong>Skills</strong> con el toggle superior y pulsa "Nuevo skill".</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Activa el modo Skills</div>
+          <div class="step-desc">En el panel izquierdo de la vista Agentes, pulsa el tab <strong>Skills</strong> en el toggle superior. La cuadrícula central cambia al catálogo de skills.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Pulsa "Nuevo skill"</div>
+          <div class="step-desc">Se abre el editor de skills. Rellena el nombre (kebab-case, p. ej. <code>react-18</code>) y una descripción breve.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Escribe o genera el contenido</div>
+          <div class="step-desc">Escribe el bloque Markdown directamente, o usa <strong>Generar con IA</strong>: elige el idioma (ES / EN), describe la tecnología y pulsa el botón. El contenido se prerrellena en el textarea para que lo revises antes de guardar.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Guarda y asigna al proyecto</div>
+          <div class="step-desc">Pulsa <strong>Guardar</strong>. La skill queda disponible en el catálogo. Para activarla en un proyecto, abre el drawer del proyecto → footer → <strong>Editar</strong> y selecciónala en el selector de skills.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <i class="ti ti-bulb" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Idioma del contenido</div>
+        <div class="callout-text">Las skills de código (React, Docker, TypeScript…) deben ir en <strong>inglés</strong> — se inyectan en system prompts de agentes que también están en inglés. Las skills de convenciones de equipo o documentación pueden ir en <strong>español</strong>.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
   <!-- Optimizar agente       -->
   <!-- ══════════════════════ -->
   <div class="section" id="optimizar-agente">
@@ -1832,7 +2326,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="step-num">4</div>
         <div class="step-body">
           <div class="step-title">Elige el destino y confirma</div>
-          <div class="step-desc">Selecciona en qué nivel guardar el agente (Global, Categoría o Tecnología). Agent Hub guarda el agente en disco y participa en el sistema de sync como cualquier otro agente del nivel elegido.</div>
+          <div class="step-desc">Selecciona en qué nivel guardar el agente (Global o Categoría). Agent Hub guarda el agente en disco y participa en el sistema de sync como cualquier otro agente del nivel elegido.</div>
         </div>
       </div>
     </div>
@@ -1846,7 +2340,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <div class="section" id="ejecutar-agente">
     <div class="section-badge">Tareas frecuentes</div>
     <h2 class="section-title">Ejecutar agente <span>sobre proyecto</span></h2>
-    <p class="section-intro">Agent Hub puede ejecutar un agente directamente sobre el código de tu proyecto usando Claude CLI (modo nativo) o el Subsistema CLI interno (para proveedores API). El resultado aparece en markdown dentro de la app.</p>
+    <p class="section-intro">Agent Hub puede ejecutar un agente directamente sobre el código de tu proyecto usando el CLI nativo (Claude Code, Gemini CLI, Aider…) o el Subsistema CLI interno para cualquier proveedor API. El resultado aparece en markdown dentro de la app.</p>
 
     <div class="steps">
       <div class="step">
@@ -1889,8 +2383,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="callout info">
       <i class="ti ti-info-circle" aria-hidden="true"></i>
       <div class="callout-body">
-        <div class="callout-title">Modo CLI vs. modo Subsistema</div>
-        <div class="callout-text">Con <strong>Claude CLI</strong> como proveedor, Agent Hub spawn un proceso nativo de Claude Code con el CWD del proyecto y acceso real al filesystem. Con <strong>API o GitHub Copilot</strong>, usa el Subsistema CLI interno que emula las herramientas de ficheros (leer, escribir, buscar) en un loop multi-turno.</div>
+        <div class="callout-title">Modo CLI nativo vs. modo Subsistema</div>
+        <div class="callout-text">Con cualquier <strong>CLI nativo</strong> (Claude Code, Gemini CLI, Codex, Aider, Cline, Goose…), Agent Hub lanza el proceso con el CWD del proyecto y acceso real al filesystem. Con <strong>cualquier proveedor API</strong> (Anthropic, GitHub Copilot, OpenAI-compatible, Custom…), usa el Subsistema CLI interno que emula las herramientas de ficheros en un loop multi-turno — sin necesidad de tener ningún CLI instalado.</div>
       </div>
     </div>
   </div>
@@ -1952,40 +2446,42 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- ══════════════════════ -->
   <div class="section" id="vscode">
     <div class="section-badge">Referencia</div>
-    <h2 class="section-title">Usar agentes en <span>VS Code</span></h2>
-    <p class="section-intro">Los agentes gestionados por Agent Hub se usan directamente en Claude Code dentro de VS Code. No necesitas ningún paso adicional — Agent Hub ya los ha copiado en los lugares correctos.</p>
+    <h2 class="section-title">Usar agentes en <span>tu editor</span></h2>
+    <p class="section-intro">Los agentes gestionados por Agent Hub se pueden invocar directamente desde tu asistente de IA en el editor. No necesitas ningún paso adicional — Agent Hub ya ha copiado los agentes en los directorios correctos para cada proveedor configurado en el proyecto.</p>
 
-    <h4>Ver agentes disponibles</h4>
+    <h4>Con Claude Code (VS Code / CLI)</h4>
     <div class="code-block"><span class="grn">/agents</span></div>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Lista completa de agentes disponibles en el proyecto actual y los globales de <code>~/.claude/agents/</code>.</p>
 
-    <h4>Invocar un agente directamente</h4>
     <div class="code-block">
 <span class="grn">@code-reviewer</span> revisa PlayerController.cs
 <span class="grn">@unity-dev</span> crea un sistema de inventario con ScriptableObjects
 <span class="grn">@test-writer</span> genera tests para AuthService.ts</div>
-    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Escribe <code>@nombre-del-agente</code> seguido de la tarea. Claude Code carga el system prompt del agente y trabaja con ese contexto especializado.</p>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">Escribe <code>@nombre-del-agente</code> seguido de la tarea. El asistente carga el system prompt del agente y trabaja con ese contexto especializado. Si describes la tarea sin <code>@</code>, puede seleccionar el agente más apropiado basándose en el campo <strong>description</strong>.</p>
 
-    <h4>Delegación automática</h4>
-    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">Si describes una tarea sin <code>@</code>, Claude Code puede seleccionar el agente más apropiado basándose en el campo <strong>description</strong> de cada agente. Por eso es importante que las descripciones sean precisas.</p>
+    <h4>Con GitHub Copilot</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">Agent Hub escribe el fichero <code>.github/copilot-instructions.md</code> con el contexto del proyecto. Las instrucciones se inyectan automáticamente en cada conversación de Copilot dentro del repositorio.</p>
 
-    <h4>Dónde viven los agentes</h4>
+    <h4>Con otros proveedores (Gemini, OpenAI, Custom…)</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">El fichero maestro <code>CONTEXTO.md</code> se replica en el formato del proveedor configurado: <code>GEMINI.md</code>, <code>.instructions.md</code>, etc. Usa Agent Hub para generar y mantener ese contexto actualizado desde la pestaña Contexto del drawer del proyecto.</p>
+
+    <h4>Dónde viven los agentes según proveedor</h4>
     <div class="grid2">
       <div class="card green-l">
         <div class="card-title"><span class="chip green">global</span></div>
-        <div class="card-body"><code>~/.claude/agents/</code> — disponibles en cualquier proyecto, aunque no esté registrado en Agent Hub.</div>
+        <div class="card-body">Agentes Claude: <code>~/.claude/agents/</code>. Disponibles en cualquier proyecto sin necesidad de sincronizar.</div>
       </div>
       <div class="card amber-l">
         <div class="card-title"><span class="chip amber">proyecto</span></div>
-        <div class="card-body"><code>{proyecto}/.claude/agents/</code> — disponibles solo cuando trabajas en ese proyecto.</div>
+        <div class="card-body">Claude: <code>{proyecto}/.claude/agents/</code> · GitHub: <code>{proyecto}/.github/agents/</code>. Disponibles solo en ese proyecto.</div>
       </div>
     </div>
 
-    <div class="callout warn">
-      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
       <div class="callout-body">
-        <div class="callout-title">Requiere Claude Code</div>
-        <div class="callout-text">Para usar agentes necesitas tener la extensión Claude Code instalada en VS Code o la CLI de Claude Code. Agent Hub gestiona los ficheros pero no instala Claude Code por ti.</div>
+        <div class="callout-title">Ningún CLI es obligatorio</div>
+        <div class="callout-text">Agent Hub funciona con cualquier proveedor de IA configurado en Ajustes. Si usas Claude Code o cualquier otro CLI nativo, los agentes se invocan directamente desde el terminal o el editor. Si usas un proveedor API (Anthropic, Copilot, DeepSeek…), el Subsistema CLI interno emula las mismas capacidades sin necesidad de ningún CLI instalado.</div>
       </div>
     </div>
   </div>
@@ -2002,7 +2498,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="faq">
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Necesito tener Claude Code instalado?</div>
-        <div class="faq-a">Sí. Agent Hub gestiona los agentes de Claude Code. Para usarlos necesitas tener la CLI de Claude Code instalada y configurada (<code>~/.claude/</code>). En modo manual puedes crear agentes sin proveedor de IA, pero solo tienen efecto si Claude Code está instalado.</div>
+        <div class="faq-a">No. Agent Hub es compatible con cualquier proveedor de IA: Claude Code CLI, Gemini CLI, Aider, Cline, Goose, API de Anthropic, GitHub Copilot, DeepSeek, Groq, OpenRouter y proveedores personalizados. Si tienes un CLI instalado, se usa directamente. Si usas una API, el Subsistema CLI interno emula las mismas capacidades de acceso al filesystem sin necesitar ningún CLI en el sistema.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo usar Agent Hub sin configurar ningún proveedor de IA?</div>
@@ -2014,11 +2510,11 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué pasa si borro un agente de nivel global?</div>
-        <div class="faq-a">El fichero se elimina del directorio <code>agents/global/</code> del manager y de <code>~/.claude/agents/</code>. En los proyectos que tenían ese agente, la copia en <code>.claude/agents/</code> queda intacta hasta que ejecutes un sync.</div>
+        <div class="faq-a">El fichero se elimina de <code>agents/global/</code> en Agent Hub y de <code>~/.claude/agents/</code> (si aplica). En los proyectos que ya tenían ese agente copiado, la copia local queda intacta hasta que ejecutes un sync explícito.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Cuál es la diferencia entre "excluir y eliminar" y "solo excluir"?</div>
-        <div class="faq-a">"Excluir y eliminar" borra el fichero <code>.md</code> del directorio <code>.claude/agents/</code> del proyecto. "Solo excluir" mantiene el fichero en disco pero Agent Hub lo ignora en syncs futuros — el agente sigue disponible en Claude Code hasta que lo borres manualmente.</div>
+        <div class="faq-a">"Excluir y eliminar" borra el fichero <code>.md</code> del directorio de agentes del proyecto (p. ej. <code>.claude/agents/</code> o <code>.github/agents/</code>). "Solo excluir" mantiene el fichero en disco pero Agent Hub lo ignora en syncs futuros — el agente sigue disponible para el asistente de IA hasta que lo borres manualmente.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo mover la carpeta del .exe a otro lugar?</div>
@@ -2031,6 +2527,10 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué diferencia hay entre "Nuevo proyecto" e "Importar"?</div>
         <div class="faq-a"><strong>Nuevo proyecto</strong> crea la carpeta en el sistema de ficheros desde cero. <strong>Importar</strong> registra una carpeta que ya existe — útil para proyectos que ya tienes en disco y quieres empezar a gestionar con Agent Hub.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Con qué proveedores de IA funciona Agent Hub?</div>
+        <div class="faq-a">Con todos los configurados en Ajustes: CLIs nativos (Claude Code, Gemini CLI, Codex, Aider, Cline, Goose), APIs directas (Anthropic, GitHub Copilot, OpenAI, Gemini API, Mistral, DeepSeek, Groq, OpenRouter, Perplexity) y proveedores personalizados (Azure OpenAI, GAIA, cualquier endpoint compatible). No necesitas instalar ningún CLI si usas un proveedor API.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Funciona en macOS o Linux?</div>
@@ -2048,6 +2548,22 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Las orquestaciones modifican los ficheros del proyecto directamente?</div>
         <div class="faq-a">Sí. Los agentes ejecutados en una orquestación tienen acceso real al filesystem del proyecto via la API-FS. Cada paso hace un backup automático antes de ejecutarse, por lo que puedes revertir cualquier cambio desde el historial de ejecuciones.</div>
       </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué es un script determinístico y cuándo usarlo?</div>
+        <div class="faq-a">Un script determinístico es un nodo de orquestación que ejecuta lógica Node.js predefinida sin llamar a la IA. No consume tokens y tarda menos de 1 segundo. Úsalos para: analizar el proyecto antes del primer agente (<code>prepare-context</code>), validar que el output del agente anterior es JSON válido (<code>validate-json</code>), calcular una puntuación de calidad (<code>quality-score</code>), o generar un índice de ficheros para dar contexto estructurado al siguiente agente.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué hace un gate HITL exactamente?</div>
+        <div class="faq-a">Un gate HITL (Human In The Loop) pausa la orquestación tras el paso marcado y espera una decisión manual. Puedes <strong>Aprobar</strong> (la ejecución continúa), <strong>Revisar y rehacer</strong> (los cambios de ese paso se revierten, escribes feedback y el agente se re-ejecuta con ese feedback), o <strong>Cancelar</strong>. El tiempo de espera en el gate no descuenta del timeout global de la orquestación.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo reanudar una orquestación que falló a la mitad?</div>
+        <div class="faq-a">Sí. Agent Hub guarda el estado de ejecución tras cada paso completado en <code>.agent-hub/executions/{id}/execution-state.json</code>. Desde el historial de ejecuciones puedes pulsar <strong>Reanudar</strong> en cualquier ejecución interrumpida. Los pasos ya completados se cargan del estado guardado y la ejecución continúa desde el punto de interrupción.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Para qué sirve el Git Checkpointer en orquestaciones?</div>
+        <div class="faq-a">Cuando activas <code>gitEnabled</code> en un proyecto que es un repo git, Agent Hub hace un commit automático tras cada paso de la orquestación. Esto permite rollback exacto usando <code>git reset --hard</code> al SHA del commit anterior, más preciso que el snapshot de ficheros. Actívalo en el modal de edición del proyecto.</div>
+      </div>
     </div>
   </div>
 
@@ -2057,18 +2573,35 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 
 <script>
 // Activa el nav-item correspondiente a la sección visible
-const items = document.querySelectorAll('.nav-item');
+const items    = document.querySelectorAll('.nav-item');
 const sections = document.querySelectorAll('.section, .hero');
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(e => {
+
+// Recopila todos los ids enlazados en la nav (incluye h4 y otros elementos no-.section)
+var navIds = {};
+items.forEach(function(a) {
+  var h = a.getAttribute('href');
+  if (h && h.charAt(0) === '#') navIds[h.slice(1)] = true;
+});
+
+// Añadir al set de observables cualquier elemento con id que tenga nav-link
+var allObservable = Array.prototype.slice.call(sections);
+document.querySelectorAll('[id]').forEach(function(el) {
+  if (navIds[el.id] && !el.classList.contains('section') && el.id !== 'inicio') {
+    allObservable.push(el);
+  }
+});
+
+var observer = new IntersectionObserver(function(entries) {
+  entries.forEach(function(e) {
     if (e.isIntersecting) {
-      items.forEach(i => i.classList.remove('active'));
-      const link = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      items.forEach(function(i) { i.classList.remove('active'); });
+      var link = document.querySelector('.nav-item[href="#' + e.target.id + '"]');
       if (link) link.classList.add('active');
     }
   });
-}, { rootMargin: '-30% 0px -60% 0px' });
-sections.forEach(s => s.id && observer.observe(s));
+}, { rootMargin: '-20% 0px -50% 0px' });
+
+allObservable.forEach(function(s) { if (s.id) observer.observe(s); });
 
 // Muestra las capturas reales si los ficheros existen; si no, deja el placeholder visible
 document.querySelectorAll('.screenshot').forEach(el => {

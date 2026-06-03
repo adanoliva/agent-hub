@@ -15,11 +15,13 @@ export interface Project {
   id: string;
   name: string;
   categoryId: string;
+  /** @deprecated techId is no longer used in new projects — kept for backward compat */
   techId?: string;
   path: string;
   description?: string;
   status: 'active' | 'paused' | 'archived';
   aiProviders: string[]; // Replaces aiProvider
+  skills?: string[];
   selectedAgents?: string[];
   excludedAgents?: string[];
   includedAgents?: string[];
@@ -54,9 +56,8 @@ export interface Agent {
   tools?: string[];
   system?: string;
   optimized?: boolean;
-  level?: 'global' | 'section' | 'tech' | 'project';
+  level?: 'global' | 'section' | 'project' | 'uncategorized';
   categoryId?: string;
-  techId?: string;
   projectId?: string;
   suggested?: boolean;
   skills?: string[];
@@ -66,9 +67,6 @@ export interface Skill {
   name:        string;
   description: string;
   content:     string;
-  level?:      'global' | 'section' | 'tech' | 'project' | 'uncategorized';
-  categoryId?: string | null;
-  techId?:     string | null;
 }
 
 export type AIProvider =
@@ -360,9 +358,8 @@ export interface ExecutionLog {
 
 export interface PendingAgentToEdit {
   name: string;
-  level: 'global' | 'section' | 'tech' | 'uncategorized' | 'project';
+  level: 'global' | 'section' | 'uncategorized' | 'project';
   categoryId?: string | null;
-  techId?: string | null;
   projectId?: string | null;
 }
 
@@ -385,7 +382,6 @@ export interface DashboardNotification {
   action:     'open-agent' | 'open-project' | 'sync-project' | 'generate-context' | 'optimize-agent';
   level?:     string;
   categoryId?: string | null;
-  techId?:    string | null;
 }
 
 export interface DashboardData {
@@ -415,7 +411,6 @@ export interface SyncPreviewAgent {
   name: string;
   level: string;
   categoryId: string | null;
-  techId: string | null;
 }
 
 export interface SyncPreview {
@@ -435,9 +430,8 @@ export interface SyncPreview {
 }
 
 export interface SelectedNode {
-  level: 'global' | 'section' | 'tech' | 'project' | 'uncategorized';
+  level: 'global' | 'section' | 'project' | 'uncategorized';
   categoryId: string | null;
-  techId: string | null;
   projectId: string | null;
 }
 

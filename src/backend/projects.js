@@ -49,8 +49,8 @@ function getAllCatalogAgents() {
   const cfg = readConfig();
   const all = [];
 
-  const collect = (level, categoryId, techId) => {
-    try { all.push(...listAgentsByLevel(level, categoryId, techId)); }
+  const collect = (level, categoryId) => {
+    try { all.push(...listAgentsByLevel(level, categoryId)); }
     catch { /* ignore broken folders */ }
   };
 
@@ -59,9 +59,6 @@ function getAllCatalogAgents() {
 
   for (const cat of (cfg.categories || [])) {
     collect('section', cat.id);
-    for (const tech of (cat.technologies || [])) {
-      collect('tech', cat.id, tech.id);
-    }
   }
 
   return all;
@@ -75,8 +72,8 @@ function buildAgentIndex() {
   return index;
 }
 
-function resolveProjectSourceAgents(categoryId, techId, includedAgents = []) {
-  const applicable = getApplicableAgents(categoryId, techId);
+function resolveProjectSourceAgents(categoryId, includedAgents = []) {
+  const applicable = getApplicableAgents(categoryId);
   const byName     = new Map(applicable.map(a => [a.name, a]));
   const index      = buildAgentIndex();
 
@@ -88,8 +85,8 @@ function resolveProjectSourceAgents(categoryId, techId, includedAgents = []) {
   return [...byName.values()];
 }
 
-function resolveInitialAgentSelection(categoryId, techId, selectedAgents) {
-  const applicable = getApplicableAgents(categoryId, techId);
+function resolveInitialAgentSelection(categoryId, selectedAgents) {
+  const applicable = getApplicableAgents(categoryId);
 
   if (!Array.isArray(selectedAgents) || selectedAgents.length === 0) {
     return {
@@ -126,10 +123,10 @@ function resolveInitialAgentSelection(categoryId, techId, selectedAgents) {
  * If selectedAgents is provided (array of names), only those are copied.
  * Writes to every provider directory. Returns a hash map.
  */
-async function copyAgentsToProject(projectPath, categoryId, techId, providers = ['claude'], selectedAgents = null) {
-  const selection = resolveInitialAgentSelection(categoryId, techId, selectedAgents);
+async function copyAgentsToProject(projectPath, categoryId, providers = ['claude'], selectedAgents = null) {
+  const selection  = resolveInitialAgentSelection(categoryId, selectedAgents);
   const applicable = selection.agentsToCopy;
-  const hashes        = {};
+  const hashes     = {};
 
   for (const provider of providers) {
     const agentsDir = getAgentsDirForProvider(projectPath, provider);
@@ -146,7 +143,6 @@ async function copyAgentsToProject(projectPath, categoryId, techId, providers = 
       copiedAt:   new Date().toISOString(),
       level:      agent.level,
       categoryId: agent.categoryId || null,
-      techId:     agent.techId     || null,
     };
   }
 
@@ -168,8 +164,8 @@ async function copyAgentsToProject(projectPath, categoryId, techId, providers = 
  */
 function getProjectSyncStatus(project) {
   const providers    = getProviders(project);
-  const applicable   = getApplicableAgents(project.categoryId, project.techId);
-  const sourceAgents = resolveProjectSourceAgents(project.categoryId, project.techId, project.includedAgents || []);
+  const applicable   = getApplicableAgents(project.categoryId);
+  const sourceAgents = resolveProjectSourceAgents(project.categoryId, project.includedAgents || []);
   const savedHashes  = project.agentHashes || {};
   const excludedSet  = new Set(project.excludedAgents || []);
   const statusMap    = {};
@@ -299,7 +295,6 @@ async function syncProject(project) {
       copiedAt:   new Date().toISOString(),
       level:      entry.agent.level,
       categoryId: entry.agent.categoryId || null,
-      techId:     entry.agent.techId     || null,
     };
 
     if (entry.status === 'outdated') updated++;
@@ -383,8 +378,9 @@ function saveContextFile(project, providerId, content) {
  * Creates a new project: folder structure + context files + copies agents.
  * selectedAgents: optional array of agent names to copy.
  */
-async function createProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }) {
-  const cleanPath = projectPath.replace(/^~/, require('os').homedir());
+async function createProject({ name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills }) {
+  const expandedPath = projectPath.replace(/^~/, require('os').homedir());
+  const cleanPath    = path.resolve(expandedPath);
 
   if (fs.existsSync(cleanPath)) {
     throw new Error(`Path already exists: ${cleanPath}`);
@@ -395,24 +391,24 @@ async function createProject({ name, categoryId, techId, projectPath, descriptio
   ensureDir(cleanPath);
 
   // Initialize with central context
-  const centralContent = getContextTemplate('claude', categoryId, techId, name);
+  const centralContent = getContextTemplate('claude', categoryId, null, name);
   saveContextFile({ path: cleanPath, aiProviders: providers }, 'central', centralContent);
 
   for (const p of providers) {
     ensureDir(getAgentsDirForProvider(cleanPath, p));
   }
 
-  const initialSelection = resolveInitialAgentSelection(categoryId, techId || null, selectedAgents || null);
+  const initialSelection = resolveInitialAgentSelection(categoryId, selectedAgents || null);
   const excludedAgents = initialSelection.excludedAgents;
   const includedAgents = initialSelection.includedAgents;
-  const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
+  const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, providers, selectedAgents || null);
 
   const project = {
     id:             makeProjectId(),
     name,
     slug:           slugify(name),
     categoryId,
-    techId:         techId  || null,
+    skills:         Array.isArray(skills) ? skills : [],
     description:    description || '',
     status:         status  || 'active',
     aiProviders:    providers,
@@ -434,8 +430,9 @@ async function createProject({ name, categoryId, techId, projectPath, descriptio
 /**
  * Imports an existing project folder.
  */
-async function importProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }) {
-  const cleanPath = projectPath.replace(/^~/, require('os').homedir());
+async function importProject({ name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills }) {
+  const expandedPath = projectPath.replace(/^~/, require('os').homedir());
+  const cleanPath    = path.resolve(expandedPath);
 
   if (!fs.existsSync(cleanPath)) {
     throw new Error(`Path does not exist: ${cleanPath}`);
@@ -462,7 +459,7 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
       }
     }
     if (!adopted) {
-      const content = getContextTemplate('claude', categoryId, techId, name);
+      const content = getContextTemplate('claude', categoryId, null, name);
       fs.writeFileSync(centralPath, content, 'utf8');
     }
   }
@@ -475,17 +472,17 @@ async function importProject({ name, categoryId, techId, projectPath, descriptio
     ensureDir(getAgentsDirForProvider(cleanPath, p));
   }
 
-  const initialSelection = resolveInitialAgentSelection(categoryId, techId || null, selectedAgents || null);
+  const initialSelection = resolveInitialAgentSelection(categoryId, selectedAgents || null);
   const excludedAgents = initialSelection.excludedAgents;
   const includedAgents = initialSelection.includedAgents;
-  const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, techId || null, providers, selectedAgents || null);
+  const agentHashes    = await copyAgentsToProject(cleanPath, categoryId, providers, selectedAgents || null);
 
   const project = {
     id:             makeProjectId(),
     name,
     slug:           slugify(name),
     categoryId,
-    techId:         techId  || null,
+    skills:         Array.isArray(skills) ? skills : [],
     description:    description || '',
     status:         status  || 'active',
     aiProviders:    providers,
@@ -517,7 +514,7 @@ function migrateProjectProviders(project, newProviders) {
   if (added.length > 0 && oldProviders.length > 0) {
     const sourceProvider = oldProviders[0];
     const sourceDir      = getAgentsDirForProvider(project.path, sourceProvider);
-    const applicable     = getApplicableAgents(project.categoryId, project.techId);
+    const applicable     = getApplicableAgents(project.categoryId);
     const applicableNames = new Set(applicable.map(a => a.name));
 
     for (const targetProvider of added) {
@@ -583,7 +580,7 @@ async function updateProject(id, updates) {
     migration = migrateProjectProviders(project, updates.aiProviders);
   }
 
-  const allowed = ['name', 'description', 'status', 'techId', 'categoryId', 'aiProviders', 'excludedAgents', 'includedAgents'];
+  const allowed = ['name', 'description', 'status', 'categoryId', 'skills', 'aiProviders', 'excludedAgents', 'includedAgents', 'gitEnabled'];
   for (const key of allowed) {
     if (updates[key] !== undefined) project[key] = updates[key];
   }
