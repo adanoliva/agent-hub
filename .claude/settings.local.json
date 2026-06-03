@@ -56,7 +56,8 @@
       "Bash(sed -n '642,655p' src/backend/orchestrator.js)",
       "Bash(sed -n '20,35p' src/backend/projects.js)",
       "Bash(sed -n '644,660p' src/backend/projects.js)",
-      "Bash(sed -n '1522,1540p' src/backend/server.js)"
+      "Bash(sed -n '1522,1540p' src/backend/server.js)",
+      "PowerShell(git *)"
     ]
   }
 }
