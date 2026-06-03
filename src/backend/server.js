@@ -1126,6 +1126,7 @@ const {
   getSuggestions,
   generateProjectSuggestions,
   clearSuggestionsCache,
+  callAI,
   callAIChat,
   getSessionUsage,
   resetSessionUsage,

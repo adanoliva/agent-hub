@@ -771,8 +771,8 @@ class OrchestrationExecutor extends EventEmitter {
         break;
       }
 
-      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" (${Math.round(remaining / 1000)}s restantes) ━━`);
       this.emit('step-start', { stepIndex: i, agentName, totalSteps: orchestration.agents.length });
+      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" (${Math.round(remaining / 1000)}s restantes) ━━`);
 
       let snapshot;
       try {
