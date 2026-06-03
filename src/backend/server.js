@@ -1709,7 +1709,10 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
 
   // Replay existing logs
   for (const log of executor.logs) send('message', log);
-  // Replay pending browser-required pause if client connected after it was emitted
+  // Replay pending gate or browser-required pause if client connected after the event fired
+  if (executor._pendingGate) {
+    send('gate-open', { type: 'gate-open', data: executor._pendingGate });
+  }
   if (executor._pendingBrowserRequired) {
     send('browser-required', { type: 'browser-required', data: executor._pendingBrowserRequired });
   }

@@ -127,8 +127,8 @@ class OrchestrationExecutor extends EventEmitter {
   cancel() {
     if (this.state === 'running') {
       this.cancelled = true;
-      // Also resolve any pending browser pause so the loop can exit cleanly
       if (this._browserContinueFn) { this._browserContinueFn(); this._browserContinueFn = null; }
+      this._pendingGate = null;
       this._log('warn', 'Ejecución cancelada por el usuario');
       this.emit('cancelled', { executionId: this.executionId });
     }
@@ -708,7 +708,7 @@ class OrchestrationExecutor extends EventEmitter {
     this._log('info', `Proveedor: ${provider} | Pasos: ${orchestration.agents.length}`);
 
     const orchTimeout  = orchestration.executionConfig?.timeout || 300_000;
-    const startTime    = Date.now();
+    let   startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
 
@@ -821,6 +821,45 @@ class OrchestrationExecutor extends EventEmitter {
           this._log('info', `Paso ${i + 1}: script "${scriptName}" completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
           this.emit('step-done', stepResult);
           this._writeExecutionState(i, stepResult);
+
+          // ── Gate HITL para scripts ───────────────────────────────────────────
+          const scriptNodeAfter = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
+          if (scriptNodeAfter?.gateAfter && i < orchestration.agents.length - 1) {
+            this._log('info', `Paso ${i + 1}: gate HITL activo — esperando decisión del operador`);
+            const pauseStart = Date.now();
+            this._writeExecutionStateGatePaused(i);
+            this._pendingGate = { stepIndex: i, agentName, executionId: this.executionId };
+            this.emit('gate-open', this._pendingGate);
+
+            let decision;
+            try {
+              decision = await _waitForGate(this.executionId, i);
+            } catch {
+              this._log('error', 'Gate cancelado');
+              this._pendingGate = null;
+              break;
+            }
+            this._pendingGate = null;
+
+            startTime += (Date.now() - pauseStart);
+            this._log('info', `Gate paso ${i + 1}: decisión = ${decision.action}`);
+
+            if (decision.action === 'cancel') break;
+
+            if (decision.action === 'revise') {
+              this._revisionFeedback = this._revisionFeedback || {};
+              if (!this._revisionFeedback[i]) this._revisionFeedback[i] = [];
+              this._revisionFeedback[i].push({
+                at: new Date().toISOString(),
+                feedback: decision.feedbackText || null,
+                previousFilesModified: stepResult.filesModified || [],
+              });
+              this.results.pop();
+              stepsCompleted--;
+              i--;
+              continue;
+            }
+          }
         } catch (err) {
           this._log('error', `Paso ${i + 1}: script "${scriptName}" error: ${err.message}`);
           stepResult = {
@@ -845,9 +884,10 @@ class OrchestrationExecutor extends EventEmitter {
       }
       // ── Agente IA (código existente) ──────────────────────────────────────
 
+      let userMessage = '';
       try {
         const systemPrompt = this._buildSystemPrompt(i);
-        const userMessage  = this._buildUserMessage(i);
+        userMessage        = this._buildUserMessage(i);
 
         // Emit the input so the frontend can display what each agent receives
         this.emit('step-input', { stepIndex: i, agentName, userMessage });
@@ -907,7 +947,7 @@ class OrchestrationExecutor extends EventEmitter {
 
           const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
           const extraArgs = provider === 'cli'
-            ? ['--dangerously-skip-permissions', '--max-turns', maxTurns]
+            ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
             : [];
           const rich = await callAIRich(fullPrompt, {
             timeout:   stepRemaining,
@@ -1027,15 +1067,18 @@ class OrchestrationExecutor extends EventEmitter {
           this._log('info', `Paso ${i + 1}: gate HITL activo — esperando decisión del operador`);
           const pauseStart = Date.now();
           this._writeExecutionStateGatePaused(i);
-          this.emit('gate-open', { stepIndex: i, agentName, executionId: this.executionId });
+          this._pendingGate = { stepIndex: i, agentName, executionId: this.executionId };
+          this.emit('gate-open', this._pendingGate);
 
           let decision;
           try {
             decision = await _waitForGate(this.executionId, i);
           } catch {
             this._log('error', 'Gate cancelado');
+            this._pendingGate = null;
             break;
           }
+          this._pendingGate = null;
 
           // Descontar el tiempo de pausa del reloj global
           startTime += (Date.now() - pauseStart);
