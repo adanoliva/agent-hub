@@ -45,16 +45,17 @@ function getAssetsDir() {
   return path.join(process.resourcesPath, 'assets');
 }
 
-const APP_DIR    = getAppDir();
-const CONFIG_FILE = path.join(APP_DIR, 'config.json');
-const AGENTS_DIR  = path.join(APP_DIR, 'agents');
-const CACHE_DIR   = path.join(APP_DIR, 'cache');
-const SKILLS_DIR  = path.join(AGENTS_DIR, 'skills');
+const APP_DIR      = getAppDir();
+const CONFIG_FILE  = path.join(APP_DIR, 'config.json');
+const AGENTS_DIR   = path.join(APP_DIR, 'agents');
+const CACHE_DIR    = path.join(APP_DIR, 'cache');
+const SKILLS_DIR   = path.join(AGENTS_DIR, 'skills');
+const SCRIPTS_DIR  = path.join(APP_DIR, 'user-scripts');
 
 // ── Default config ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-  version: '1.9.4',
+  version: '2.2.0',
   aiProvider: 'cli',
 
   // Anthropic API
@@ -105,6 +106,7 @@ const DEFAULT_CONFIG = {
   codexCliModel: 'o4-mini',
 
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
+  externalScriptsTimeoutMs: 60000,
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
   agentsDirectoryEnabled: true,
   dismissedDashboardNotifications: [],
@@ -179,6 +181,7 @@ function bootstrapDirectories(cfg) {
   ensureDir(AGENTS_DIR);
   ensureDir(CACHE_DIR);
   ensureDir(SKILLS_DIR);
+  try { ensureDir(SCRIPTS_DIR); } catch (e) { console.warn('[config] No se pudo crear scripts/:', e.message); }
   ensureDir(path.join(AGENTS_DIR, 'global'));
   ensureDir(path.join(AGENTS_DIR, 'uncategorized'));
 
@@ -195,6 +198,7 @@ module.exports = {
   AGENTS_DIR,
   CACHE_DIR,
   SKILLS_DIR,
+  SCRIPTS_DIR,
   readConfig,
   writeConfig,
   bootstrapDirectories,

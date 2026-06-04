@@ -10,6 +10,10 @@ import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomA
 
 type Tab = 'general' | 'cats' | 'ext-agents';
 
+interface ScriptValidationIssue { severity: 'error' | 'warn'; code: string; message: string; }
+interface ScriptValidationResult { file: string; name: string; status: 'ok' | 'warn' | 'error'; issues: ScriptValidationIssue[]; }
+interface ScriptValidationReport { validatedAt: string; summary: { ok: number; warn: number; error: number }; results: ScriptValidationResult[]; }
+
 type CLICheck = { found: boolean; path: string | null };
 
 // ── Modals state types ─────────────────────────────────────────────────────────
@@ -39,6 +43,11 @@ export function Settings() {
   const [updateMsg,   setUpdateMsg]   = useState('');
   const [importUrl,   setImportUrl]   = useState('');
   const [importBusy,  setImportBusy]  = useState(false);
+
+  // External scripts validation
+  const [scriptValidating,  setScriptValidating]  = useState(false);
+  const [scriptReport,      setScriptReport]       = useState<ScriptValidationReport | null>(null);
+  const [scriptExpandedIdx, setScriptExpandedIdx]  = useState<number | null>(null);
 
   // Custom Providers
   const [customProviders, setCustomProviders] = useState<CustomAIProvider[]>(config?.customProviders ?? []);
@@ -233,6 +242,22 @@ export function Settings() {
     else window.open(url, '_blank');
   }
 
+
+  // ── external scripts ─────────────────────────────────────────────────────────
+
+  async function validateScripts() {
+    setScriptValidating(true);
+    setScriptReport(null);
+    setScriptExpandedIdx(null);
+    try {
+      const report = await req<ScriptValidationReport>('GET', '/scripts/validate');
+      setScriptReport(report);
+    } catch {
+      toast('Error al validar scripts', 'err');
+    } finally {
+      setScriptValidating(false);
+    }
+  }
 
   // ── updates ──────────────────────────────────────────────────────────────────
 
@@ -775,6 +800,70 @@ export function Settings() {
                   </button>
                 </div>
               </div>
+
+            {/* Scripts personalizados */}
+            <div className="settings-section">
+              <div className="settings-head">Scripts personalizados</div>
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 0, marginBottom: 12 }}>
+                Añade ficheros <code>.js</code> a la carpeta <code>user-scripts/</code> junto al ejecutable para crear pasos de orquestación sin IA. <a
+                  href="#"
+                  style={{ color: 'var(--accent)' }}
+                  onClick={e => { e.preventDefault(); (window as any).api?.openPath?.(config ? '' : ''); }}
+                >Ver guía</a>
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <code style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--bg3)', padding: '3px 8px', borderRadius: 5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  user-scripts/
+                </code>
+                <button className="btn sm ghost" onClick={() => (window as any).api?.openPath?.('user-scripts')}>
+                  <i className="ti ti-folder-open" /> Abrir carpeta
+                </button>
+                <button className="btn sm" onClick={validateScripts} disabled={scriptValidating}>
+                  {scriptValidating
+                    ? <><i className="ti ti-loader-2" /> Validando…</>
+                    : <><i className="ti ti-shield-check" /> Validar scripts</>
+                  }
+                </button>
+              </div>
+
+              {scriptReport && (
+                <div style={{ fontSize: 12 }}>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 10, color: 'var(--text2)' }}>
+                    <span style={{ color: 'var(--green)' }}><i className="ti ti-check" /> {scriptReport.summary.ok} correctos</span>
+                    {scriptReport.summary.warn > 0 && <span style={{ color: 'var(--amber)' }}><i className="ti ti-alert-triangle" /> {scriptReport.summary.warn} advertencia{scriptReport.summary.warn !== 1 ? 's' : ''}</span>}
+                    {scriptReport.summary.error > 0 && <span style={{ color: 'var(--coral)' }}><i className="ti ti-x" /> {scriptReport.summary.error} error{scriptReport.summary.error !== 1 ? 'es' : ''}</span>}
+                  </div>
+                  {scriptReport.results.length === 0 ? (
+                    <div style={{ color: 'var(--text3)', fontStyle: 'italic' }}>No se encontraron ficheros .js en la carpeta user-scripts/</div>
+                  ) : (
+                    scriptReport.results.map((r, idx) => (
+                      <div key={r.file} style={{ background: 'var(--bg2)', border: `1px solid ${r.status === 'error' ? 'var(--coral)' : r.status === 'warn' ? 'var(--amber)' : 'var(--border)'}`, borderRadius: 6, marginBottom: 6, overflow: 'hidden' }}>
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: r.issues.length > 0 ? 'pointer' : 'default' }}
+                          onClick={() => r.issues.length > 0 && setScriptExpandedIdx(scriptExpandedIdx === idx ? null : idx)}
+                        >
+                          {r.status === 'ok'    && <i className="ti ti-check"          style={{ color: 'var(--green)', fontSize: 13 }} />}
+                          {r.status === 'warn'  && <i className="ti ti-alert-triangle" style={{ color: 'var(--amber)', fontSize: 13 }} />}
+                          {r.status === 'error' && <i className="ti ti-x"              style={{ color: 'var(--coral)', fontSize: 13 }} />}
+                          <code style={{ flex: 1, color: 'var(--text1)' }}>{r.file}</code>
+                          {r.issues.length > 0 && <i className={`ti ti-chevron-${scriptExpandedIdx === idx ? 'up' : 'down'}`} style={{ color: 'var(--text3)', fontSize: 11 }} />}
+                        </div>
+                        {scriptExpandedIdx === idx && r.issues.length > 0 && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {r.issues.map((issue, ii) => (
+                              <div key={ii} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                                <code style={{ fontSize: 10, color: issue.severity === 'error' ? 'var(--coral)' : 'var(--amber)', whiteSpace: 'nowrap', flexShrink: 0 }}>{issue.code}</code>
+                                <span style={{ color: 'var(--text2)' }}>{issue.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Row 2: Application (Compact: Close behavior + Updates + Wizard on the right) */}
             <div className="settings-section">

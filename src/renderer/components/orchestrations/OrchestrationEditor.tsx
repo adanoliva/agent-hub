@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { req } from '../../api';
 import type { Orchestration, OrchestrateNode, DataFlow, ContextExtra, Agent } from '../../types';
 import { NodeCanvas, getAgentIcon, CANVAS_SLOT_H, CANVAS_AGENTS_OFFSET } from './NodeCanvas';
-import { ConnectionConfigurator } from './ConnectionConfigurator';
+import { ConnectionConfigurator, type ScriptParamSchema } from './ConnectionConfigurator';
 import { useStore } from '../../store';
 
 interface Props {
@@ -64,15 +64,15 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
 
   const [allAgents,      setAllAgents]      = useState<Agent[]>([]);
   const [agentSearch,    setAgentSearch]    = useState('');
-  const [scripts,        setScripts]        = useState<Array<{ name: string; label: string; description: string }>>([]);
+  const [scripts,        setScripts]        = useState<Array<{ name: string; label: string; description: string; builtin: boolean; hasWarnings?: boolean; params?: ScriptParamSchema[] }>>([]);
   const [paletteTab,     setPaletteTab]     = useState<'agents' | 'scripts'>('agents');
   const [paletteOpen,    setPaletteOpen]    = useState(true);
 
 
-  // Load available scripts from the registry
+  // Load available scripts from the registry (hot-reload on each mount)
   useEffect(() => {
-    req<Array<{ name: string; label: string; description: string }>>('GET', '/scripts')
-      .then(setScripts)
+    req<{ scripts: Array<{ name: string; label: string; description: string; builtin: boolean; hasWarnings?: boolean }>; warnings: string[] }>('GET', '/scripts')
+      .then(res => setScripts(res.scripts ?? []))
       .catch(() => {});
   }, []);
 
@@ -257,7 +257,8 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     )
   );
 
-  const availableScripts = scripts;
+  const builtinScripts  = scripts.filter(s => s.builtin);
+  const externalScripts = scripts.filter(s => !s.builtin);
 
   const agentModels: Record<string, string>       = {};
   const agentDescriptions: Record<string, string> = {};
@@ -273,6 +274,17 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
   for (const s of scripts) {
     agentDescriptions[`__script:${s.name}__`] = s.description || '';
   }
+
+  function getScriptParamsForAgent(agentName: string): ScriptParamSchema[] {
+    if (!agentName?.startsWith('__script:')) return [];
+    const name = agentName.replace(/^__script:/, '').replace(/__$/, '');
+    return scripts.find(s => s.name === name)?.params ?? [];
+  }
+
+  // Scripts que tienen al menos un param requerido
+  const scriptsWithRequiredParams = new Set(
+    scripts.filter(s => s.params?.some(p => p.required)).map(s => s.name)
+  );
 
   function modelShort(m: string): string {
     if (!m) return '';
@@ -407,8 +419,8 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                   >
                     <i className="ti ti-terminal-2" />
                     Scripts
-                    {availableScripts.length > 0 && (
-                      <span className="orch-palette-tab-count">{availableScripts.length}</span>
+                    {scripts.length > 0 && (
+                      <span className="orch-palette-tab-count">{scripts.length}</span>
                     )}
                   </button>
                 </div>
@@ -468,8 +480,8 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                         <div className="orch-palette-info">
                           <div className="orch-palette-name">{a.name}</div>
                           {a.description && <div className="orch-palette-desc">{a.description}</div>}
-                          {modelShort(a.model) && (
-                            <span className={`orch-palette-model model-${modelShort(a.model)}`}>{modelShort(a.model)}</span>
+                          {modelShort(a.model ?? '') && (
+                            <span className={`orch-palette-model model-${modelShort(a.model ?? '')}`}>{modelShort(a.model ?? '')}</span>
                           )}
                         </div>
                         <i className="ti ti-grip-vertical orch-palette-grip" />
@@ -477,28 +489,64 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                     ))
                   )
                 ) : (
-                  availableScripts.length === 0 ? (
+                  scripts.length === 0 ? (
                     <div className="orch-picker-empty">Sin scripts disponibles</div>
                   ) : (
-                    availableScripts.map(s => (
-                      <div
-                        key={s.name}
-                        className="orch-palette-card orch-palette-card-script"
-                        draggable
-                        onDragStart={e => handlePaletteDragStart(`__script:${s.name}__`, e)}
-                        title={s.description || 'Script determinístico — sin IA'}
-                      >
-                        <div className="orch-palette-card-icon orch-palette-card-icon-script">
-                          <i className="ti ti-terminal-2" />
-                        </div>
-                        <div className="orch-palette-info">
-                          <div className="orch-palette-name">{s.label}</div>
-                          {s.description && <div className="orch-palette-desc">{s.description}</div>}
-                          <span className="orch-palette-script-badge">sin IA · determinístico</span>
-                        </div>
-                        <i className="ti ti-grip-vertical orch-palette-grip" />
-                      </div>
-                    ))
+                    <>
+                      {/* Built-in scripts */}
+                      {builtinScripts.length > 0 && (
+                        <>
+                          <div className="orch-palette-section-label">Scripts</div>
+                          {builtinScripts.map(s => (
+                            <div
+                              key={s.name}
+                              className="orch-palette-card orch-palette-card-script"
+                              draggable
+                              onDragStart={e => handlePaletteDragStart(`__script:${s.name}__`, e)}
+                              title={s.description || 'Script determinístico — sin IA'}
+                            >
+                              <div className="orch-palette-card-icon orch-palette-card-icon-script">
+                                <i className="ti ti-terminal-2" />
+                              </div>
+                              <div className="orch-palette-info">
+                                <div className="orch-palette-name">{s.label}</div>
+                                {s.description && <div className="orch-palette-desc">{s.description}</div>}
+                                <span className="orch-palette-script-badge">sin IA · determinístico</span>
+                              </div>
+                              <i className="ti ti-grip-vertical orch-palette-grip" />
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {/* External scripts */}
+                      {externalScripts.length > 0 && (
+                        <>
+                          <div className="orch-palette-section-label">Scripts personalizados</div>
+                          {externalScripts.map(s => (
+                            <div
+                              key={s.name}
+                              className="orch-palette-card orch-palette-card-script orch-palette-card-script-external"
+                              draggable
+                              onDragStart={e => handlePaletteDragStart(`__script:${s.name}__`, e)}
+                              title={s.description || 'Script externo — sin IA'}
+                            >
+                              <div className="orch-palette-card-icon orch-palette-card-icon-script">
+                                <i className="ti ti-puzzle" />
+                              </div>
+                              <div className="orch-palette-info">
+                                <div className="orch-palette-name">
+                                  {s.label}
+                                  {s.hasWarnings && <i className="ti ti-alert-triangle" style={{ color: 'var(--amber)', fontSize: 11, marginLeft: 5 }} />}
+                                </div>
+                                {s.description && <div className="orch-palette-desc">{s.description}</div>}
+                                <span className="orch-palette-script-badge">personalizado · sin IA</span>
+                              </div>
+                              <i className="ti ti-grip-vertical orch-palette-grip" />
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </>
                   )
                 )}
               </div>
@@ -532,7 +580,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
               <button
                 className={`orch-palette-strip-btn${paletteTab === 'scripts' ? ' active' : ''}`}
                 onClick={() => { setPaletteTab('scripts'); setPaletteOpen(true); }}
-                title={`Scripts (${scripts.length})`}
+                title={`Scripts (${builtinScripts.length + externalScripts.length})`}
               >
                 <i className="ti ti-terminal-2" />
               </button>
@@ -567,6 +615,8 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
             onRemoveAgent={removeAgent}
             agentModels={agentModels}
             agentDescriptions={agentDescriptions}
+            externalScriptNames={new Set(externalScripts.map(s => s.name))}
+            scriptsWithRequiredParams={scriptsWithRequiredParams}
           />
         </div>
 
@@ -579,6 +629,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
               toAgent={agents[0] ?? ''}
               isInputNode
               onUpdate={handleUpdateNode}
+              scriptParams={getScriptParamsForAgent(agents[0] ?? '')}
             />
           ) : selectedNode !== null && nodes[selectedNode] ? (
             <ConnectionConfigurator
@@ -586,6 +637,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
               fromAgent={agents[nodes[selectedNode].from]}
               toAgent={agents[nodes[selectedNode].to]}
               onUpdate={handleUpdateNode}
+              scriptParams={getScriptParamsForAgent(agents[nodes[selectedNode].to])}
             />
           ) : (
             <div className="orch-config-placeholder">

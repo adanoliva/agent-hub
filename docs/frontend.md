@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-06-03 · Versión: 2.1.0
+> Última actualización: 2026-06-04 · Versión: 2.2.0
 
 ---
 
@@ -492,6 +492,8 @@ Los agentes del proyecto tienen prioridad (aparecen primero). Los agentes exclui
 
 **Gate HITL (`gateAfter`):** toggle al final del configurador para conexiones inter-agente (no disponible en `isInputNode`). Cuando está activo, el orquestador pausa tras ese agente y espera `POST /executions/:execId/gate`. El toggle persiste en `node.gateAfter: boolean`.
 
+**Parámetros de script (`scriptParams`):** cuando el nodo destino de la conexión es un script con parámetros declarados (p.ej. `budget-guard`), el configurador muestra una sección adicional con los campos correspondientes. Los valores se guardan en `node.scriptParams: Record<string, unknown>`. Los campos obligatorios se marcan con `*` y resaltan en ámbar si están vacíos. El schema de params viene de `GET /scripts` (campo `params[]` por script).
+
 **Prop `isInputNode`:** `true` para el nodo de entrada (Orquestador → Agente 1). Deshabilita los checkboxes de agente anterior y el toggle de gate.
 
 **Auto-save:** el cleanup del `useEffect` de nodo persiste cambios pendientes con refs antes de desmontar.
@@ -501,6 +503,8 @@ Los agentes del proyecto tienen prioridad (aparecen primero). Los agentes exclui
 Lienzo vertical del editor. Los nodos de tipo script (`agentName.startsWith('__script:')`) se renderizan con clase `.orch-node-script` y badge `model-script`. Los nodos agente/script se distinguen visualmente pero comparten la misma interfaz de arrastre.
 
 `fmtAgentName(name)` formatea los nombres `__script:quality-score__` → `quality score` para mostrar en el lienzo.
+
+**Advertencia de params faltantes:** si un nodo script tiene parámetros obligatorios y la conexión entrante no los tiene configurados, el nodo muestra un icono `ti-alert-triangle` en ámbar junto al nombre. Prop `scriptsWithRequiredParams: Set<string>` recibido desde `OrchestrationEditor`.
 
 ### `ExecutionPanel.tsx`
 
@@ -521,6 +525,8 @@ Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL** (si acti
 **Ops Ledger:** el resultado final tiene dos tabs: `steps` (comportamiento previo) y `ops` (operaciones del ledger). Cada entrada del ledger muestra id, fichero, agente, paso y estado, con botón de revertir que llama a `POST /ops/:opId/revert`.
 
 **Tabs estado global:** `opsTab: 'steps' | 'ops'` controla la vista activa en el resultado.
+
+**Banner de presupuesto agotado:** cuando el SSE emite `cancelled` con `reason: 'budget_exceeded'`, el estado `cancelReason` captura `{ type, spent, limit }`. Al volver al formulario pre-ejecución se muestra el banner `.orch-budget-exceeded-banner` con los valores en coral, antes del formulario. Se resetea con cada nueva ejecución.
 
 ---
 

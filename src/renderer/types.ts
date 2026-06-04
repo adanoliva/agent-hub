@@ -249,6 +249,7 @@ export interface OrchestrateNode {
   dataFlow:     DataFlow;
   contextExtra: ContextExtra;
   gateAfter?:   boolean;
+  scriptParams?: Record<string, unknown>;
 }
 
 export interface ExecutionConfig {

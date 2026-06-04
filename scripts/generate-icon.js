@@ -145,8 +145,8 @@ if (fs.existsSync(SOURCE_PNG)) {
   }
 }
 
-// Skip if a large icon already exists (user's custom icon)
-if (fs.existsSync(ICON_PATH) && fs.statSync(ICON_PATH).size > 5000) {
+// Skip if a real icon already exists (programmatic fallback is ~5 KB; real icons are much larger)
+if (fs.existsSync(ICON_PATH) && fs.statSync(ICON_PATH).size > 50_000) {
   console.log('[generate-icon] Icon already exists, skipping.');
   process.exit(0);
 }

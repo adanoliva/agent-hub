@@ -1866,9 +1866,32 @@ app.delete('/api/skills', (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/scripts — lista los scripts determinísticos registrados
+// GET /api/scripts — lista los scripts determinísticos (built-in + externos)
 app.get('/api/scripts', (req, res) => {
-  res.json(scriptsRegistry.listScripts());
+  try {
+    res.json(scriptsRegistry.listScripts());
+  } catch (e) {
+    console.error('[scripts] listScripts error:', e);
+    // Fallback: return only built-in scripts so the UI doesn't break
+    const builtins = [
+      { name: 'prepare-context',    label: 'Preparar contexto',        description: 'Analiza el proyecto y genera el índice canónico.', builtin: true },
+      { name: 'generate-file-index', label: 'Índice de archivos',      description: 'Lista estructurada de todos los archivos.',        builtin: true },
+      { name: 'diff-since-step',    label: 'Diff desde paso anterior', description: 'Compara el filesystem con un paso anterior.',       builtin: true },
+      { name: 'validate-json',      label: 'Validar JSON',             description: 'Verifica que el output es JSON válido.',            builtin: true },
+      { name: 'quality-score',      label: 'Quality Score',            description: 'Calcula puntuación de calidad del paso anterior.',  builtin: true },
+      { name: 'validate-output',    label: 'Validar output',           description: 'Valida el output según reglas configurables.',      builtin: true },
+    ];
+    res.json({ scripts: builtins, warnings: [`Error cargando scripts externos: ${e.message}`] });
+  }
+});
+
+// GET /api/scripts/validate — valida estáticamente todos los scripts externos
+app.get('/api/scripts/validate', (req, res) => {
+  try {
+    res.json(scriptsRegistry.validateExternalScripts());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/orchestrations/:id/executions/:execId/resume — reanuda ejecución tras crash

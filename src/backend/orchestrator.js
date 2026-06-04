@@ -795,6 +795,8 @@ class OrchestrationExecutor extends EventEmitter {
         const userMessage  = this._buildUserMessage(i);
         this.emit('step-input', { stepIndex: i, agentName, userMessage });
 
+        const scriptNode   = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
+        const scriptParams = scriptNode?.scriptParams ?? {};
         try {
           const scriptResult = await scriptsRegistry.run(scriptName, {
             projectPath:   this.project.path,
@@ -802,6 +804,7 @@ class OrchestrationExecutor extends EventEmitter {
             stepIndex:     i,
             prevResult:    this.results[i - 1] || null,
             agentOutputs,
+            scriptParams,
           });
           stepResult = {
             stepIndex:     i,
@@ -862,6 +865,7 @@ class OrchestrationExecutor extends EventEmitter {
           }
         } catch (err) {
           this._log('error', `Paso ${i + 1}: script "${scriptName}" error: ${err.message}`);
+          const isBudgetExceeded = err.category === 'budget_exceeded';
           stepResult = {
             stepIndex:     i,
             agentName,
@@ -872,12 +876,16 @@ class OrchestrationExecutor extends EventEmitter {
             estimatedCost: 0,
             duration:      Date.now() - stepStart,
             status:        'error',
-            error:         { message: err.message, category: 'script_error', recoverable: false },
+            error:         { message: err.message, category: err.category || 'script_error', recoverable: false, data: err.data },
             backupPath:    snapshot?.snapshotPath || null,
           };
           this.results.push(stepResult);
           this.emit('step-done', stepResult);
           this._writeExecutionState(i, stepResult);
+          if (isBudgetExceeded) {
+            this.emit('cancelled', { executionId: this.executionId, reason: 'budget_exceeded', data: err.data });
+            return;
+          }
           if (orchestration.executionConfig?.stopOnError !== false) break;
         }
         continue;

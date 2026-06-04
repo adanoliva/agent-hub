@@ -89,6 +89,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(-1);
   const [rollingBack,    setRollingBack]     = useState<number | null>(null);
   const [cancelling,     setCancelling]      = useState(false);
+  const [cancelReason,   setCancelReason]    = useState<{ type: 'budget_exceeded'; spent: number; limit: number } | null>(null);
   const [browserPause,   setBrowserPause]    = useState<{ stepIndex: number; agentName: string } | null>(null);
   const [browserContinuing, setBrowserContinuing] = useState(false);
 
@@ -261,6 +262,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
     setStepInputs([]);
     setCurrentStepIndex(0);
     setCancelling(false);
+    setCancelReason(null);
     setIsOrchestrating(true);
 
     try {
@@ -335,14 +337,20 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         setBrowserContinuing(false);
       });
 
-      es.addEventListener('cancelled', () => {
+      es.addEventListener('cancelled', e => {
+        let payload: any = null;
+        try { payload = JSON.parse((e as MessageEvent).data); } catch {}
+        const isBudget = payload?.reason === 'budget_exceeded';
+        if (isBudget && payload?.data) {
+          setCancelReason({ type: 'budget_exceeded', spent: payload.data.spent, limit: payload.data.limit });
+        }
         setIsRunning(false);
         setIsOrchestrating(false);
         setCancelling(false);
         setBrowserPause(null);
         setGateOpen(null);
         es.close();
-        addToast('Ejecución cancelada', 'warn');
+        addToast(isBudget ? 'Presupuesto agotado — ejecución detenida' : 'Ejecución cancelada', isBudget ? 'err' : 'warn');
       });
 
       es.addEventListener('completed', e => {
@@ -455,6 +463,18 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   if (!isRunning && !result) {
     return (
       <div className="orch-exec-panel">
+        {cancelReason?.type === 'budget_exceeded' && (
+          <div className="orch-budget-exceeded-banner">
+            <div className="orch-budget-exceeded-icon"><i className="ti ti-coins-off" /></div>
+            <div className="orch-budget-exceeded-body">
+              <strong>Presupuesto agotado</strong>
+              <p>
+                La orquestación se detuvo al alcanzar el límite configurado.
+                Gastado: <code>${cancelReason.spent.toFixed(4)}</code> de <code>${cancelReason.limit.toFixed(4)}</code>.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="orch-exec-form">
           <div className="orch-exec-form-header">
             <i className="ti ti-player-play" />

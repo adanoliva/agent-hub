@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-03 · Versión: 2.1.0
+> Última actualización: 2026-06-04 · Versión: 2.2.0
 
 ---
 
@@ -365,7 +365,8 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución |
 | POST | `/api/orchestrations/:id/executions/:execId/resume` | Reanuda una ejecución interrumpida |
 | POST | `/api/orchestrations/:id/executions/:execId/gate` | Resuelve un gate HITL: `{ action: 'approve'\|'revise'\|'cancel', feedbackText?, stepIndex }` |
-| GET | `/api/scripts` | Lista los scripts determinísticos disponibles |
+| GET | `/api/scripts` | Lista los scripts disponibles (built-in + externos). Devuelve `{ scripts, warnings }` |
+| GET | `/api/scripts/validate` | Valida estáticamente los scripts externos y devuelve informe con issues por fichero |
 | GET | `/api/orchestrations/:id/ops` | Lee el ops-ledger |
 | POST | `/api/orchestrations/:id/ops/:opId/revert` | Marca una operación atómica como revertida |
 
@@ -854,17 +855,19 @@ Si `orchestration.nodes[i].gateAfter === true` y no es el último paso:
 
 ## 12b. Scripts determinísticos (`scripts-registry.js`)
 
-Módulo de scripts Node.js sin llamadas a IA para usar como pasos en orquestaciones.
+Módulo de scripts Node.js sin llamadas a IA para usar como pasos en orquestaciones. Incluye scripts **built-in** (empaquetados con la app) y **scripts externos** (archivos `.js` en `APP_DIR/user-scripts/` creados por el usuario).
 
-### Contrato de un script
+### Contrato de un script (built-in y externo)
 
 ```js
-async function script({ projectPath, orchestration, stepIndex, prevResult, agentOutputs }) {
+async function script({ projectPath, orchestration, stepIndex, prevResult, agentOutputs, fs, path }) {
   return { output: string, filesModified: string[], data: any };
 }
 ```
 
-### Scripts incluidos
+Los scripts externos se ejecutan dentro de un sandbox `node:vm` (ver §12b.1).
+
+### Scripts built-in incluidos
 
 | Nombre | Descripción |
 |---|---|
@@ -874,6 +877,41 @@ async function script({ projectPath, orchestration, stepIndex, prevResult, agent
 | `validate-json` | Verifica que el output del paso anterior es JSON válido. Devuelve `{ valid, error? }`. |
 | `quality-score` | Calcula puntuación 0–100 del paso anterior: respuesta producida, JSON válido, archivos modificados, longitud. Grade: verde ≥75, ámbar ≥50, rojo <50. |
 | `validate-output` | Valida el output según reglas configurables. Devuelve `{ passed, issues[] }`. |
+| `budget-guard` | **Requiere `maxBudgetUSD` (param obligatorio).** Suma el `estimatedCost` de todos los pasos anteriores y lanza `budget_exceeded` si el total supera el límite. El orquestador emite `cancelled` con razón `budget_exceeded` y detiene la ejecución limpiamente. |
+
+### 12b.1 Scripts externos
+
+Los scripts externos son archivos `.js` CommonJS en `APP_DIR/user-scripts/`. Se cargan bajo demanda en cada llamada a `GET /api/scripts` (recarga en caliente sin reiniciar).
+
+**Contrato del fichero externo:**
+
+```js
+exports.label       = 'Nombre en UI';        // requerido
+exports.description = 'Descripción breve';   // requerido
+exports.timeout     = 120_000;               // opcional — override de timeout (máx. 300 000 ms)
+
+exports.run = async (context) => {
+  const { projectPath, prevResult, agentOutputs, fs, path } = context;
+  return { output: 'resultado', filesModified: [], data: {} };
+};
+```
+
+**API `fs` disponible en el sandbox:**
+
+| Operación | Descripción |
+|---|---|
+| `fs.readFile(relPath)` | Lee fichero como string UTF-8 |
+| `fs.writeFile(relPath, data)` | Escribe (crea directorios intermedios) |
+| `fs.exists(relPath)` | `→ Promise<boolean>` |
+| `fs.listDir(relPath)` | `→ Promise<string[]>` |
+| `fs.readJSON(relPath)` | `→ Promise<object>` |
+| `fs.writeJSON(relPath, data)` | Escribe JSON pretty-print |
+
+Todas las rutas son relativas a `projectPath`. Las rutas con `..` que escapan del proyecto lanzan `Error: ruta fuera del proyecto`.
+
+**Prioridad de nombres:** un script externo con el mismo nombre que un built-in es ignorado. `GET /api/scripts` devuelve el conflicto en el campo `warnings[]`.
+
+**Timeout:** se resuelve de más específico a más general: `exports.timeout` del script → `config.externalScriptsTimeoutMs` (default 60 000 ms). Máximo absoluto: 300 000 ms.
 
 ### API pública
 
@@ -881,9 +919,11 @@ async function script({ projectPath, orchestration, stepIndex, prevResult, agent
 |---|---|
 | `isScript(agentName)` | `true` si `agentName` empieza por `__script:` |
 | `getScriptName(agentName)` | Extrae el nombre del script del identificador |
-| `hasScript(name)` | `true` si el script está registrado |
-| `run(name, context)` | Ejecuta el script y devuelve `ScriptResult` |
-| `listScripts()` | Devuelve el catálogo completo con `name`, `label` y `description` |
+| `hasScript(name)` | `true` si el script está registrado (built-in o externo) |
+| `run(name, context)` | Ejecuta el script (built-in directo; externo en sandbox) |
+| `listScripts()` | Devuelve `{ scripts: [...], warnings: [] }` con todos los scripts y campo `builtin` |
+| `loadExternalScripts()` | Recarga scripts externos desde disco; devuelve `{ loaded, errors, warnings }` |
+| `validateExternalScripts()` | Valida estáticamente todos los ficheros externos; devuelve informe completo |
 
 ---
 

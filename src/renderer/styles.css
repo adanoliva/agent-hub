@@ -844,10 +844,15 @@ select option{background:var(--bg2)}
 }
 
 
-/* ── Scripts en el orquestador (Fase 1) ────────────────────────────────────── */
+/* ── Scripts en el orquestador ──────────────────────────────────────────────── */
 .orch-node-script{background:var(--bg3);border-left:3px solid var(--text3) !important}
 .orch-node-script .orch-node-icon{color:var(--text3)}
 .orch-node-model.model-script{background:rgba(98,98,110,.12);color:var(--text3);border-color:rgba(98,98,110,.2)}
+.orch-node-model.model-script-external{background:rgba(251,191,36,.08);color:var(--amber);border-color:rgba(251,191,36,.2)}
+/* Palette section label */
+.orch-palette-section-label{font-size:10px;font-weight:600;letter-spacing:.05em;color:var(--text3);text-transform:uppercase;padding:8px 12px 4px;user-select:none}
+.orch-palette-card-script-external .orch-palette-card-icon-script{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2)}
+.orch-palette-card-script-external .orch-palette-card-icon-script i{color:var(--amber)}
 
 
 /* Quality Score badge */
@@ -864,6 +869,23 @@ select option{background:var(--bg2)}
 .orch-gate-feedback{width:100%;min-height:80px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:.5rem;color:var(--text0);resize:vertical;font-family:inherit;font-size:12px;box-sizing:border-box}
 .orch-gate-actions{display:flex;gap:.5rem;flex-wrap:wrap}
 .orch-gate-hint{margin:0;font-size:11px;color:var(--text2);line-height:1.5}
+
+/* Script params section */
+.orch-script-params{border:1px solid rgba(251,191,36,.2);background:rgba(251,191,36,.04);border-radius:8px}
+.orch-script-param-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.orch-script-param-row:last-child{margin-bottom:0}
+.orch-label-required{color:var(--text0)}
+.orch-param-required-dot{color:var(--coral);margin-left:3px;font-weight:700}
+.orch-param-hint{margin:0;font-size:11px;line-height:1.4}
+.orch-param-hint.warn{color:var(--amber)}
+.input-missing{border-color:var(--amber) !important;background:rgba(251,191,36,.06) !important}
+
+/* Banner presupuesto agotado */
+.orch-budget-exceeded-banner{display:flex;align-items:flex-start;gap:12px;background:rgba(251,113,133,.08);border:1px solid rgba(251,113,133,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.orch-budget-exceeded-icon{font-size:22px;color:var(--coral);flex-shrink:0;margin-top:1px}
+.orch-budget-exceeded-body strong{display:block;color:var(--coral);font-size:13px;margin-bottom:4px}
+.orch-budget-exceeded-body p{margin:0;font-size:12px;color:var(--text1);line-height:1.5}
+.orch-budget-exceeded-body code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text0);background:var(--bg3);padding:1px 5px;border-radius:4px}
 
 /* ── Git SHA chip (Fase 4) ──────────────────────────────────────────────────── */
 .orch-step-git-sha{display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
