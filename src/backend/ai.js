@@ -304,8 +304,9 @@ function callCLI(prompt, opts = {}) {
       clearTimeout(timer);
       if (code !== 0) {
         const errText = stderr.trim() || stdout.trim() || 'unknown error';
-        // Missing agent file in CLI temp cache → surface a clear message
-        if (/temp|AppData.*Local.*Temp|no such file|ENOENT|resource.*not.*found/i.test(errText)) {
+        if (/fichero por lotes|batch file|is not recognized|command not found/i.test(errText)) {
+          reject(new Error('Claude CLI not found. Install from https://claude.ai/code'));
+        } else if (/temp|AppData.*Local.*Temp|no such file|ENOENT|resource.*not.*found/i.test(errText)) {
           reject(new Error('El CLI de Claude no encontró un archivo de agente. Puede que hayas eliminado un agente desde VS Code o el directorio de Claude directamente. Reinicia la app para limpiar el estado.'));
         } else {
           reject(new Error(`Claude CLI exited with code ${code}: ${errText}`));
@@ -313,8 +314,19 @@ function callCLI(prompt, opts = {}) {
         return;
       }
       const raw = stdout.trim();
-      try {
-        const parsed       = JSON.parse(raw);
+
+      // Try parsing the last JSON object — multi-turn mode emits one JSON per line
+      function parseLastJson(text) {
+        try { return JSON.parse(text); } catch {}
+        const lines = text.split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try { return JSON.parse(lines[i].trim()); } catch {}
+        }
+        return null;
+      }
+
+      const parsed = parseLastJson(raw);
+      if (parsed) {
         const text         = (parsed.result ?? raw).trim();
         const usage        = parsed.usage || {};
         const inputTokens  = usage.input_tokens  || 0;
@@ -326,7 +338,7 @@ function callCLI(prompt, opts = {}) {
         } else {
           resolve(text);
         }
-      } catch {
+      } else {
         // Old CLI version without JSON output — use raw text, no usage data
         if (opts.returnRich) {
           resolve({ text: raw, inputTokens: 0, outputTokens: 0, costUSD: 0 });
