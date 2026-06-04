@@ -755,7 +755,7 @@ class OrchestrationExecutor extends EventEmitter {
             backupPath:    null,
           };
           this.results.push(stub);
-          agentOutputs[i] = { response: stub.output.response, handoff: null, filesModified: stub.filesModified };
+          agentOutputs[i] = { response: stub.output.response, handoff: null, filesModified: stub.filesModified, estimatedCost: 0 };
           stepsCompleted++;
         }
         continue;
@@ -818,7 +818,7 @@ class OrchestrationExecutor extends EventEmitter {
             status:        'success',
             backupPath:    snapshot?.snapshotPath || null,
           };
-          agentOutputs[i] = { response: scriptResult.output, handoff: null, filesModified: scriptResult.filesModified || [] };
+          agentOutputs[i] = { response: scriptResult.output, handoff: null, filesModified: scriptResult.filesModified || [], estimatedCost: 0 };
           this.results.push(stepResult);
           stepsCompleted++;
           this._log('info', `Paso ${i + 1}: script "${scriptName}" completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
@@ -1029,7 +1029,7 @@ class OrchestrationExecutor extends EventEmitter {
 
         stepResult.revisions = this._revisionFeedback?.[i] || [];
 
-        agentOutputs[i] = { response: cleanResponse, handoff, filesModified };
+        agentOutputs[i] = { response: cleanResponse, handoff, filesModified, estimatedCost: stepResult.estimatedCost ?? 0 };
         this.results.push(stepResult);
         stepsCompleted++;
         this._log('info', `Paso ${i + 1}: Completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);

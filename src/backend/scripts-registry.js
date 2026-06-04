@@ -234,9 +234,21 @@ const SCRIPTS = {
       throw err;
     }
 
-    const spent = Object.values(agentOutputs).reduce(
-      (sum, r) => sum + (r.estimatedCost ?? 0), 0
-    );
+    const outputs = Object.values(agentOutputs);
+    const spent   = outputs.reduce((sum, r) => sum + (r.estimatedCost ?? 0), 0);
+
+    // Si hay pasos completados y todos tienen coste 0, el proveedor no reporta coste.
+    // Continuamos pero avisamos — detener la orquestación con spent=0 no tendría sentido.
+    const hasAgentSteps   = outputs.some(r => r.estimatedCost !== undefined);
+    const providerNoCost  = hasAgentSteps && spent === 0;
+
+    if (providerNoCost) {
+      return {
+        output:        'budget-guard: el proveedor de IA activo no reporta coste (CLI o proveedor sin tracking de tokens). El control de presupuesto no tiene efecto.',
+        filesModified: [],
+        data:          { spent: 0, limit, providerNoCost: true },
+      };
+    }
 
     if (spent >= limit) {
       const err = new Error(
