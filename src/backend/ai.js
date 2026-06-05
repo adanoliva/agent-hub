@@ -371,9 +371,13 @@ async function callAIRich(prompt, opts = {}) {
   const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
   if (provider === 'cli') return callCLI(prompt, { ...opts, returnRich: true });
-  // For API/GitHub the orchestrator uses callAIWithSubsystemCLI which already returns tokens.
-  // Provide a passthrough that returns text with zero token counts.
   const text = await callAI(prompt, opts);
+  // For generic CLI providers: estimate output tokens from response length so the
+  // orchestrator can build a meaningful tokensUsed / estimatedCost on the step result.
+  if (CLI_PROVIDERS.includes(provider)) {
+    return { text, inputTokens: 0, outputTokens: Math.ceil(text.length / 4), costUSD: 0 };
+  }
+  // For API/GitHub the orchestrator uses callAIWithSubsystemCLI which already returns tokens.
   return { text, inputTokens: 0, outputTokens: 0, costUSD: 0 };
 }
 
@@ -579,8 +583,9 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
         reject(new Error(`${bin} exited with code ${code}${detail ? ': ' + detail : ''}`));
         return;
       }
-      trackUsage({});
-      resolve(stdout.trim());
+      const text = stdout.trim();
+      trackUsage({ outputTokens: Math.ceil(text.length / 4) });
+      resolve(text);
     });
 
     child.on('error', (err) => {
