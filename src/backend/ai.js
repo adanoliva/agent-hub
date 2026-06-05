@@ -583,8 +583,9 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
         reject(new Error(`${bin} exited with code ${code}${detail ? ': ' + detail : ''}`));
         return;
       }
-      const text = stdout.trim();
-      trackUsage({ outputTokens: Math.ceil(text.length / 4) });
+      const text      = stdout.trim();
+      const outTokens = Math.ceil(text.length / 4);
+      trackUsage({ outputTokens: outTokens, costUSD: calcAnthropicCost('claude-sonnet-4-20250514', 0, outTokens) });
       resolve(text);
     });
 
