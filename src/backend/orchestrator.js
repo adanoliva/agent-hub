@@ -884,7 +884,9 @@ class OrchestrationExecutor extends EventEmitter {
           this.emit('step-done', stepResult);
           this._writeExecutionState(i, stepResult);
           if (isBudgetExceeded) {
-            this.emit('cancelled', { executionId: this.executionId, reason: 'budget_exceeded', data: err.data });
+            const cancelData = { executionId: this.executionId, reason: 'budget_exceeded', data: err.data };
+            this._cancelledData = cancelData;  // replay for late SSE clients
+            this.emit('cancelled', cancelData);
             return;
           }
           if (orchestration.executionConfig?.stopOnError !== false) break;
@@ -1269,6 +1271,7 @@ class OrchestrationExecutor extends EventEmitter {
     } catch {}
 
     this.state = 'completed';
+    this._completedResult = executionResult;  // replay for late SSE clients
     this._log('info', `━━ Orquestación finalizada: ${status.toUpperCase()} ━━`);
     this.emit('completed', executionResult);
     return executionResult;

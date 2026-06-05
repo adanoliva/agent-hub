@@ -1717,6 +1717,19 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
 
   // Replay existing logs
   for (const log of executor.logs) send('message', log);
+
+  // If execution already finished before this SSE client connected, replay terminal event immediately
+  if (executor._completedResult) {
+    send('completed', { type: 'completed', data: executor._completedResult });
+    res.end();
+    return;
+  }
+  if (executor._cancelledData) {
+    send('cancelled', { type: 'cancelled', data: executor._cancelledData });
+    res.end();
+    return;
+  }
+
   // Replay pending gate or browser-required pause if client connected after the event fired
   if (executor._pendingGate) {
     send('gate-open', { type: 'gate-open', data: executor._pendingGate });
