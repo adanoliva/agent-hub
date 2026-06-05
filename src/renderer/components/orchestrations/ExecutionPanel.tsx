@@ -114,8 +114,10 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [browserBusy,    setBrowserBusy]    = useState(false);
   const [browserMsg,     setBrowserMsg]     = useState('');
 
-  const logsEndRef = useRef<HTMLDivElement>(null);
-  const esRef      = useRef<EventSource | null>(null);
+  const logsEndRef     = useRef<HTMLDivElement>(null);
+  const esRef          = useRef<EventSource | null>(null);
+  const execStartedAt  = useRef<string>(new Date().toISOString());
+  const stepsDoneRef   = useRef<StepResult[]>([]);
 
   // Collect all temporal context fields: inputNode first, then inter-agent nodes
   const temporalFields = [
@@ -264,6 +266,8 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
     setCancelling(false);
     setCancelReason(null);
     setIsOrchestrating(true);
+    execStartedAt.current  = new Date().toISOString();
+    stepsDoneRef.current   = [];
 
     try {
       const resp = await req<{ executionId: string; status: string }>(
@@ -300,7 +304,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         try {
           const payload = JSON.parse(e.data);
           const step: StepResult = payload.data || payload;
-          setStepsDone(prev => [...prev, step]);
+          setStepsDone(prev => { const next = [...prev, step]; stepsDoneRef.current = next; return next; });
         } catch {}
       });
 
@@ -341,9 +345,32 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         let payload: any = null;
         try { payload = JSON.parse((e as MessageEvent).data); } catch {}
         const isBudget = payload?.reason === 'budget_exceeded';
-        if (isBudget && payload?.data) {
-          setCancelReason({ type: 'budget_exceeded', spent: payload.data.spent, limit: payload.data.limit });
+        const budgetData = isBudget && payload?.data ? payload.data : null;
+        if (budgetData) {
+          setCancelReason({ type: 'budget_exceeded', spent: budgetData.spent, limit: budgetData.limit });
         }
+        const now = new Date().toISOString();
+        const doneSteps = stepsDoneRef.current;
+        setResult(prev => prev ?? {
+          orchestrationId: orchestration.id,
+          projectId,
+          executionId:     executionId ?? '',
+          startedAt:       execStartedAt.current,
+          completedAt:     now,
+          duration:        Date.now() - new Date(execStartedAt.current).getTime(),
+          status:          'failed' as const,
+          stepsCompleted:  doneSteps.length,
+          totalSteps:      orchestration.agents.length,
+          totalTokensUsed: { input: 0, output: 0 },
+          estimatedCost:   0,
+          results:         doneSteps,
+          errors:          budgetData
+            ? [{ message: `Presupuesto agotado: $${budgetData.spent?.toFixed(4)} de $${budgetData.limit?.toFixed(4)}`, category: 'budget_exceeded', recoverable: false }]
+            : [{ message: 'Ejecución cancelada', category: 'cancelled', recoverable: false }],
+          summary:         { filesModified: 0, filesCreated: 0, filesDeleted: 0, linesAdded: 0, linesRemoved: 0 },
+          changes:         [],
+          backups:         {},
+        });
         setIsRunning(false);
         setIsOrchestrating(false);
         setCancelling(false);
@@ -463,18 +490,6 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   if (!isRunning && !result) {
     return (
       <div className="orch-exec-panel">
-        {cancelReason?.type === 'budget_exceeded' && (
-          <div className="orch-budget-exceeded-banner">
-            <div className="orch-budget-exceeded-icon"><i className="ti ti-coins-off" /></div>
-            <div className="orch-budget-exceeded-body">
-              <strong>Presupuesto agotado</strong>
-              <p>
-                La orquestación se detuvo al alcanzar el límite configurado.
-                Gastado: <code>${cancelReason.spent.toFixed(4)}</code> de <code>${cancelReason.limit.toFixed(4)}</code>.
-              </p>
-            </div>
-          </div>
-        )}
         <div className="orch-exec-form">
           <div className="orch-exec-form-header">
             <i className="ti ti-player-play" />
@@ -846,6 +861,18 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
 
     return (
       <div className="orch-exec-panel">
+        {cancelReason?.type === 'budget_exceeded' && (
+          <div className="orch-budget-exceeded-banner">
+            <div className="orch-budget-exceeded-icon"><i className="ti ti-coins-off" /></div>
+            <div className="orch-budget-exceeded-body">
+              <strong>Presupuesto agotado</strong>
+              <p>
+                La orquestación se detuvo al alcanzar el límite configurado.
+                Gastado: <code>${cancelReason.spent.toFixed(4)}</code> de <code>${cancelReason.limit.toFixed(4)}</code>.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="orch-exec-result">
           <div className={`orch-result-header status-${result.status}`}>
             <i className={`ti ${statusIcon}`} />
