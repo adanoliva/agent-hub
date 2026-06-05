@@ -220,7 +220,7 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         </div>
 
         {/* Skills — solo en agentes de proyecto */}
-        {node.level === 'project' && allSkills.length > 0 && (
+        {node.level === 'project' && (allSkills.length > 0 || (a.skills || []).length > 0) && (
           <div className="field">
             <label>Skills asociadas</label>
             <div className="agent-skills-selector">
@@ -235,19 +235,21 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
                   >×</button>
                 </span>
               ))}
-              <select
-                className="input sm agent-skill-add"
-                value=""
-                onChange={e => {
-                  if (!e.target.value) return;
-                  update({ skills: [...(a.skills || []), e.target.value] });
-                }}
-              >
-                <option value="">Añadir skill…</option>
-                {allSkills.filter(s => !(a.skills || []).includes(s.name)).map(s => (
-                  <option key={s.name} value={s.name}>{s.name}{s.description ? ` — ${s.description}` : ''}</option>
-                ))}
-              </select>
+              {allSkills.filter(s => !(a.skills || []).includes(s.name)).length > 0 && (
+                <select
+                  className="input sm agent-skill-add"
+                  value=""
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    update({ skills: [...(a.skills || []), e.target.value] });
+                  }}
+                >
+                  <option value="">Añadir skill…</option>
+                  {allSkills.filter(s => !(a.skills || []).includes(s.name)).map(s => (
+                    <option key={s.name} value={s.name}>{s.name}{s.description ? ` — ${s.description}` : ''}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <p className="agent-hint">
               Las skills inyectan conocimiento tecnológico en el system prompt. Mantén el prompt enfocado en la tarea; el contexto técnico va en skills.

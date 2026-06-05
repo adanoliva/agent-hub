@@ -269,13 +269,20 @@ function serializeAgentGitHub(agent) {
   const toolsList  = (Array.isArray(agent.tools) ? agent.tools : []).filter(Boolean).map(t => `  - ${t}`).join('\n');
   const toolsBlock = toolsList ? `tools:\n${toolsList}` : 'tools: []';
 
-  return [
+  const lines = [
     '---',
     `name: ${agent.name}`,
     `description: ${agent.description || ''}`,
     `model: ${agent.model}`,
     toolsBlock,
-    '---',
+  ];
+  if (Array.isArray(agent.skills) && agent.skills.length > 0) {
+    lines.push(`skills: ${agent.skills.join(', ')}`);
+  }
+  lines.push('---');
+
+  return [
+    ...lines,
     '',
     agent.system || '',
     '',
