@@ -60,7 +60,7 @@ function create(projectId, projectPath, data) {
       stopOnError:           true,
       validateAfterEachStep: false,
       maxTurns:              10,
-      timeout:               300000,
+      timeout:               1_800_000,
       ...(data.executionConfig || {}),
     },
     createdAt:      now,

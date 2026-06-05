@@ -1558,7 +1558,7 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
       projectContext: projectContext || '',
       provider,
       maxTurns:       maxTurns  || 10,
-      timeout:        timeout   || 300_000,
+      timeout:        timeout   || 1_800_000,
       useBrowser:     useBrowser || false,
     });
     res.json(result);

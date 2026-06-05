@@ -505,7 +505,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             </div>
             <div className="orch-exec-info-item">
               <i className="ti ti-clock" />
-              <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 300000) / 1000)}s por paso</span>
+              <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 1_800_000) / 1000)}s total</span>
             </div>
             {orchestration.executionConfig?.stopOnError && (
               <div className="orch-exec-info-item">

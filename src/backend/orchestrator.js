@@ -707,7 +707,7 @@ class OrchestrationExecutor extends EventEmitter {
     this._log('info', `Orquestación iniciada: "${orchestration.name}"`);
     this._log('info', `Proveedor: ${provider} | Pasos: ${orchestration.agents.length}`);
 
-    const orchTimeout  = orchestration.executionConfig?.timeout || 300_000;
+    const orchTimeout  = orchestration.executionConfig?.timeout || 1_800_000;
     let   startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
