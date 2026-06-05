@@ -67,7 +67,6 @@ function QualityBadge({ qs }: { qs: QualityScore }) {
 
 export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const addToast           = useStore(s => s.addToast);
-  const navigateTo         = useStore(s => s.navigateTo);
   const setIsOrchestrating = useStore(s => s.setIsOrchestrating);
   const config             = useStore(s => s.config);
 
@@ -1097,11 +1096,6 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             <button className="btn" onClick={() => { setResult(null); setLogs([]); setStepsDone([]); setStepInputs([]); }}>
               <i className="ti ti-refresh" /> Ejecutar de nuevo
             </button>
-            {result.status !== 'failed' && (
-              <button className="btn ghost" onClick={() => navigateTo('chat')}>
-                <i className="ti ti-message-chatbot" /> Discutir en chat
-              </button>
-            )}
           </div>
         </div>
       </div>
