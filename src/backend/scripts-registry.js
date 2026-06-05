@@ -246,19 +246,20 @@ const SCRIPTS = {
     }, 0);
 
     if (spent >= limit) {
-      if (softLimit || isEstimated) {
-        const reason = isEstimated ? ' (coste aproximado — proveedor sin tracking nativo)' : '';
+      if (softLimit) {
+        const approxNote = isEstimated ? ' (coste aproximado)' : '';
         return {
-          output:        `⚠ budget-guard: $${spent.toFixed(4)} superan el límite de $${limit.toFixed(4)}${reason}. La orquestación continúa.`,
+          output:        `⚠ budget-guard: $${spent.toFixed(4)} superan el límite de $${limit.toFixed(4)}${approxNote}. La orquestación continúa.`,
           filesModified: [],
           data:          { spent, limit, isEstimated, softLimit, limitExceeded: true },
         };
       }
+      const approxNote = isEstimated ? ' (coste aproximado)' : '';
       const err = new Error(
-        `Presupuesto agotado: $${spent.toFixed(4)} gastado de $${limit.toFixed(4)} permitidos`
+        `Presupuesto agotado: $${spent.toFixed(4)} gastado de $${limit.toFixed(4)} permitidos${approxNote}`
       );
       err.category = 'budget_exceeded';
-      err.data = { spent, limit };
+      err.data = { spent, limit, isEstimated };
       throw err;
     }
 
