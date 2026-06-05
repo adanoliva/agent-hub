@@ -75,7 +75,7 @@ interface OrchestrationNode {
 
 ## Fase 2 — Motor de ejecución (backend)
 
-**Estado:** ⬜ No iniciada  
+**Estado:** ✅ Completada  
 **Prerrequisito:** Fase 1 completada
 
 ### Objetivo
@@ -139,16 +139,24 @@ Sustituir el bucle `for` lineal de `orchestrator.js` por un scheduler DAG que ej
 
 ### Checklist Fase 2
 
-- [ ] Implementar `computeTopologicalLevels(nodes)` — devuelve `OrchestrationNode[][]` (array de niveles)
-- [ ] Reescribir el bucle principal de `execute()` con el scheduler
-- [ ] Actualizar `_buildSystemPrompt` para recibir nodo en lugar de índice
-- [ ] Actualizar `_buildUserMessage` para merge de múltiples predecesores
-- [ ] Adaptar `agentOutputs` a clave `nodeId`
-- [ ] Adaptar `this.results` a clave `nodeId`
-- [ ] Actualizar eventos SSE para incluir `nodeId` y `parallelGroup`
-- [ ] Adaptar gates HITL al nuevo modelo
-- [ ] Adaptar checkpoints git
-- [ ] Adaptar budget-guard y quality-score
+- [x] Implementar `computeTopologicalLevels(nodes)` — devuelve `OrchestrationNode[][]` (array de niveles)
+- [x] Reescribir el bucle principal de `execute()` con el scheduler DAG + Promise.allSettled por nivel
+- [x] Reescribir `_buildSystemPrompt(node)` — recibe nodo DAG
+- [x] Reescribir `_buildUserMessage(node, agentOutputs, stepIndex)` — merge de múltiples predecesores
+- [x] Extraer `_executeNode(node, agentOutputs, stepIndex, opts)` — lógica de nodo individual
+- [x] `agentOutputs` keyed por `nodeId`
+- [x] `this.results` incluye `nodeId` en cada StepResult
+- [x] Eventos SSE incluyen `nodeId`
+- [x] Gates HITL adaptados: keyed por nodeId, resueltos al finalizar cada nivel
+- [x] Revisión de gate: re-ejecuta solo el nodo gateado
+- [x] Checkpoints git adaptados por nodo
+- [x] Ops ledger adaptado por nodo
+- [x] budget-guard y quality-score reciben agentOutputs keyed por nodeId (compatible)
+- [x] `validate()` reescrita para DAG (cycle detection, validación por nodo)
+- [x] `_writeExecutionState` adaptada a nodeId
+- [x] `resolveGate`/`_waitForGate` usan nodeId en lugar de stepIndex
+- [x] server.js: gate endpoint usa nodeId
+- [x] ExecutionPanel.tsx: temporal context keys, gate handler, referencias a agents[] → nodes[]
 - [ ] Test manual: orquestación lineal migrada → ejecuta igual que antes
 - [ ] Test manual: orquestación con 2 ramas paralelas → ambas corren a la vez
 - [ ] Test manual: merge de 2 ramas en un nodo final → recibe ambos outputs

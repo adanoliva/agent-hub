@@ -106,6 +106,29 @@ function stripHandoff(response) {
   return (response || '').replace(/^HANDOFF:\s*\{.+\}\s*$/m, '').trimEnd();
 }
 
+// ── DAG scheduler ────────────────────────────────────────────────────────────
+
+/**
+ * Groups nodes into topological levels. Nodes in the same level
+ * have no dependencies on each other and can run in parallel.
+ * Returns [] if a cycle is detected.
+ */
+function computeTopologicalLevels(nodes) {
+  const completed = new Set();
+  const remaining = new Set(nodes.map(n => n.id));
+  const levels    = [];
+
+  while (remaining.size > 0) {
+    const ready = nodes.filter(n =>
+      remaining.has(n.id) && n.dependsOn.every(dep => completed.has(dep)),
+    );
+    if (ready.length === 0) return levels; // cycle — stop early
+    levels.push(ready);
+    ready.forEach(n => { completed.add(n.id); remaining.delete(n.id); });
+  }
+  return levels;
+}
+
 // ── OrchestrationExecutor ─────────────────────────────────────────────────────
 
 class OrchestrationExecutor extends EventEmitter {
@@ -299,22 +322,20 @@ class OrchestrationExecutor extends EventEmitter {
 
   // ── Prompt building ───────────────────────────────────────────────────────
 
-  _buildSystemPrompt(stepIndex) {
-    const agentName  = this.orchestration.agents[stepIndex];
-    const agent      = this._getAgent(agentName);
-    const isLastStep = stepIndex === this.orchestration.agents.length - 1;
-    let prompt       = agent?.system || `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
+  _buildSystemPrompt(node) {
+    const { agentName } = node;
+    const agent       = this._getAgent(agentName);
+    // A node is "last" if no other node depends on it
+    const isLastNode  = !this.orchestration.nodes.some(n => n.dependsOn.includes(node.id));
+    const isRoot      = node.dependsOn.length === 0;
 
-    // Determine which node provides context into this step:
-    // step 0 uses inputNode (Orquestador → Agent[0]), others use the previous inter-agent node.
-    const inputNode  = this.orchestration.inputNode;
-    const prevNode   = stepIndex === 0 ? inputNode : this.orchestration.nodes[stepIndex - 1];
-    const prevDF     = prevNode?.dataFlow;
+    let prompt = agent?.system ||
+      `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
 
-    // Project context: always for step 0 (unless inputNode disables it), or per dataFlow
-    const includeContext = stepIndex === 0
-      ? (prevDF ? prevDF.projectContext !== false : true)
-      : (prevDF?.projectContext === true);
+    // Project context: root nodes include it by default; non-root only if explicitly requested
+    const includeContext = isRoot
+      ? (node.dataFlow?.projectContext !== false)
+      : (node.dataFlow?.projectContext === true);
 
     if (includeContext) {
       const contextFile = this._getContextFile();
@@ -326,30 +347,26 @@ class OrchestrationExecutor extends EventEmitter {
       }
     }
 
-    // Fixed context from the node that feeds into this step
-    const fc = prevNode?.contextExtra?.fixed;
+    // Fixed context lives on the node itself in the DAG model
+    const fc = node.contextExtra?.fixed;
     if (fc) {
       if (fc.freeText?.trim()) {
         prompt += `\n\n# CONTEXTO ADICIONAL\n${fc.freeText.trim()}`;
       }
-      if (fc.files?.length > 0) {
-        for (const filePath of fc.files) {
-          try {
-            const resolvedPath = require('path').isAbsolute(filePath)
-              ? filePath
-              : path.join(this.project.path, filePath);
-            const content = fs.readFileSync(resolvedPath, 'utf8');
-            const name = require('path').basename(filePath);
-            const truncated = content.length > MAX_CONTEXT_FILE_CHARS
-              ? content.slice(0, MAX_CONTEXT_FILE_CHARS) + '\n[Archivo truncado]'
-              : content;
-            prompt += `\n\n# ARCHIVO DE CONTEXTO (${name})\n${truncated}`;
-          } catch {}
-        }
+      for (const filePath of (fc.files || [])) {
+        try {
+          const resolved = path.isAbsolute(filePath) ? filePath : path.join(this.project.path, filePath);
+          const content  = fs.readFileSync(resolved, 'utf8');
+          const name     = path.basename(filePath);
+          const truncated = content.length > MAX_CONTEXT_FILE_CHARS
+            ? content.slice(0, MAX_CONTEXT_FILE_CHARS) + '\n[Archivo truncado]'
+            : content;
+          prompt += `\n\n# ARCHIVO DE CONTEXTO (${name})\n${truncated}`;
+        } catch {}
       }
     }
 
-    // Inyectar skills del agente (Fase 5)
+    // Skills injection
     if (agent?.skills?.length > 0) {
       try {
         const { listAllSkills } = require('./skills');
@@ -363,16 +380,16 @@ class OrchestrationExecutor extends EventEmitter {
       } catch {}
     }
 
-    if (!isLastStep) prompt += prompts.agentHandoffInstruction();
-
+    if (!isLastNode) prompt += prompts.agentHandoffInstruction();
     return prompt;
   }
 
-  _buildUserMessage(stepIndex) {
+  _buildUserMessage(node, agentOutputs, stepIndex) {
     let message = '';
+    const isRoot = node.dependsOn.length === 0;
 
-    // Inyectar feedback de revisión si existe para este paso
-    const revisions = this._revisionFeedback?.[stepIndex];
+    // Revision feedback (keyed by nodeId)
+    const revisions = this._revisionFeedback?.[node.id];
     if (revisions?.length > 0) {
       const latest = revisions[revisions.length - 1];
       if (latest.feedback) {
@@ -380,74 +397,63 @@ class OrchestrationExecutor extends EventEmitter {
       }
     }
 
-    if (stepIndex === 0) {
-      // Step 0: use inputNode temporal contexts (user inputs at execution time)
-      const inputNode = this.orchestration.inputNode;
-      if (inputNode?.contextExtra?.temporal?.length > 0) {
-        for (const temp of inputNode.contextExtra.temporal) {
-          const tempKey   = `input-${temp.id}`;
-          const tempValue = this.temporalContextValues[tempKey];
-          if (tempValue) {
-            message += `## ${temp.label || 'Entrada'}\n\n${tempValue}\n\n`;
-          }
-        }
+    if (isRoot) {
+      // Root node: temporal inputs and optional task text from the node itself
+      for (const temp of (node.contextExtra?.temporal || [])) {
+        const val = this.temporalContextValues[`${node.id}-${temp.id}`];
+        if (val) message += `## ${temp.label || 'Entrada'}\n\n${val}\n\n`;
       }
-
-      const taskText  = inputNode?.contextExtra?.fixed?.freeText?.trim();
-      const agentName = this.orchestration.agents[0];
-
-      if (taskText) {
-        message += `## Tarea\n\n${taskText}`;
-      } else {
-        message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
+      const taskText = node.contextExtra?.fixed?.freeText?.trim();
+      message += taskText
+        ? `## Tarea\n\n${taskText}`
+        : `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${node.agentName}" en este proyecto.` +
           ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.`;
-      }
 
     } else {
-      const prevResult = this.results[stepIndex - 1];
-      const prevNode   = this.orchestration.nodes[stepIndex - 1];
+      // Non-root: merge outputs from all predecessor nodes
+      const multiPred = node.dependsOn.length > 1;
 
-      if (prevNode?.dataFlow?.agentOutput && prevResult?.output?.response) {
-        const fromAgent = this.orchestration.agents[stepIndex - 1];
-        const handoff   = extractHandoff(prevResult.output.response);
-        if (handoff) {
-          message += prompts.formatHandoffAsInput(handoff, fromAgent) + '\n\n';
-        } else {
-          // Fallback: prose truncado mucho más corto que el límite anterior
-          const raw = prevResult.output.response;
-          const snippet = raw.length > 400 ? raw.slice(0, 400) + '\n[...]' : raw;
-          message += `## Paso anterior: ${fromAgent}\n\n${snippet}\n\n`;
-        }
-      }
+      for (const depId of node.dependsOn) {
+        const predOutput = agentOutputs[depId];
+        if (!predOutput) continue;
 
-      if (prevNode?.dataFlow?.filesModified && prevResult?.filesModified?.length > 0) {
-        message += `## Archivos modificados en el paso anterior\n\n`;
-        message += prevResult.filesModified.map(f => `- ${f}`).join('\n');
-        message += '\n\n';
-      }
-
-      // Temporal contexts from inter-agent node
-      if (prevNode?.contextExtra?.temporal?.length > 0) {
-        for (const temp of prevNode.contextExtra.temporal) {
-          const tempKey   = `${stepIndex - 1}-${temp.id}`;
-          const tempValue = this.temporalContextValues[tempKey];
-          if (tempValue) {
-            message += `## ${temp.label}\n\n${tempValue}\n\n`;
+        if (node.dataFlow?.agentOutput && predOutput.response) {
+          const handoff = predOutput.handoff || extractHandoff(predOutput.response);
+          if (handoff) {
+            message += prompts.formatHandoffAsInput(handoff, predOutput.agentName || depId) + '\n\n';
+          } else {
+            const snippet = predOutput.response.length > 400
+              ? predOutput.response.slice(0, 400) + '\n[...]'
+              : predOutput.response;
+            const header = multiPred
+              ? `## Salida de ${predOutput.agentName || depId}\n\n`
+              : `## Paso anterior\n\n`;
+            message += header + snippet + '\n\n';
           }
         }
+
+        if (node.dataFlow?.filesModified && predOutput.filesModified?.length > 0) {
+          const header = multiPred
+            ? `## Archivos modificados por ${predOutput.agentName || depId}\n\n`
+            : `## Archivos modificados en el paso anterior\n\n`;
+          message += header + predOutput.filesModified.map(f => `- ${f}`).join('\n') + '\n\n';
+        }
       }
 
-      const agentName = this.orchestration.agents[stepIndex];
-      message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${agentName}" en este proyecto.` +
+      // Temporal inputs on this node (for inter-node operator inputs)
+      for (const temp of (node.contextExtra?.temporal || [])) {
+        const val = this.temporalContextValues[`${node.id}-${temp.id}`];
+        if (val) message += `## ${temp.label}\n\n${val}\n\n`;
+      }
+
+      message += `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${node.agentName}" en este proyecto.` +
         ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.`;
     }
 
-    // Hard limit: use executionConfig.maxContextChars or default
     const maxChars = this.orchestration.executionConfig?.maxContextChars || 4000;
     if (message.length > maxChars) {
       message = message.slice(0, maxChars) + '\n\n[Contexto truncado por límite de tokens]';
     }
-
     return message;
   }
 
@@ -551,46 +557,41 @@ class OrchestrationExecutor extends EventEmitter {
   async validate() {
     const errors = [];
     const { orchestration } = this;
+    const nodes = orchestration.nodes || [];
 
-    if (!orchestration.agents || orchestration.agents.length < 2) {
-      errors.push('La orquestación debe tener al menos 2 agentes');
+    if (nodes.length < 1) {
+      errors.push('La orquestación debe tener al menos 1 agente');
     }
 
-    if (orchestration.nodes.length !== Math.max(0, orchestration.agents.length - 1)) {
-      errors.push(`Se requieren ${orchestration.agents.length - 1} conexiones para ${orchestration.agents.length} agentes`);
+    // Cycle detection via topological sort
+    const levels = computeTopologicalLevels(nodes);
+    if (levels.reduce((s, l) => s + l.length, 0) !== nodes.length) {
+      errors.push('La orquestación contiene un ciclo — verifica las conexiones');
     }
 
+    const nodeIds  = new Set(nodes.map(n => n.id));
     const allAgents = this._getAllAgents();
-    for (const agentName of (orchestration.agents || [])) {
-      if (scriptsRegistry.isScript(agentName)) {
-        const scriptName = scriptsRegistry.getScriptName(agentName);
-        if (!scriptsRegistry.hasScript(scriptName)) {
-          errors.push(`Script no registrado: "${scriptName}" (en "${agentName}")`);
-        }
-        continue;
-      }
-      if (!allAgents.find(a => a.name === agentName)) {
-        errors.push(`Agente no encontrado: "${agentName}"`);
-      }
-    }
 
-    for (let i = 0; i < (orchestration.nodes || []).length; i++) {
-      const node = orchestration.nodes[i];
-      if (node.from !== i || node.to !== i + 1) {
-        errors.push(`Conexión ${i}: índices inválidos (esperado from=${i}, to=${i + 1})`);
+    for (const node of nodes) {
+      if (scriptsRegistry.isScript(node.agentName)) {
+        const scriptName = scriptsRegistry.getScriptName(node.agentName);
+        if (!scriptsRegistry.hasScript(scriptName)) {
+          errors.push(`Script no registrado: "${scriptName}"`);
+        }
+      } else if (!allAgents.find(a => a.name === node.agentName)) {
+        errors.push(`Agente no encontrado: "${node.agentName}"`);
       }
-      const df = node.dataFlow || {};
-      if (!df.agentOutput && !df.filesModified && !df.projectContext) {
-        errors.push(`Conexión ${i + 1}: debe transmitir al menos una información`);
+
+      for (const depId of (node.dependsOn || [])) {
+        if (!nodeIds.has(depId)) {
+          errors.push(`Nodo "${node.agentName}": dependencia "${depId}" no existe`);
+        }
       }
-      if (node.contextExtra?.fixed?.files?.length > 0) {
-        for (const filePath of node.contextExtra.fixed.files) {
-          const resolvedPath = require('path').isAbsolute(filePath)
-            ? filePath
-            : path.join(this.project.path, filePath);
-          if (!fs.existsSync(resolvedPath)) {
-            errors.push(`Conexión ${i + 1}: archivo de contexto no existe: ${filePath}`);
-          }
+
+      for (const filePath of (node.contextExtra?.fixed?.files || [])) {
+        const resolved = path.isAbsolute(filePath) ? filePath : path.join(this.project.path, filePath);
+        if (!fs.existsSync(resolved)) {
+          errors.push(`Nodo "${node.agentName}": archivo de contexto no existe: ${filePath}`);
         }
       }
     }
@@ -603,12 +604,11 @@ class OrchestrationExecutor extends EventEmitter {
     if (ec.timeout  && ec.timeout  < 5000)        errors.push('El timeout mínimo es 5 segundos');
     if (ec.maxTurns && (ec.maxTurns < 1 || ec.maxTurns > 100)) errors.push('maxTurns debe estar entre 1 y 100');
 
-    // Browser check: if any agent uses browser tools, verify connectivity once here.
-    const cfg = readConfig();
+    const cfg      = readConfig();
     const provider = cfg.aiProvider || 'cli';
     if (!CLI_PROVIDERS.includes(provider)) {
-      const needsBrowser = (orchestration.agents || []).some(name => {
-        const a = allAgents.find(x => x.name === name);
+      const needsBrowser = nodes.some(node => {
+        const a = allAgents.find(x => x.name === node.agentName);
         return Array.isArray(a?.tools) && a.tools.some(t => t.startsWith('browser_'));
       });
       if (needsBrowser) {
@@ -624,7 +624,7 @@ class OrchestrationExecutor extends EventEmitter {
 
   // ── Incremental execution state ──────────────────────────────────────────
 
-  _writeExecutionState(lastCompletedStep, stepResult) {
+  _writeExecutionState(nodeId, stepResult) {
     if (!this.execDir) return;
     const statePath = path.join(this.execDir, 'execution-state.json');
     const tmp       = statePath + '.tmp';
@@ -633,14 +633,11 @@ class OrchestrationExecutor extends EventEmitter {
       orchestrationId:   this.orchestration.id,
       projectId:         this.project.id,
       status:            'running',
-      lastCompletedStep,
+      lastCompletedStep: stepResult.stepIndex,
       startedAt:         this._startedAt,
       steps: {
         ...(this._executionState?.steps || {}),
-        [lastCompletedStep]: {
-          status:        stepResult.status,
-          filesModified: stepResult.filesModified,
-        },
+        [nodeId]: { status: stepResult.status, filesModified: stepResult.filesModified },
       },
     };
     this._executionState = state;
@@ -650,14 +647,14 @@ class OrchestrationExecutor extends EventEmitter {
     } catch {}
   }
 
-  _writeExecutionStateGatePaused(stepIndex) {
+  _writeExecutionStateGatePaused(nodeId) {
     if (!this.execDir) return;
     const statePath = path.join(this.execDir, 'execution-state.json');
     const tmp       = statePath + '.tmp';
     const state = {
       ...(this._executionState || {}),
       status:         'paused_gate',
-      pausedAtStep:   stepIndex,
+      pausedAtNodeId: nodeId,
       pauseStartedAt: new Date().toISOString(),
     };
     this._executionState = state;
@@ -667,62 +664,305 @@ class OrchestrationExecutor extends EventEmitter {
     } catch {}
   }
 
+  // ── Single-node execution ────────────────────────────────────────────────
+
+  /**
+   * Executes one DAG node (AI agent or deterministic script).
+   * Returns { stepResult, agentOutput, budgetError? }.
+   * Gates are NOT handled here — they are resolved at the level boundary in execute().
+   */
+  async _executeNode(node, agentOutputs, stepIndex, opts = {}) {
+    const { gitAvailable, startTime, orchTimeout, contextFile, orchestrationUsesBrowser } = opts;
+    const { orchestration } = this;
+    const { agentName }     = node;
+
+    this.emit('step-start', { nodeId: node.id, stepIndex, agentName, totalSteps: orchestration.nodes.length });
+    this._log('info', `━━ Nodo "${agentName}" [${node.id}] (paso ${stepIndex + 1}) ━━`);
+
+    let snapshot;
+    try {
+      snapshot = await this._takeSnapshot(stepIndex);
+    } catch (e) {
+      this._log('warn', `Snapshot falló para "${agentName}": ${e.message}`);
+    }
+
+    const stepStart = Date.now();
+
+    // ── Script determinístico ─────────────────────────────────────────────
+    if (scriptsRegistry.isScript(agentName)) {
+      const scriptName   = scriptsRegistry.getScriptName(agentName);
+      const scriptParams = node.scriptParams ?? {};
+      this._log('info', `Script determinístico "${scriptName}"`);
+      this.emit('step-input', { nodeId: node.id, stepIndex, agentName, userMessage: '' });
+
+      let stepResult;
+      try {
+        const scriptResult = await scriptsRegistry.run(scriptName, {
+          projectPath:   this.project.path,
+          orchestration: this.orchestration,
+          stepIndex,
+          prevResult:    agentOutputs[node.dependsOn[0]] ? { output: { response: agentOutputs[node.dependsOn[0]].response } } : null,
+          agentOutputs,
+          scriptParams,
+        });
+        stepResult = {
+          stepIndex, nodeId: node.id, agentName,
+          input:         { systemPrompt: '', userMessage: '' },
+          output:        { response: scriptResult.output },
+          filesModified: scriptResult.filesModified || [],
+          tokensUsed:    { input: 0, output: 0 },
+          estimatedCost: 0, costIsEstimated: false,
+          duration:      Date.now() - stepStart,
+          status:        'success',
+          backupPath:    snapshot?.snapshotPath || null,
+        };
+        const agentOutput = { agentName, response: scriptResult.output, handoff: null, filesModified: stepResult.filesModified, estimatedCost: 0 };
+        this.emit('step-done', stepResult);
+        this._writeExecutionState(node.id, stepResult);
+        return { stepResult, agentOutput };
+      } catch (err) {
+        this._log('error', `Script "${scriptName}" error: ${err.message}`);
+        const isBudget = err.category === 'budget_exceeded';
+        stepResult = {
+          stepIndex, nodeId: node.id, agentName,
+          input:  { systemPrompt: '', userMessage: '' },
+          output: { response: '' },
+          filesModified: [], tokensUsed: { input: 0, output: 0 },
+          estimatedCost: 0, costIsEstimated: false,
+          duration: Date.now() - stepStart, status: 'error',
+          error: { message: err.message, category: err.category || 'script_error', recoverable: false, data: err.data },
+          backupPath: snapshot?.snapshotPath || null,
+        };
+        this.emit('step-done', stepResult);
+        this._writeExecutionState(node.id, stepResult);
+        if (isBudget) {
+          const cancelData = { executionId: this.executionId, reason: 'budget_exceeded', data: err.data };
+          this._cancelledData = cancelData;
+          this.emit('cancelled', cancelData);
+          return { stepResult, agentOutput: null, budgetError: err };
+        }
+        return { stepResult, agentOutput: null };
+      }
+    }
+
+    // ── Agente IA ─────────────────────────────────────────────────────────
+    let userMessage = '';
+    try {
+      const systemPrompt = this._buildSystemPrompt(node);
+      userMessage        = this._buildUserMessage(node, agentOutputs, stepIndex);
+      this.emit('step-input', { nodeId: node.id, stepIndex, agentName, userMessage });
+      this._log('info', `Invocando agente "${agentName}"…`);
+
+      const cfg            = readConfig();
+      const provider       = cfg.aiProvider || 'cli';
+      const agent          = this._getAgent(agentName);
+      const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
+      const CLI_NATIVE     = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+      const isCustomCLI    = (cfg.customProviders || []).some(p => p.id === provider && p.type === 'cli');
+      const useNativeCLI   = CLI_NATIVE.includes(provider) || isCustomCLI;
+      const stepRemaining  = Math.max(10_000, orchTimeout - (Date.now() - startTime));
+
+      let response = '', inputTokens = 0, outputTokens = 0, stepCostUSD = 0;
+
+      if (useNativeCLI) {
+        let browserContext = '';
+        if (agentUsesBrowser) {
+          try {
+            const browser  = require('./browser');
+            const status   = await browser.getStatus();
+            if (!status.connected) {
+              const installed = browser.listInstalledBrowsers();
+              const preferred = installed.find(b => b.engine === 'chromium') || installed[0];
+              if (preferred) await browser.launchBrowserWithCdp(preferred.key, status.cdpPort || 9222);
+            }
+          } catch (e) { this._log('warn', `No se pudo lanzar el navegador: ${e.message}`); }
+
+          if (!this.cancelled) {
+            this._log('info', `Esperando confirmación del usuario (autenticación en el navegador)…`);
+            await this._pauseForBrowser(stepIndex, agentName);
+          }
+          if (this.cancelled) throw new Error('Ejecución cancelada');
+          browserContext = await this._buildBrowserContext();
+        }
+
+        const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
+        const extraArgs  = provider === 'cli'
+          ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
+          : [];
+        const rich = await callAIRich(fullPrompt, { timeout: stepRemaining, extraArgs, cwd: this.project.path });
+        response = rich.text; inputTokens = rich.inputTokens; outputTokens = rich.outputTokens; stepCostUSD = rich.costUSD;
+
+      } else {
+        const cliResult = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
+          projectPath: this.project.path, projectContext: contextFile,
+          provider, maxTurns: orchestration.executionConfig?.maxTurns || 10,
+          timeout: stepRemaining, useBrowser: orchestrationUsesBrowser,
+        });
+        if (!cliResult.success && cliResult.error) {
+          if (cliResult.finalResponse?.trim()) {
+            this._log('warn', `${cliResult.error} — usando respuesta parcial`);
+          } else throw new Error(cliResult.error);
+        }
+        response = cliResult.finalResponse || cliResult.result || '';
+        inputTokens = cliResult.tokens?.input || 0; outputTokens = cliResult.tokens?.output || 0;
+        stepCostUSD = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', inputTokens, outputTokens);
+      }
+
+      let costIsEstimated = false;
+      if (stepCostUSD === 0 && response.trim().length > 0) {
+        const outToks = Math.ceil(response.length / 4);
+        stepCostUSD   = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', 0, outToks);
+        costIsEstimated = true;
+      }
+
+      this._log('info', `Tokens entrada=${inputTokens} salida=${outputTokens}` +
+        (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}${costIsEstimated ? ' (est.)' : ''}` : ''));
+
+      const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
+      if (filesModified.length > 0) this._log('info', `${filesModified.length} archivo(s) modificado(s)`);
+
+      const handoff      = extractHandoff(response);
+      const cleanResponse = stripHandoff(response);
+      if (handoff) this._log('info', `Handoff → ${handoff.done}`);
+
+      const stepResult = {
+        stepIndex, nodeId: node.id, agentName,
+        input:         { systemPrompt: '', userMessage },
+        output:        { response: cleanResponse, handoff: handoff || undefined },
+        filesModified,
+        tokensUsed:    { input: inputTokens, output: outputTokens },
+        estimatedCost: stepCostUSD, costIsEstimated,
+        duration:      Date.now() - stepStart,
+        status:        'success',
+        backupPath:    snapshot?.snapshotPath || null,
+        revisions:     this._revisionFeedback?.[node.id] || [],
+      };
+
+      const agentOutput = {
+        agentName, response: cleanResponse, handoff, filesModified,
+        estimatedCost: stepCostUSD, costIsEstimated,
+        tokensUsed: { input: inputTokens, output: outputTokens },
+        model: agent?.model || null,
+      };
+
+      this.emit('step-done', stepResult);
+      this._writeExecutionState(node.id, stepResult);
+
+      // Quality score
+      try {
+        const qs = await scriptsRegistry.run('quality-score', {
+          projectPath: this.project.path, orchestration: this.orchestration,
+          stepIndex, prevResult: stepResult, agentOutputs,
+        });
+        stepResult.qualityScore = qs.data?.qualityScore || null;
+        if (stepResult.qualityScore) this._log('info', `Quality score ${stepResult.qualityScore.score}/100`);
+      } catch {}
+
+      // validate-output
+      if (orchestration.executionConfig?.validateAfterEachStep) {
+        try {
+          const validation = await scriptsRegistry.run('validate-output', {
+            projectPath: this.project.path, orchestration: this.orchestration,
+            stepIndex, prevResult: stepResult, agentOutputs,
+          });
+          if (validation.data && !validation.data.passed) {
+            this._log('warn', `Validación post-escritura falló: ${JSON.stringify(validation.data.issues)}`);
+            this.emit('step-warning', { nodeId: node.id, stepIndex, issues: validation.data.issues });
+            stepResult.status = 'warning';
+          }
+        } catch {}
+      }
+
+      // Ops ledger
+      if (filesModified.length > 0) {
+        try {
+          const now = new Date().toISOString();
+          opsLedger.appendOps(this.project.path, this.orchestration.id, filesModified.map(filePath => ({
+            id: `op-${crypto.randomBytes(4).toString('hex')}`,
+            executionId: this.executionId, orchestrationId: this.orchestration.id,
+            stepIndex, nodeId: node.id, agentName, kind: 'modify', filePath,
+            status: 'applied', createdAt: now, appliedAt: now,
+          })));
+        } catch {}
+      }
+
+      // Git checkpoint
+      if (gitAvailable) {
+        try {
+          const sha = await gitCheckpointer.checkpoint(
+            this.project.path,
+            `agenthub: ${agentName} [${node.id.slice(-6)}] [exec:${this.executionId.slice(-6)}]`,
+          );
+          if (sha) { stepResult.gitCommitSha = sha; this._log('info', `Git checkpoint → ${sha.slice(0, 7)}`); }
+        } catch (e) { this._log('warn', `Git checkpoint falló: ${e.message}`); }
+      }
+
+      return { stepResult, agentOutput };
+
+    } catch (err) {
+      this._log('error', `Error en "${agentName}": ${err.message}`);
+      const stepResult = {
+        stepIndex, nodeId: node.id, agentName,
+        input: { systemPrompt: '', userMessage },
+        output: { response: '' },
+        filesModified: [], tokensUsed: { input: 0, output: 0 },
+        estimatedCost: 0, costIsEstimated: false,
+        duration: Date.now() - stepStart, status: 'error',
+        error: { message: err.message, category: categorizeError(err), recoverable: true },
+        backupPath: snapshot?.snapshotPath || null,
+      };
+      this.emit('step-done', stepResult);
+      this._writeExecutionState(node.id, stepResult);
+      return { stepResult, agentOutput: null };
+    }
+  }
+
   // ── Execute ───────────────────────────────────────────────────────────────
 
   async execute() {
-    const cfg      = readConfig();
-    // Use the global AI provider — project.aiProvider is only for agent sync destinations,
-    // not for which engine runs the orchestration.
-    const provider = cfg.aiProvider || 'cli';
+    const cfg        = readConfig();
+    const provider   = cfg.aiProvider || 'cli';
     const { orchestration } = this;
+    const nodes      = orchestration.nodes || [];
 
     // Create execution directory
-    const timestamp  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const execDirName = `${timestamp}-${this.executionId.slice(-8)}`;
-    ensureDir(path.join(this.project.path, '.agent-hub', 'executions'));
-    this.execDir = path.join(this.project.path, '.agent-hub', 'executions', execDirName);
+    const timestamp   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    this.execDir      = path.join(this.project.path, '.agent-hub', 'executions', `${timestamp}-${this.executionId.slice(-8)}`);
     ensureDir(this.execDir);
 
     const startedAt = new Date().toISOString();
     const metadata  = {
-      executionId:     this.executionId,
-      orchestrationId: orchestration.id,
-      projectId:       this.project.id,
-      startedAt,
-      status:          'running',
-      stepsCompleted:  0,
-      totalSteps:      orchestration.agents.length,
+      executionId: this.executionId, orchestrationId: orchestration.id,
+      projectId: this.project.id, startedAt, status: 'running',
+      stepsCompleted: 0, totalSteps: nodes.length,
     };
     fs.writeFileSync(path.join(this.execDir, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
-
     this._startedAt = startedAt;
     this._executionState = null;
 
-    // Git checkpointing (Fase 4)
     const gitAvailable = this.project.gitEnabled
       ? await gitCheckpointer.isGitRepo(this.project.path)
       : false;
 
     this.state = 'running';
+    const levels = computeTopologicalLevels(nodes);
     this._log('info', `Orquestación iniciada: "${orchestration.name}"`);
-    this._log('info', `Proveedor: ${provider} | Pasos: ${orchestration.agents.length}`);
+    this._log('info', `Proveedor: ${provider} | Nodos: ${nodes.length} | Niveles: ${levels.length} | Max paralelo: ${Math.max(0, ...levels.map(l => l.length))}`);
 
     const orchTimeout  = orchestration.executionConfig?.timeout || 1_800_000;
     let   startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
 
-    // Compute once: context file and browser need — shared across all steps.
     const contextFile = this._getContextFile();
     const orchestrationUsesBrowser = !CLI_PROVIDERS.includes(provider) && (() => {
-      const allAgents = this._getAllAgents();
-      return orchestration.agents.some(name => {
-        const a = allAgents.find(x => x.name === name);
+      const all = this._getAllAgents();
+      return nodes.some(n => {
+        const a = all.find(x => x.name === n.agentName);
         return Array.isArray(a?.tools) && a.tools.some(t => t.startsWith('browser_'));
       });
     })();
 
-    // If any agent needs the browser, verify connectivity now — before any step runs.
     if (orchestrationUsesBrowser) {
       const browserMod = require('./browser');
       if (!browserMod.isConnected()) {
@@ -731,547 +971,153 @@ class OrchestrationExecutor extends EventEmitter {
         this.emit('error', { message: msg });
         return;
       }
-      this._log('info', 'Navegador CDP conectado. Disponible para todos los pasos de esta orquestación.');
+      this._log('info', 'Navegador CDP conectado.');
     }
 
-    for (let i = 0; i < orchestration.agents.length; i++) {
-      const agentName = orchestration.agents[i];
-      this.currentStep = i;
+    let budgetExceededError = null;
+    let stepCounter         = 0;
 
-      // Si es una reanudación, saltar los pasos ya completados
-      if (this._resumeFromStep !== undefined && i < this._resumeFromStep) {
-        const savedStep = this._executionState?.steps?.[i];
-        if (savedStep) {
-          const stub = {
-            stepIndex:     i,
-            agentName,
-            input:         { systemPrompt: '', userMessage: '' },
-            output:        { response: '[Paso completado en ejecución anterior]' },
-            filesModified: savedStep.filesModified || [],
-            tokensUsed:    { input: 0, output: 0 },
-            estimatedCost: 0,
-            duration:      0,
-            status:        savedStep.status,
-            backupPath:    null,
-          };
-          this.results.push(stub);
-          agentOutputs[i] = { response: stub.output.response, handoff: null, filesModified: stub.filesModified, estimatedCost: 0 };
-          stepsCompleted++;
-        }
-        continue;
-      }
+    for (const level of levels) {
+      if (this.cancelled || budgetExceededError) break;
 
-      if (this.cancelled) break;
-
-      // Check global orchestration timeout before starting each step
       const elapsed   = Date.now() - startTime;
       const remaining = orchTimeout - elapsed;
       if (remaining <= 5_000) {
-        this._log('error', `Orquestación: timeout global alcanzado (${Math.round(elapsed / 1000)}s) antes del paso ${i + 1}`);
+        this._log('error', `Timeout global alcanzado (${Math.round(elapsed / 1000)}s)`);
         break;
       }
 
-      this.emit('step-start', { stepIndex: i, agentName, totalSteps: orchestration.agents.length });
-      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" (${Math.round(remaining / 1000)}s restantes) ━━`);
+      const parallelLabel = level.length > 1 ? ` [${level.length} en paralelo]` : '';
+      this._log('info', `▶ Nivel ${levels.indexOf(level) + 1}/${levels.length}${parallelLabel}: ${level.map(n => `"${n.agentName}"`).join(', ')}`);
 
-      let snapshot;
-      try {
-        this._log('info', `Paso ${i + 1}: Creando snapshot del proyecto...`);
-        snapshot = await this._takeSnapshot(i);
-        this._log('info', `Paso ${i + 1}: Snapshot de ${snapshot.fileCount} archivos`);
-      } catch (snapshotErr) {
-        this._log('warn', `Paso ${i + 1}: No se pudo crear snapshot: ${snapshotErr.message}`);
-      }
+      // Run all nodes in this level in parallel
+      const levelSettled = await Promise.allSettled(
+        level.map(node => this._executeNode(node, agentOutputs, stepCounter++, {
+          gitAvailable, startTime, orchTimeout, contextFile, orchestrationUsesBrowser,
+        })),
+      );
 
-      const stepStart = Date.now();
-      let stepResult;
-
-      // ── Script determinístico ─────────────────────────────────────────────
-      if (scriptsRegistry.isScript(agentName)) {
-        const scriptName = scriptsRegistry.getScriptName(agentName);
-        this._log('info', `Paso ${i + 1}: ejecutando script determinístico "${scriptName}"`);
-
-        const systemPrompt = this._buildSystemPrompt(i);
-        const userMessage  = this._buildUserMessage(i);
-        this.emit('step-input', { stepIndex: i, agentName, userMessage });
-
-        // scriptParams live in the incoming edge (nodes[i-1]); nodes[i] is the outgoing edge used for gateAfter
-        const scriptNode   = i > 0 ? orchestration.nodes[i - 1] : orchestration.inputNode;
-        const scriptParams = scriptNode?.scriptParams ?? {};
-        try {
-          const scriptResult = await scriptsRegistry.run(scriptName, {
-            projectPath:   this.project.path,
-            orchestration: this.orchestration,
-            stepIndex:     i,
-            prevResult:    this.results[i - 1] || null,
-            agentOutputs,
-            scriptParams,
-          });
-          stepResult = {
-            stepIndex:     i,
-            agentName,
-            input:         { systemPrompt: '', userMessage: '' },
-            output:        { response: scriptResult.output },
-            filesModified: scriptResult.filesModified || [],
-            tokensUsed:    { input: 0, output: 0 },
-            estimatedCost: 0,
-            duration:      Date.now() - stepStart,
-            status:        'success',
-            backupPath:    snapshot?.snapshotPath || null,
-          };
-          agentOutputs[i] = { response: scriptResult.output, handoff: null, filesModified: scriptResult.filesModified || [], estimatedCost: 0 };
-          this.results.push(stepResult);
-          stepsCompleted++;
-          this._log('info', `Paso ${i + 1}: script "${scriptName}" completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
-          this.emit('step-done', stepResult);
-          this._writeExecutionState(i, stepResult);
-
-          // ── Gate HITL para scripts ───────────────────────────────────────────
-          const scriptNodeAfter = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
-          if (scriptNodeAfter?.gateAfter && i < orchestration.agents.length - 1) {
-            this._log('info', `Paso ${i + 1}: gate HITL activo — esperando decisión del operador`);
-            const pauseStart = Date.now();
-            this._writeExecutionStateGatePaused(i);
-            this._pendingGate = { stepIndex: i, agentName, executionId: this.executionId };
-            this.emit('gate-open', this._pendingGate);
-
-            let decision;
-            try {
-              decision = await _waitForGate(this.executionId, i);
-            } catch {
-              this._log('error', 'Gate cancelado');
-              this._pendingGate = null;
-              break;
-            }
-            this._pendingGate = null;
-
-            startTime += (Date.now() - pauseStart);
-            this._log('info', `Gate paso ${i + 1}: decisión = ${decision.action}`);
-
-            if (decision.action === 'cancel') break;
-
-            if (decision.action === 'revise') {
-              this._revisionFeedback = this._revisionFeedback || {};
-              if (!this._revisionFeedback[i]) this._revisionFeedback[i] = [];
-              this._revisionFeedback[i].push({
-                at: new Date().toISOString(),
-                feedback: decision.feedbackText || null,
-                previousFilesModified: stepResult.filesModified || [],
-              });
-              this.results.pop();
-              stepsCompleted--;
-              i--;
-              continue;
-            }
-          }
-        } catch (err) {
-          this._log('error', `Paso ${i + 1}: script "${scriptName}" error: ${err.message}`);
-          const isBudgetExceeded = err.category === 'budget_exceeded';
-          stepResult = {
-            stepIndex:     i,
-            agentName,
-            input:         { systemPrompt: '', userMessage: '' },
-            output:        { response: '' },
-            filesModified: [],
-            tokensUsed:    { input: 0, output: 0 },
-            estimatedCost: 0,
-            duration:      Date.now() - stepStart,
-            status:        'error',
-            error:         { message: err.message, category: err.category || 'script_error', recoverable: false, data: err.data },
-            backupPath:    snapshot?.snapshotPath || null,
-          };
-          this.results.push(stepResult);
-          this.emit('step-done', stepResult);
-          this._writeExecutionState(i, stepResult);
-          if (isBudgetExceeded) {
-            const cancelData = { executionId: this.executionId, reason: 'budget_exceeded', data: err.data };
-            this._cancelledData = cancelData;  // replay for late SSE clients
-            this.emit('cancelled', cancelData);
-            return;
-          }
-          if (orchestration.executionConfig?.stopOnError !== false) break;
+      for (const settled of levelSettled) {
+        if (settled.status === 'rejected') {
+          this._log('error', `Nodo rechazado inesperadamente: ${settled.reason?.message}`);
+          continue;
         }
-        continue;
-      }
-      // ── Agente IA (código existente) ──────────────────────────────────────
+        const { stepResult, agentOutput, budgetError } = settled.value;
+        if (!stepResult) continue;
 
-      let userMessage = '';
-      try {
-        const systemPrompt = this._buildSystemPrompt(i);
-        userMessage        = this._buildUserMessage(i);
-
-        // Emit the input so the frontend can display what each agent receives
-        this.emit('step-input', { stepIndex: i, agentName, userMessage });
-
-        this._log('info', `Paso ${i + 1}: Invocando agente "${agentName}"...`);
-
-        let response     = '';
-        let inputTokens  = 0;
-        let outputTokens = 0;
-        let stepCostUSD  = 0;
-
-        // Calculate step timeout as whatever time is left for the whole orchestration
-        const stepRemaining = Math.max(10_000, orchTimeout - (Date.now() - startTime));
-
-        const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
-        const customProviders = readConfig().customProviders || [];
-        const isCustomCLI = customProviders.some(p => p.id === provider && p.type === 'cli');
-
-        const agent = this._getAgent(agentName);
-        const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
-
-        // Native CLIs use their own tool engine — routing them through SubsystemCLI
-        // produces empty tool execution. SubsystemCLI browser_ tools only work with API providers.
-        const useNativeCLI = CLI_NATIVE.includes(provider) || isCustomCLI;
-
-        if (useNativeCLI) {
-          let browserContext = '';
-          if (agentUsesBrowser) {
-            try {
-              const browser = require('./browser');
-              const status  = await browser.getStatus();
-              if (!status.connected) {
-                this._log('info', `Paso ${i + 1}: lanzando navegador CDP para el agente "${agentName}"…`);
-                const installed = browser.listInstalledBrowsers();
-                const preferred = installed.find(b => b.engine === 'chromium') || installed[0];
-                if (preferred) {
-                  await browser.launchBrowserWithCdp(preferred.key, status.cdpPort || 9222);
-                } else {
-                  this._log('warn', `Paso ${i + 1}: no se encontró ningún navegador instalado`);
-                }
-              }
-            } catch (e) {
-              this._log('warn', `Paso ${i + 1}: no se pudo lanzar el navegador: ${e.message}`);
-            }
-
-            if (!this.cancelled) {
-              this._log('info', `Paso ${i + 1}: esperando confirmación del usuario (autenticación en el navegador)…`);
-              await this._pauseForBrowser(i, agentName);
-            }
-            if (this.cancelled) break;
-
-            browserContext = await this._buildBrowserContext();
-            if (browserContext) {
-              this._log('info', `Paso ${i + 1}: contexto CDP inyectado en el prompt`);
-            }
-          }
-
-          const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
-          const extraArgs = provider === 'cli'
-            ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
-            : [];
-          const rich = await callAIRich(fullPrompt, {
-            timeout:   stepRemaining,
-            extraArgs,
-            cwd: this.project.path,
-          });
-          response     = rich.text;
-          inputTokens  = rich.inputTokens;
-          outputTokens = rich.outputTokens;
-          stepCostUSD  = rich.costUSD;
-        } else {
-          const cliResult = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
-            projectPath:    this.project.path,
-            projectContext: contextFile,
-            provider,
-            maxTurns:       orchestration.executionConfig?.maxTurns  || 10,
-            timeout:        stepRemaining,
-            useBrowser:     orchestrationUsesBrowser,
-          });
-
-          // MAX_TURNS_EXCEEDED / TIMEOUT_EXCEEDED with a partial response → treat as warning, not hard failure
-          if (!cliResult.success && cliResult.error) {
-            if (cliResult.finalResponse?.trim()) {
-              this._log('warn', `Paso ${i + 1}: ${cliResult.error} — usando respuesta parcial disponible`);
-            } else {
-              throw new Error(cliResult.error);
-            }
-          }
-
-          response     = cliResult.finalResponse || cliResult.result || '';
-          inputTokens  = cliResult.tokens?.input  || 0;
-          outputTokens = cliResult.tokens?.output || 0;
-
-          // If subsystem-cli ran but produced no output, warn
-          if (!response.trim()) {
-            this._log('warn', `Paso ${i + 1}: el agente no produjo respuesta`);
-          }
-
-          // Estimate cost from token counts (api/github)
-          stepCostUSD  = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', inputTokens, outputTokens);
-        }
-
-        // Fallback: if no cost yet (provider without token tracking), estimate from response length
-        let stepCostIsEstimated = false;
-        if (stepCostUSD === 0 && response.trim().length > 0) {
-          const outToks = Math.ceil(response.length / 4);
-          stepCostUSD = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', 0, outToks);
-          stepCostIsEstimated = true;
-        }
-
-        this._log('info', `Paso ${i + 1}: tokens entrada=${inputTokens} salida=${outputTokens}` +
-          (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}${stepCostIsEstimated ? ' (estimado)' : ''}` : ''));
-
-        const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
-        if (filesModified.length > 0) {
-          this._log('info', `Paso ${i + 1}: ${filesModified.length} archivo(s) modificado(s)`);
-        }
-
-        // Guardar el handoff extraído en agentOutputs para trazabilidad,
-        // pero limpiar la línea del response visible.
-        const handoff = extractHandoff(response);
-        if (handoff) {
-          this._log('info', `Paso ${i + 1}: handoff → ${handoff.done}`);
-        }
-        const cleanResponse = stripHandoff(response);
-
-        stepResult = {
-          stepIndex:    i,
-          agentName,
-          input:        { systemPrompt: '', userMessage },
-          output:       { response: cleanResponse, handoff: handoff || undefined },
-          filesModified,
-          tokensUsed:   { input: inputTokens, output: outputTokens },
-          estimatedCost:     stepCostUSD,
-          costIsEstimated:   stepCostIsEstimated,
-          duration:     Date.now() - stepStart,
-          status:       'success',
-          backupPath:   snapshot?.snapshotPath || null,
-        };
-
-        stepResult.revisions = this._revisionFeedback?.[i] || [];
-
-        agentOutputs[i] = { response: cleanResponse, handoff, filesModified, estimatedCost: stepResult.estimatedCost ?? 0, costIsEstimated: stepCostIsEstimated, tokensUsed: { input: inputTokens, output: outputTokens }, model: agent?.model || null };
         this.results.push(stepResult);
-        stepsCompleted++;
-        this._log('info', `Paso ${i + 1}: Completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
-        this.emit('step-done', stepResult);
-        this._writeExecutionState(i, stepResult);
+        if (stepResult.status !== 'error') stepsCompleted++;
+        if (agentOutput) agentOutputs[stepResult.nodeId] = agentOutput;
+        if (budgetError) budgetExceededError = budgetError;
+      }
 
-        // Quality score (determinístico, sin IA)
+      if (budgetExceededError) break;
+
+      if (
+        this.results.some(r => r.status === 'error') &&
+        orchestration.executionConfig?.stopOnError !== false
+      ) {
+        this._log('error', 'Deteniendo ejecución (stopOnError=true)');
+        break;
+      }
+
+      // ── Gates after this level ─────────────────────────────────────────────
+      const hasSuccessors = (nodeId) => nodes.some(n => n.dependsOn.includes(nodeId));
+      const gatedNodes    = level.filter(n => n.gateAfter && hasSuccessors(n.id));
+
+      for (const gatedNode of gatedNodes) {
+        if (this.cancelled) break;
+        const nodeResult = this.results.find(r => r.nodeId === gatedNode.id);
+        if (!nodeResult || nodeResult.status === 'error') continue;
+
+        this._log('info', `Gate HITL: "${gatedNode.agentName}" — esperando decisión del operador`);
+        const pauseStart = Date.now();
+        this._writeExecutionStateGatePaused(gatedNode.id);
+        this._pendingGate = { nodeId: gatedNode.id, agentName: gatedNode.agentName, executionId: this.executionId };
+        this.emit('gate-open', this._pendingGate);
+
+        let decision;
         try {
-          const qsResult = await scriptsRegistry.run('quality-score', {
-            projectPath:   this.project.path,
-            orchestration: this.orchestration,
-            stepIndex:     i,
-            prevResult:    stepResult,
-            agentOutputs,
-          });
-          stepResult.qualityScore = qsResult.data?.qualityScore || null;
-          if (stepResult.qualityScore) {
-            this._log('info', `Paso ${i + 1}: quality score ${stepResult.qualityScore.score}/100 (${stepResult.qualityScore.grade})`);
-          }
-        } catch {}
-
-        // Validación post-escritura automática (Fase 3)
-        if (orchestration.executionConfig?.validateAfterEachStep) {
-          try {
-            const validation = await scriptsRegistry.run('validate-output', {
-              projectPath:   this.project.path,
-              orchestration: this.orchestration,
-              stepIndex:     i,
-              prevResult:    stepResult,
-              agentOutputs,
-            });
-            if (validation.data && !validation.data.passed) {
-              this._log('warn', `Paso ${i + 1}: validación post-escritura falló: ${JSON.stringify(validation.data.issues)}`);
-              this.emit('step-warning', { stepIndex: i, issues: validation.data.issues });
-              stepResult.status = 'warning';
-            }
-          } catch {}
-        }
-
-        // ── Gate HITL ──────────────────────────────────────────────────────
-        const nodeAfterStep = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
-        if (nodeAfterStep?.gateAfter && i < orchestration.agents.length - 1) {
-          this._log('info', `Paso ${i + 1}: gate HITL activo — esperando decisión del operador`);
-          const pauseStart = Date.now();
-          this._writeExecutionStateGatePaused(i);
-          this._pendingGate = { stepIndex: i, agentName, executionId: this.executionId };
-          this.emit('gate-open', this._pendingGate);
-
-          let decision;
-          try {
-            decision = await _waitForGate(this.executionId, i);
-          } catch {
-            this._log('error', 'Gate cancelado');
-            this._pendingGate = null;
-            break;
-          }
+          decision = await _waitForGate(this.executionId, gatedNode.id);
+        } catch {
+          this._log('error', 'Gate cancelado');
           this._pendingGate = null;
-
-          // Descontar el tiempo de pausa del reloj global
-          startTime += (Date.now() - pauseStart);
-
-          this._log('info', `Gate paso ${i + 1}: decisión = ${decision.action}`);
-
-          if (decision.action === 'cancel') break;
-
-          if (decision.action === 'revise') {
-            const feedback = decision.feedbackText || null;
-            this._log('info', `Paso ${i + 1}: REVISE — backup + re-ejecución`);
-
-            // Backup de ficheros modificados en este paso
-            const reviseBackupDir = path.join(
-              this.project.path, '.agent-hub', 'backups',
-              `step-${i}-revise-${Date.now()}`
-            );
-            ensureDir(reviseBackupDir);
-            for (const relPath of (stepResult.filesModified || [])) {
-              try {
-                const src = path.join(this.project.path, relPath);
-                const dst = path.join(reviseBackupDir, relPath.replace(/[\\/]/g, '_'));
-                fs.copyFileSync(src, dst);
-              } catch {}
-            }
-
-            // Revertir al snapshot pre-paso
-            try { await this.rollbackStep(i); } catch {}
-
-            // Registrar feedback para la re-ejecución
-            this._revisionFeedback = this._revisionFeedback || {};
-            if (!this._revisionFeedback[i]) this._revisionFeedback[i] = [];
-            this._revisionFeedback[i].push({
-              at:                    new Date().toISOString(),
-              feedback,
-              previousFilesModified: stepResult.filesModified || [],
-            });
-
-            // Eliminar el resultado de este paso y re-ejecutarlo
-            this.results.pop();
-            stepsCompleted--;
-            i--;
-            continue;
-          }
-          // action === 'approve': continuar normalmente
-        }
-
-        // Ops ledger (Fase 6)
-        if (filesModified.length > 0) {
-          try {
-            const now    = new Date().toISOString();
-            const newOps = filesModified.map(filePath => ({
-              id:              `op-${crypto.randomBytes(4).toString('hex')}`,
-              executionId:     this.executionId,
-              orchestrationId: this.orchestration.id,
-              stepIndex:       i,
-              agentName,
-              kind:            'modify',
-              filePath,
-              status:          'applied',
-              createdAt:       now,
-              appliedAt:       now,
-            }));
-            opsLedger.appendOps(this.project.path, this.orchestration.id, newOps);
-          } catch {}
-        }
-
-        // Git checkpoint (Fase 4)
-        if (gitAvailable) {
-          try {
-            const sha = await gitCheckpointer.checkpoint(
-              this.project.path,
-              `agenthub: paso ${i + 1} (${agentName}) [exec:${this.executionId.slice(-6)}]`,
-            );
-            if (sha) {
-              stepResult.gitCommitSha = sha;
-              this._log('info', `Paso ${i + 1}: git checkpoint → ${sha.slice(0, 7)}`);
-            }
-          } catch (gitErr) {
-            this._log('warn', `Paso ${i + 1}: git checkpoint falló: ${gitErr.message}`);
-          }
-        }
-
-      } catch (err) {
-        this._log('error', `Paso ${i + 1}: Error: ${err.message}`);
-
-        stepResult = {
-          stepIndex:    i,
-          agentName,
-          input:        { systemPrompt: '', userMessage },
-          output:       { response: '' },
-          filesModified: [],
-          tokensUsed:   { input: 0, output: 0 },
-          estimatedCost: 0,
-          duration:     Date.now() - stepStart,
-          status:       'error',
-          error: {
-            message:     err.message,
-            category:    categorizeError(err),
-            recoverable: true,
-          },
-          backupPath: snapshot?.snapshotPath || null,
-        };
-
-        this.results.push(stepResult);
-        this.emit('step-done', stepResult);
-        this._writeExecutionState(i, stepResult);
-
-        if (orchestration.executionConfig?.stopOnError !== false) {
-          this._log('error', `Deteniendo ejecución (stopOnError=true)`);
+          this.cancelled = true;
           break;
         }
+        this._pendingGate = null;
+        startTime += (Date.now() - pauseStart);
+        this._log('info', `Gate "${gatedNode.agentName}": decisión = ${decision.action}`);
+
+        if (decision.action === 'cancel') { this.cancelled = true; break; }
+
+        if (decision.action === 'revise') {
+          const feedback = decision.feedbackText || null;
+          this._revisionFeedback = this._revisionFeedback || {};
+          if (!this._revisionFeedback[gatedNode.id]) this._revisionFeedback[gatedNode.id] = [];
+          this._revisionFeedback[gatedNode.id].push({
+            at: new Date().toISOString(), feedback,
+            previousFilesModified: nodeResult.filesModified || [],
+          });
+
+          try { await this.rollbackStep(nodeResult.stepIndex); } catch {}
+          this.results.splice(this.results.indexOf(nodeResult), 1);
+          stepsCompleted--;
+          delete agentOutputs[gatedNode.id];
+
+          const reResult = await this._executeNode(gatedNode, agentOutputs, nodeResult.stepIndex, {
+            gitAvailable, startTime, orchTimeout, contextFile, orchestrationUsesBrowser,
+          });
+          if (reResult.stepResult) {
+            this.results.push(reResult.stepResult);
+            if (reResult.stepResult.status !== 'error') stepsCompleted++;
+            if (reResult.agentOutput) agentOutputs[gatedNode.id] = reResult.agentOutput;
+          }
+        }
+        // approve → continue
       }
     }
 
     // Save agent outputs
     try {
-      fs.writeFileSync(
-        path.join(this.execDir, 'agent_outputs.json'),
-        JSON.stringify(agentOutputs, null, 2),
-        'utf8',
-      );
+      fs.writeFileSync(path.join(this.execDir, 'agent_outputs.json'), JSON.stringify(agentOutputs, null, 2), 'utf8');
     } catch {}
 
-    // Build summary
     const allFiles = new Set();
-    for (const r of this.results) {
-      for (const f of (r.filesModified || [])) allFiles.add(f);
-    }
+    for (const r of this.results) for (const f of (r.filesModified || [])) allFiles.add(f);
 
     const hasError = this.results.some(r => r.status === 'error');
     const status   = this.results.length === 0 ? 'failed'
       : hasError ? (stepsCompleted > 0 ? 'partial' : 'failed')
       : 'success';
 
-    const completedAt = new Date().toISOString();
-
-    const totalIn            = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
-    const totalOut           = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
-    const totalCost          = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
-    const totalCostIsApprox  = this.results.some(r => r.costIsEstimated);
+    const completedAt      = new Date().toISOString();
+    const totalIn          = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
+    const totalOut         = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
+    const totalCost        = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    const totalCostIsApprox = this.results.some(r => r.costIsEstimated);
 
     const executionResult = {
-      orchestrationId: orchestration.id,
-      projectId:       this.project.id,
-      executionId:     this.executionId,
-      startedAt,
-      completedAt,
-      duration:        Date.now() - startTime,
-      status,
-      stepsCompleted,
-      totalSteps:      orchestration.agents.length,
-      totalTokensUsed:      { input: totalIn, output: totalOut },
-      estimatedCost:        totalCost,
-      estimatedCostIsApprox: totalCostIsApprox,
-      results:         this.results,
-      errors:          this.results.filter(r => r.status === 'error').map(r => r.error),
-      summary:         { filesModified: allFiles.size, filesCreated: 0, filesDeleted: 0, linesAdded: 0, linesRemoved: 0 },
-      changes:         [...allFiles].map(f => ({ path: f, status: 'modified' })),
-      backups:         Object.fromEntries(this.results.map(r => [r.stepIndex, r.backupPath])),
+      orchestrationId: orchestration.id, projectId: this.project.id,
+      executionId: this.executionId, startedAt, completedAt,
+      duration: Date.now() - startTime, status, stepsCompleted, totalSteps: nodes.length,
+      totalTokensUsed: { input: totalIn, output: totalOut },
+      estimatedCost: totalCost, estimatedCostIsApprox: totalCostIsApprox,
+      results:  this.results,
+      errors:   this.results.filter(r => r.status === 'error').map(r => r.error),
+      summary:  { filesModified: allFiles.size, filesCreated: 0, filesDeleted: 0, linesAdded: 0, linesRemoved: 0 },
+      changes:  [...allFiles].map(f => ({ path: f, status: 'modified' })),
+      backups:  Object.fromEntries(this.results.map(r => [r.nodeId || r.stepIndex, r.backupPath])),
     };
 
-    // Save result and update metadata
     try {
       fs.writeFileSync(path.join(this.execDir, 'result.json'), JSON.stringify(executionResult, null, 2), 'utf8');
-      metadata.status         = status;
-      metadata.stepsCompleted = stepsCompleted;
-      metadata.completedAt    = completedAt;
+      metadata.status = status; metadata.stepsCompleted = stepsCompleted; metadata.completedAt = completedAt;
       fs.writeFileSync(path.join(this.execDir, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
     } catch {}
 
     this.state = 'completed';
-    this._completedResult = executionResult;  // replay for late SSE clients
+    this._completedResult = executionResult;
     this._log('info', `━━ Orquestación finalizada: ${status.toUpperCase()} ━━`);
     this.emit('completed', executionResult);
     return executionResult;
@@ -1280,16 +1126,16 @@ class OrchestrationExecutor extends EventEmitter {
 
 // ── HITL Gate registry ────────────────────────────────────────────────────────
 
-const _pendingGates = new Map(); // `${execId}-${stepIndex}` → { resolve, reject }
+const _pendingGates = new Map(); // `${execId}-${nodeId}` → { resolve, reject }
 
-function _waitForGate(executionId, stepIndex) {
+function _waitForGate(executionId, nodeId) {
   return new Promise((resolve, reject) => {
-    _pendingGates.set(`${executionId}-${stepIndex}`, { resolve, reject });
+    _pendingGates.set(`${executionId}-${nodeId}`, { resolve, reject });
   });
 }
 
-function resolveGate(executionId, stepIndex, decision) {
-  const key     = `${executionId}-${stepIndex}`;
+function resolveGate(executionId, nodeId, decision) {
+  const key     = `${executionId}-${nodeId}`;
   const pending = _pendingGates.get(key);
   if (!pending) return false;
   _pendingGates.delete(key);

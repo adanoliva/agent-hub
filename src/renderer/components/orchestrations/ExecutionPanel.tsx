@@ -98,7 +98,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [revertingOpId,  setRevertingOpId]  = useState<string | null>(null);
 
   // Gate HITL state
-  const [gateOpen,      setGateOpen]      = useState<{ stepIndex: number; agentName: string } | null>(null);
+  const [gateOpen,      setGateOpen]      = useState<{ nodeId: string; agentName: string } | null>(null);
   const [gateDecision,  setGateDecision]  = useState<'revise' | null>(null);
   const [gateFeedback,  setGateFeedback]  = useState('');
   const [gateResolving, setGateResolving] = useState(false);
@@ -118,32 +118,21 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const execStartedAt  = useRef<string>(new Date().toISOString());
   const stepsDoneRef   = useRef<StepResult[]>([]);
 
-  // Collect all temporal context fields: inputNode first, then inter-agent nodes
-  const temporalFields = [
-    ...(orchestration.inputNode?.contextExtra?.temporal || []).map(t => ({
-      nodeIndex:   -1,
+  // Temporal context fields — keyed by nodeId (DAG format)
+  const temporalFields = orchestration.nodes.flatMap(node =>
+    (node.contextExtra?.temporal || []).map(t => ({
+      nodeId:      node.id,
       tempId:      t.id,
-      key:         `input-${t.id}`,
+      key:         `${node.id}-${t.id}`,
       label:       t.label,
       type:        t.type,
       placeholder: t.placeholder,
       required:    t.required,
-    })),
-    ...orchestration.nodes.flatMap((node, nodeIdx) =>
-      (node.contextExtra?.temporal || []).map(t => ({
-        nodeIndex:   nodeIdx,
-        tempId:      t.id,
-        key:         `${nodeIdx}-${t.id}`,
-        label:       t.label,
-        type:        t.type,
-        placeholder: t.placeholder,
-        required:    t.required,
-      }))
-    ),
-  ];
+    }))
+  );
 
   useEffect(() => {
-    const names = new Set(orchestration.agents);
+    const names = new Set(orchestration.nodes.map(n => n.agentName));
     const pid   = projectId;
     setAgentsLoading(true);
     setAgentsLoadError(false);
@@ -169,7 +158,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
     }).finally(() => {
       setAgentsLoading(false);
     });
-  }, [orchestration.id, orchestration.agents.join(','), projectId]);
+  }, [orchestration.id, orchestration.nodes.map(n => n.agentName).join(','), projectId]);
 
   const needsBrowser = useMemo(
     () => agentObjects.some(a => a.tools?.some(t => t.startsWith('browser_'))),
@@ -319,7 +308,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         try {
           const payload = JSON.parse(e.data);
           const data    = payload.data || payload;
-          setGateOpen({ stepIndex: data.stepIndex, agentName: data.agentName });
+          setGateOpen({ nodeId: data.nodeId, agentName: data.agentName });
           setGateDecision(null);
           setGateFeedback('');
         } catch {}
@@ -359,7 +348,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
           duration:        Date.now() - new Date(execStartedAt.current).getTime(),
           status:          'failed' as const,
           stepsCompleted:  doneSteps.length,
-          totalSteps:      orchestration.agents.length,
+          totalSteps:      orchestration.nodes.length,
           totalTokensUsed: { input: 0, output: 0 },
           estimatedCost:   0,
           results:         doneSteps,
@@ -418,7 +407,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
       await req('POST', `/orchestrations/${orchestration.id}/executions/${executionId}/gate`, {
         action,
         feedbackText: action === 'revise' ? gateFeedback : undefined,
-        stepIndex:    gateOpen.stepIndex,
+        nodeId:       gateOpen.nodeId,
       });
       setGateOpen(null);
       setGateDecision(null);
@@ -501,7 +490,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
           <div className="orch-exec-info">
             <div className="orch-exec-info-item">
               <i className="ti ti-cpu" />
-              <span>{orchestration.agents.length} agentes en secuencia</span>
+              <span>{orchestration.nodes.length} agente{orchestration.nodes.length !== 1 ? 's' : ''}</span>
             </div>
             <div className="orch-exec-info-item">
               <i className="ti ti-clock" />
@@ -516,27 +505,24 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
           </div>
 
           {temporalFields.length > 0 && (() => {
-            const getNodeLabel = (nodeIndex: number) => {
-              if (nodeIndex === -1) return `Orquestador → ${orchestration.agents[0] ?? ''}`;
-              const n = orchestration.nodes[nodeIndex];
-              if (!n) return `Conexión ${nodeIndex + 1}`;
-              return `${orchestration.agents[n.from]} → ${orchestration.agents[n.to]}`;
-            };
             const groups = temporalFields.reduce((acc, f) => {
-              (acc[f.nodeIndex] ??= []).push(f);
+              (acc[f.nodeId] ??= []).push(f);
               return acc;
-            }, {} as Record<number, typeof temporalFields>);
-            const sortedIndices = Object.keys(groups).map(Number).sort((a, b) => a - b);
+            }, {} as Record<string, typeof temporalFields>);
+            const nodeOrder = orchestration.nodes.map(n => n.id);
+            const sortedIds = Object.keys(groups).sort((a, b) => nodeOrder.indexOf(a) - nodeOrder.indexOf(b));
             return (
               <section className="orch-exec-section">
                 <h4><i className="ti ti-input-check" /> Contexto adicional</h4>
-                {sortedIndices.map(nodeIdx => (
-                  <div key={nodeIdx}>
+                {sortedIds.map(nodeId => {
+                  const node = orchestration.nodes.find(n => n.id === nodeId);
+                  return (
+                  <div key={nodeId}>
                     <div className="orch-exec-node-label">
-                      <i className="ti ti-arrows-exchange" />
-                      {getNodeLabel(nodeIdx)}
+                      <i className="ti ti-cpu" />
+                      {node?.agentName ?? nodeId}
                     </div>
-                    {groups[nodeIdx].map(f => (
+                    {groups[nodeId].map(f => (
                       <div key={f.key} className="orch-exec-field">
                         <label>
                           {f.label || f.key}
@@ -565,7 +551,8 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                       </div>
                     ))}
                   </div>
-                ))}
+                  );
+                })}
               </section>
             );
           })()}
@@ -768,10 +755,11 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
 
           {/* Step-by-step data flow */}
           <div className="orch-steps-flow">
-            {orchestration.agents.map((agentName, i) => {
-              const done    = stepsDone.find(s => s.stepIndex === i);
-              const input   = stepInputs.find(s => s.stepIndex === i);
-              const isActive = !done && i === currentStepIndex;
+            {orchestration.nodes.map((node, i) => {
+              const agentName = node.agentName;
+              const done      = stepsDone.find(s => s.nodeId === node.id || s.stepIndex === i);
+              const input     = stepInputs.find(s => (s as any).nodeId === node.id || s.stepIndex === i);
+              const isActive  = !done && i === currentStepIndex;
               return (
                 <div key={i} className={`orch-step-flow-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
                   <div className="orch-step-flow-head">
