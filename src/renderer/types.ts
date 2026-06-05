@@ -388,7 +388,7 @@ export interface DashboardNotification {
 export interface DashboardData {
   agents:         { total: number; global: number; section: number; tech: number; uncategorized: number };
   projects:       { total: number; active: number; paused: number; archived: number; withPending: number; totalPending: number };
-  orchestrations: { total: number; success: number; failed: number; partial: number; neverRun: number };
+  orchestrations: { total: number; success: number; failed: number; partial: number; neverRun: number; totalCost: number; totalCostIsApprox: boolean };
   lastSyncAt: string | null;
   dirStatus: { enabled: boolean; syncing: boolean; lastSync: string | null; pendingConflicts: SyncConflict[]; lastResult: any };
   projectHealth?: Array<{

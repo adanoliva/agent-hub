@@ -326,6 +326,11 @@ export function Dashboard() {
                     {data.orchestrations.neverRun > 0 && (
                       <span><i className="ti ti-circle-filled" style={{ color: 'var(--text3)', fontSize: 7 }} /> Sin ejecutar: {data.orchestrations.neverRun}</span>
                     )}
+                    {data.orchestrations.totalCost > 0 && (
+                      <span style={{ color: 'var(--text2)' }}>
+                        <i className="ti ti-coin" style={{ fontSize: 9 }} /> ${data.orchestrations.totalCost.toFixed(4)}{data.orchestrations.totalCostIsApprox && <span style={{ color: 'var(--text3)' }}> aprox</span>}
+                      </span>
+                    )}
                   </div>
                 </button>
               </>

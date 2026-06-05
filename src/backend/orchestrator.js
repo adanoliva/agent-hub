@@ -995,11 +995,19 @@ class OrchestrationExecutor extends EventEmitter {
           }
 
           // Estimate cost from token counts (api/github)
-          stepCostUSD  = calcAnthropicCost('claude-sonnet-4-20250514', inputTokens, outputTokens);
+          stepCostUSD  = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', inputTokens, outputTokens);
+        }
+
+        // Fallback: if no cost yet (provider without token tracking), estimate from response length
+        let stepCostIsEstimated = false;
+        if (stepCostUSD === 0 && response.trim().length > 0) {
+          const outToks = Math.ceil(response.length / 4);
+          stepCostUSD = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', 0, outToks);
+          stepCostIsEstimated = true;
         }
 
         this._log('info', `Paso ${i + 1}: tokens entrada=${inputTokens} salida=${outputTokens}` +
-          (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}` : ''));
+          (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}${stepCostIsEstimated ? ' (estimado)' : ''}` : ''));
 
         const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
         if (filesModified.length > 0) {
@@ -1021,7 +1029,8 @@ class OrchestrationExecutor extends EventEmitter {
           output:       { response: cleanResponse, handoff: handoff || undefined },
           filesModified,
           tokensUsed:   { input: inputTokens, output: outputTokens },
-          estimatedCost: stepCostUSD,
+          estimatedCost:     stepCostUSD,
+          costIsEstimated:   stepCostIsEstimated,
           duration:     Date.now() - stepStart,
           status:       'success',
           backupPath:   snapshot?.snapshotPath || null,
@@ -1029,7 +1038,7 @@ class OrchestrationExecutor extends EventEmitter {
 
         stepResult.revisions = this._revisionFeedback?.[i] || [];
 
-        agentOutputs[i] = { response: cleanResponse, handoff, filesModified, estimatedCost: stepResult.estimatedCost ?? 0 };
+        agentOutputs[i] = { response: cleanResponse, handoff, filesModified, estimatedCost: stepResult.estimatedCost ?? 0, costIsEstimated: stepCostIsEstimated, tokensUsed: { input: inputTokens, output: outputTokens }, model: agent?.model || null };
         this.results.push(stepResult);
         stepsCompleted++;
         this._log('info', `Paso ${i + 1}: Completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
@@ -1224,9 +1233,10 @@ class OrchestrationExecutor extends EventEmitter {
 
     const completedAt = new Date().toISOString();
 
-    const totalIn   = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
-    const totalOut  = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
-    const totalCost = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    const totalIn            = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
+    const totalOut           = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
+    const totalCost          = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    const totalCostIsApprox  = this.results.some(r => r.costIsEstimated);
 
     const executionResult = {
       orchestrationId: orchestration.id,
@@ -1238,8 +1248,9 @@ class OrchestrationExecutor extends EventEmitter {
       status,
       stepsCompleted,
       totalSteps:      orchestration.agents.length,
-      totalTokensUsed: { input: totalIn, output: totalOut },
-      estimatedCost:   totalCost,
+      totalTokensUsed:      { input: totalIn, output: totalOut },
+      estimatedCost:        totalCost,
+      estimatedCostIsApprox: totalCostIsApprox,
       results:         this.results,
       errors:          this.results.filter(r => r.status === 'error').map(r => r.error),
       summary:         { filesModified: allFiles.size, filesCreated: 0, filesDeleted: 0, linesAdded: 0, linesRemoved: 0 },

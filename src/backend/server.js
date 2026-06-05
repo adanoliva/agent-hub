@@ -641,6 +641,7 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 
 function buildOrchestrationStats(projects) {
   let total = 0, success = 0, failed = 0, partial = 0;
+  let totalCost = 0, totalCostIsApprox = false;
   for (const project of projects) {
     if (!project.path || project.pathExists === false) continue;
     const orchDir = path.join(project.path, '.agent-hub', 'orchestrations');
@@ -653,11 +654,15 @@ function buildOrchestrationStats(projects) {
           if      (orch.lastExecutionStatus === 'success') success++;
           else if (orch.lastExecutionStatus === 'failed')  failed++;
           else if (orch.lastExecutionStatus === 'partial') partial++;
+          if (orch.lastExecutionCost) {
+            totalCost += orch.lastExecutionCost;
+            if (orch.lastExecutionCostIsApprox) totalCostIsApprox = true;
+          }
         } catch { /* skip corrupt JSON */ }
       }
     } catch { /* skip unreadable dir */ }
   }
-  return { total, success, failed, partial, neverRun: total - success - failed - partial };
+  return { total, success, failed, partial, neverRun: total - success - failed - partial, totalCost, totalCostIsApprox };
 }
 
 function buildDashboardNotifications(allAgents, projects, categories = []) {
@@ -1680,9 +1685,11 @@ app.post('/api/orchestrations/:id/execute', async (req, res) => {
         if (current) {
           workflows.update(orch.id, project.path, {
             ...current,
-            lastExecutedAt:     result.completedAt,
-            lastExecutionStatus: result.status,
-            executionCount:      (current.executionCount || 0) + 1,
+            lastExecutedAt:           result.completedAt,
+            lastExecutionStatus:      result.status,
+            executionCount:           (current.executionCount || 0) + 1,
+            lastExecutionCost:        result.estimatedCost        || 0,
+            lastExecutionCostIsApprox: result.estimatedCostIsApprox || false,
           });
         }
       } catch {}

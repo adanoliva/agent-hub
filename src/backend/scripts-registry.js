@@ -235,22 +235,24 @@ const SCRIPTS = {
     }
 
     const outputs = Object.values(agentOutputs);
-    const spent   = outputs.reduce((sum, r) => sum + (r.estimatedCost ?? 0), 0);
 
-    // Si hay pasos completados y todos tienen coste 0, el proveedor no reporta coste.
-    // Continuamos pero avisamos — detener la orquestación con spent=0 no tendría sentido.
-    const hasAgentSteps   = outputs.some(r => r.estimatedCost !== undefined);
-    const providerNoCost  = hasAgentSteps && spent === 0;
-
-    if (providerNoCost) {
-      return {
-        output:        'budget-guard: el proveedor de IA activo no reporta coste (CLI o proveedor sin tracking de tokens). El control de presupuesto no tiene efecto.',
-        filesModified: [],
-        data:          { spent: 0, limit, providerNoCost: true },
-      };
-    }
+    // The orchestrator guarantees estimatedCost > 0 for all AI steps (real or text-length fallback).
+    // costIsEstimated flags steps where the provider didn't report tokens.
+    let isEstimated = false;
+    const spent = outputs.reduce((sum, r) => {
+      if (r.costIsEstimated) isEstimated = true;
+      return sum + (r.estimatedCost ?? 0);
+    }, 0);
 
     if (spent >= limit) {
+      if (isEstimated) {
+        // Soft warning — estimated values are approximate, don't hard-stop
+        return {
+          output:        `⚠ budget-guard: coste estimado $${spent.toFixed(4)} supera el límite de $${limit.toFixed(4)} (proveedor sin tracking nativo — valores aproximados). La orquestación continúa.`,
+          filesModified: [],
+          data:          { spent, limit, isEstimated: true, limitExceeded: true },
+        };
+      }
       const err = new Error(
         `Presupuesto agotado: $${spent.toFixed(4)} gastado de $${limit.toFixed(4)} permitidos`
       );
@@ -259,10 +261,11 @@ const SCRIPTS = {
       throw err;
     }
 
+    const note = isEstimated ? ' (estimado)' : '';
     return {
-      output:        `Presupuesto OK: $${spent.toFixed(4)} de $${limit.toFixed(4)} (${((spent / limit) * 100).toFixed(1)}% usado)`,
+      output:        `Presupuesto OK: $${spent.toFixed(4)}${note} de $${limit.toFixed(4)} (${((spent / limit) * 100).toFixed(1)}% usado)`,
       filesModified: [],
-      data:          { spent, limit, remaining: limit - spent },
+      data:          { spent, limit, remaining: limit - spent, isEstimated },
     };
   },
 
