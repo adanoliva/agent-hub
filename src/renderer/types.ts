@@ -242,6 +242,7 @@ export interface ContextExtra {
   temporal: TemporalContext[];
 }
 
+/** @deprecated Formato lineal — migrado automáticamente a OrchestrationNode al leer */
 export interface OrchestrateNode {
   id:           string;
   from:         number;
@@ -249,6 +250,19 @@ export interface OrchestrateNode {
   dataFlow:     DataFlow;
   contextExtra: ContextExtra;
   gateAfter?:   boolean;
+  scriptParams?: Record<string, unknown>;
+}
+
+/** Nodo del grafo DAG de orquestación paralela */
+export interface OrchestrationNode {
+  id:            string;          // UUID estable del nodo
+  agentName:     string;          // nombre del agente o "__script:name__"
+  dependsOn:     string[];        // ids de nodos predecesores ([] = nodo raíz)
+  x?:            number;          // posición en el canvas (px)
+  y?:            number;
+  dataFlow:      DataFlow;
+  contextExtra:  ContextExtra;
+  gateAfter?:    boolean;
   scriptParams?: Record<string, unknown>;
 }
 
@@ -267,15 +281,19 @@ export interface Orchestration {
   name:                 string;
   description:          string;
   enabled:              boolean;
-  agents:               string[];
-  nodes:                OrchestrateNode[];
-  inputNode?:           OrchestrateNode;  // Orquestador → Agent[0] connection
+  nodes:                OrchestrationNode[];   // DAG — único formato desde v2.3
   executionConfig:      ExecutionConfig;
   createdAt:            string;
   updatedAt:            string;
   lastExecutedAt?:      string;
   lastExecutionStatus?: 'success' | 'partial' | 'failed';
   executionCount:       number;
+  lastExecutionCost?:         number;
+  lastExecutionCostIsApprox?: boolean;
+  // Campos legacy (formato lineal) — presentes solo al leer ficheros antiguos
+  // antes de que migrateOrchestration() los transforme. No usar directamente.
+  /** @deprecated */ agents?:    string[];
+  /** @deprecated */ inputNode?: OrchestrateNode;
 }
 
 export interface QualityScore {
@@ -308,6 +326,7 @@ export interface StepRevision {
 
 export interface StepResult {
   stepIndex:     number;
+  nodeId?:       string;   // id del nodo DAG (disponible desde v2.3)
   agentName:     string;
   input:         { systemPrompt: string; userMessage: string };
   output:        { response: string; handoff?: { done: string; changed: string[]; issues: string[]; next: string }; toolCalls?: unknown[]; toolResults?: unknown[] };

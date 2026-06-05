@@ -14,7 +14,7 @@ Las orquestaciones actuales son estrictamente lineales: `agents: string[]` recor
 
 ## Fase 1 — Modelo de datos
 
-**Estado:** ⬜ No iniciada
+**Estado:** ✅ Completada
 
 ### Objetivo
 Reemplazar el modelo lineal (`agents[]` + `nodes[]` de conexiones) por un modelo de nodos unificado donde cada nodo declara sus dependencias explícitamente.
@@ -61,11 +61,13 @@ interface OrchestrationNode {
 
 ### Checklist Fase 1
 
-- [ ] Añadir `OrchestrationNode` a `types.ts`
-- [ ] Actualizar interfaz `Orchestration` en `types.ts`
-- [ ] Escribir `migrateOrchestration(raw)` en `workflows.js`
-- [ ] Aplicar migración en `read()` y `list()`
-- [ ] Aplicar migración en `create()` si viene formato antiguo
+- [x] Añadir `OrchestrationNode` a `types.ts`
+- [x] Actualizar interfaz `Orchestration` en `types.ts`
+- [x] Escribir `migrateOrchestration(raw)` en `workflows.js`
+- [x] Aplicar migración en `read()` y `list()`
+- [x] Aplicar migración en `create()` si viene formato antiguo
+- [x] `migrateOrchestration` exportada para uso en Fase 2
+- [x] `nodeId?: string` añadido a `StepResult` en `types.ts`
 - [ ] Test manual: abrir orquestación existente → verificar que el JSON migrado es correcto
 - [ ] Test manual: crear orquestación nueva → verificar que se guarda con el nuevo formato
 

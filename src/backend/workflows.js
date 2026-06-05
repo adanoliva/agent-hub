@@ -30,22 +30,70 @@ function generateId() {
   return `orch-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 }
 
+// ── Migration: linear → DAG ───────────────────────────────────────────────────
+
+const DEFAULT_DATAFLOW = { agentOutput: false, filesModified: false, projectContext: true };
+const DEFAULT_CONTEXT  = { fixed: { freeText: '', files: [] }, temporal: [] };
+
+/**
+ * Converts a legacy linear orchestration (agents[] + nodes[] + inputNode)
+ * to the DAG format (nodes: OrchestrationNode[]).
+ * Already-migrated orchestrations (no agents[]) are returned unchanged.
+ */
+function migrateOrchestration(raw) {
+  if (!raw || !Array.isArray(raw.agents)) return raw;
+
+  const agents    = raw.agents;
+  const oldEdges  = Array.isArray(raw.nodes) ? raw.nodes : [];
+  const inputNode = raw.inputNode;
+
+  const newNodes = agents.map((agentName, i) => {
+    const nodeId = `node-${i}`;
+    const x = 300;
+    const y = 80 + i * 180;
+
+    if (i === 0) {
+      return {
+        id:           nodeId,
+        agentName,
+        dependsOn:    [],
+        x, y,
+        dataFlow:     inputNode?.dataFlow     ?? DEFAULT_DATAFLOW,
+        contextExtra: inputNode?.contextExtra ?? DEFAULT_CONTEXT,
+      };
+    }
+
+    // Edge nodes[i-1] carries the config for the connection from agent[i-1] → agent[i]
+    const edge = oldEdges[i - 1];
+    return {
+      id:           nodeId,
+      agentName,
+      dependsOn:    [`node-${i - 1}`],
+      x, y,
+      dataFlow:     edge?.dataFlow     ?? DEFAULT_DATAFLOW,
+      contextExtra: edge?.contextExtra ?? DEFAULT_CONTEXT,
+      ...(edge?.gateAfter    != null ? { gateAfter:    edge.gateAfter }    : {}),
+      ...(edge?.scriptParams != null ? { scriptParams: edge.scriptParams } : {}),
+    };
+  });
+
+  // Drop legacy fields, return with new nodes
+  const { agents: _a, nodes: _n, inputNode: _in, ...rest } = raw;
+  return { ...rest, nodes: newNodes };
+}
+
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 /**
  * Create a new orchestration for a project.
  */
 function create(projectId, projectPath, data) {
-  const id = generateId();
+  const id  = generateId();
   const now = new Date().toISOString();
 
-  const defaultInputNode = data.inputNode || {
-    id:           `input-node-${Date.now()}`,
-    from:         -1,
-    to:           0,
-    dataFlow:     { agentOutput: false, filesModified: false, projectContext: true },
-    contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
-  };
+  // Accept both legacy (agents[]+nodes[]+inputNode) and new (nodes: OrchestrationNode[]) formats
+  const migrated = migrateOrchestration(data);
+  const nodes    = Array.isArray(migrated.nodes) ? migrated.nodes : [];
 
   const orch = {
     id,
@@ -53,9 +101,7 @@ function create(projectId, projectPath, data) {
     name:        data.name        || 'Nueva orquestación',
     description: data.description || '',
     enabled:     true,
-    agents:      Array.isArray(data.agents) ? data.agents : [],
-    nodes:       Array.isArray(data.nodes)  ? data.nodes  : [],
-    inputNode:   defaultInputNode,
+    nodes,
     executionConfig: {
       stopOnError:           true,
       validateAfterEachStep: false,
@@ -80,7 +126,7 @@ function read(orchestrationId, projectPath) {
   const filePath = path.join(getOrchDir(projectPath), `${orchestrationId}.json`);
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return migrateOrchestration(JSON.parse(fs.readFileSync(filePath, 'utf8')));
   } catch {
     return null;
   }
@@ -122,7 +168,7 @@ function list(projectPath) {
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.json') && !f.startsWith('.'))
     .map(f => {
-      try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); }
+      try { return migrateOrchestration(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); }
       catch { return null; }
     })
     .filter(Boolean)
@@ -207,4 +253,5 @@ module.exports = {
   getExecution,
   findExecutionDir,
   getExecDir,
+  migrateOrchestration,
 };
