@@ -228,6 +228,24 @@ function formatHandoffAsInput(handoff, fromAgent) {
   return lines.join('\n');
 }
 
+function skillContent({ name, description, language }) {
+  const isEs = language === 'es';
+  const langInstr = isEs
+    ? 'Write the content block entirely in Spanish.'
+    : 'Write the content block entirely in English.';
+
+  return [
+    `Generate the content block for a skill named "${name}".`,
+    description ? `Description: ${description}` : '',
+    '',
+    'A skill is a Markdown block injected into an AI agent\'s system prompt to provide technology-specific context.',
+    'It must contain: a short h2 heading, bullet points with conventions/patterns/constraints, and brief code examples when useful.',
+    'Do NOT include frontmatter. Do NOT include meta-commentary. Output only the Markdown content block.',
+    'Target length: 20–40 lines. Dense, actionable, no filler.',
+    langInstr,
+  ].filter(Boolean).join('\n');
+}
+
 module.exports = {
   agentPrompt,
   optimizeAgent,
@@ -237,4 +255,5 @@ module.exports = {
   adaptForProvider,
   agentHandoffInstruction,
   formatHandoffAsInput,
+  skillContent,
 };

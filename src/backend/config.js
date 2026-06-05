@@ -10,7 +10,7 @@
  *     agents/
  *       global/
  *       section-{id}/
- *       tech-{catId}-{techId}/
+ *     skills/
  *     cache/
  */
 
@@ -45,15 +45,17 @@ function getAssetsDir() {
   return path.join(process.resourcesPath, 'assets');
 }
 
-const APP_DIR    = getAppDir();
-const CONFIG_FILE = path.join(APP_DIR, 'config.json');
-const AGENTS_DIR  = path.join(APP_DIR, 'agents');
-const CACHE_DIR   = path.join(APP_DIR, 'cache');
+const APP_DIR      = getAppDir();
+const CONFIG_FILE  = path.join(APP_DIR, 'config.json');
+const AGENTS_DIR   = path.join(APP_DIR, 'agents');
+const CACHE_DIR    = path.join(APP_DIR, 'cache');
+const SKILLS_DIR   = path.join(AGENTS_DIR, 'skills');
+const SCRIPTS_DIR  = path.join(APP_DIR, 'user-scripts');
 
 // ── Default config ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-  version: '1.9.4',
+  version: '2.2.0',
   aiProvider: 'cli',
 
   // Anthropic API
@@ -104,49 +106,18 @@ const DEFAULT_CONFIG = {
   codexCliModel: 'o4-mini',
 
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
+  externalScriptsTimeoutMs: 60000,
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
   agentsDirectoryEnabled: true,
   dismissedDashboardNotifications: [],
   snoozedDashboardNotifications: {},
   categories: [
-    {
-      id: 'games',
-      name: 'Juegos',
-      icon: 'ti-device-gamepad-2',
-      color: '#3ecf8e',
-      technologies: [
-        { id: 'unity', name: 'Unity' },
-        { id: 'godot', name: 'Godot' },
-      ],
-    },
-    {
-      id: 'web',
-      name: 'Aplicaciones Web',
-      icon: 'ti-world',
-      color: '#60a5fa',
-      technologies: [
-        { id: 'react',     name: 'React'     },
-        { id: 'fullstack', name: 'Fullstack' },
-        { id: 'nextjs',    name: 'Next.js'   },
-      ],
-    },
-    {
-      id: 'mobile',
-      name: 'Apps Móviles',
-      icon: 'ti-device-mobile',
-      color: '#fbbf24',
-      technologies: [
-        { id: 'react-native', name: 'React Native' },
-        { id: 'pwa',          name: 'PWA'          },
-      ],
-    },
-    {
-      id: 'docs',
-      name: 'Documentación',
-      icon: 'ti-file-description',
-      color: '#fb7185',
-      technologies: [],
-    },
+    { id: 'frontend', name: 'Frontend',   icon: 'ti-layout',            color: '#60a5fa', technologies: [] },
+    { id: 'backend',  name: 'Backend',    icon: 'ti-server',            color: '#34d399', technologies: [] },
+    { id: 'mobile',   name: 'Mobile',     icon: 'ti-device-mobile',     color: '#a78bfa', technologies: [] },
+    { id: 'devops',   name: 'DevOps',     icon: 'ti-settings-2',        color: '#fbbf24', technologies: [] },
+    { id: 'data',     name: 'Data / IA',  icon: 'ti-chart-bar',         color: '#fb923c', technologies: [] },
+    { id: 'games',    name: 'Games',      icon: 'ti-device-gamepad-2',  color: '#f472b6', technologies: [] },
   ],
   projects: [],
 };
@@ -191,11 +162,10 @@ function writeConfig(cfg) {
 
 // ── Agent dir resolver ────────────────────────────────────────────────────────
 
-function getAgentDir(level, sectionId, techId) {
+function getAgentDir(level, sectionId) {
   switch (level) {
     case 'global':        return path.join(AGENTS_DIR, 'global');
     case 'section':       return path.join(AGENTS_DIR, `section-${sectionId}`);
-    case 'tech':          return path.join(AGENTS_DIR, `tech-${sectionId}-${techId}`);
     case 'uncategorized': return path.join(AGENTS_DIR, 'uncategorized');
     default:              return null;
   }
@@ -210,14 +180,13 @@ function getAgentDir(level, sectionId, techId) {
 function bootstrapDirectories(cfg) {
   ensureDir(AGENTS_DIR);
   ensureDir(CACHE_DIR);
+  ensureDir(SKILLS_DIR);
+  try { ensureDir(SCRIPTS_DIR); } catch (e) { console.warn('[config] No se pudo crear scripts/:', e.message); }
   ensureDir(path.join(AGENTS_DIR, 'global'));
   ensureDir(path.join(AGENTS_DIR, 'uncategorized'));
 
   for (const cat of (cfg.categories || [])) {
     ensureDir(path.join(AGENTS_DIR, `section-${cat.id}`));
-    for (const tech of (cat.technologies || [])) {
-      ensureDir(path.join(AGENTS_DIR, `tech-${cat.id}-${tech.id}`));
-    }
   }
 }
 
@@ -228,6 +197,8 @@ module.exports = {
   CONFIG_FILE,
   AGENTS_DIR,
   CACHE_DIR,
+  SKILLS_DIR,
+  SCRIPTS_DIR,
   readConfig,
   writeConfig,
   bootstrapDirectories,

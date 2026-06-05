@@ -13,8 +13,12 @@ const { EventEmitter } = require('events');
 
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
-const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS } = require('./ai');
-const prompts = require('./prompts');
+const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS, CLI_PROVIDERS } = require('./ai');
+const prompts           = require('./prompts');
+const scriptsRegistry   = require('./scripts-registry');
+const gitCheckpointer   = require('./git-checkpointer');
+const opsLedger         = require('./ops-ledger');
+const crypto2           = crypto; // alias for ops id generation
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -123,8 +127,8 @@ class OrchestrationExecutor extends EventEmitter {
   cancel() {
     if (this.state === 'running') {
       this.cancelled = true;
-      // Also resolve any pending browser pause so the loop can exit cleanly
       if (this._browserContinueFn) { this._browserContinueFn(); this._browserContinueFn = null; }
+      this._pendingGate = null;
       this._log('warn', 'Ejecución cancelada por el usuario');
       this.emit('cancelled', { executionId: this.executionId });
     }
@@ -345,6 +349,20 @@ class OrchestrationExecutor extends EventEmitter {
       }
     }
 
+    // Inyectar skills del agente (Fase 5)
+    if (agent?.skills?.length > 0) {
+      try {
+        const { listAllSkills } = require('./skills');
+        const allSkills = listAllSkills();
+        for (const skillName of agent.skills) {
+          const skill = allSkills.find(s => s.name === skillName);
+          if (skill?.content?.trim()) {
+            prompt += `\n\n# SKILL: ${skill.name}\n${skill.content.trim()}`;
+          }
+        }
+      } catch {}
+    }
+
     if (!isLastStep) prompt += prompts.agentHandoffInstruction();
 
     return prompt;
@@ -352,6 +370,15 @@ class OrchestrationExecutor extends EventEmitter {
 
   _buildUserMessage(stepIndex) {
     let message = '';
+
+    // Inyectar feedback de revisión si existe para este paso
+    const revisions = this._revisionFeedback?.[stepIndex];
+    if (revisions?.length > 0) {
+      const latest = revisions[revisions.length - 1];
+      if (latest.feedback) {
+        message += `## Feedback del operador (revisión ${revisions.length})\n\n${latest.feedback}\n\n`;
+      }
+    }
 
     if (stepIndex === 0) {
       // Step 0: use inputNode temporal contexts (user inputs at execution time)
@@ -480,6 +507,21 @@ class OrchestrationExecutor extends EventEmitter {
   }
 
   async rollbackStep(stepIndex) {
+    // Intentar rollback git si hay SHA disponible para el paso anterior
+    if (this.project.gitEnabled) {
+      const stepRes = this.results.find(r => r.stepIndex === stepIndex);
+      if (stepRes?.gitCommitSha) {
+        const prevRes = this.results.find(r => r.stepIndex === stepIndex - 1);
+        const targetSha = prevRes?.gitCommitSha;
+        if (targetSha) {
+          try {
+            await gitCheckpointer.rollbackToSha(this.project.path, targetSha);
+            return;
+          } catch {}
+        }
+      }
+    }
+
     const snapshotPath = path.join(this.execDir, 'backups', `pre-step-${stepIndex}.json`);
     if (!fs.existsSync(snapshotPath)) {
       throw new Error(`Backup no encontrado para el paso ${stepIndex}`);
@@ -520,6 +562,13 @@ class OrchestrationExecutor extends EventEmitter {
 
     const allAgents = this._getAllAgents();
     for (const agentName of (orchestration.agents || [])) {
+      if (scriptsRegistry.isScript(agentName)) {
+        const scriptName = scriptsRegistry.getScriptName(agentName);
+        if (!scriptsRegistry.hasScript(scriptName)) {
+          errors.push(`Script no registrado: "${scriptName}" (en "${agentName}")`);
+        }
+        continue;
+      }
       if (!allAgents.find(a => a.name === agentName)) {
         errors.push(`Agente no encontrado: "${agentName}"`);
       }
@@ -573,6 +622,51 @@ class OrchestrationExecutor extends EventEmitter {
     return { valid: errors.length === 0, errors };
   }
 
+  // ── Incremental execution state ──────────────────────────────────────────
+
+  _writeExecutionState(lastCompletedStep, stepResult) {
+    if (!this.execDir) return;
+    const statePath = path.join(this.execDir, 'execution-state.json');
+    const tmp       = statePath + '.tmp';
+    const state = {
+      executionId:       this.executionId,
+      orchestrationId:   this.orchestration.id,
+      projectId:         this.project.id,
+      status:            'running',
+      lastCompletedStep,
+      startedAt:         this._startedAt,
+      steps: {
+        ...(this._executionState?.steps || {}),
+        [lastCompletedStep]: {
+          status:        stepResult.status,
+          filesModified: stepResult.filesModified,
+        },
+      },
+    };
+    this._executionState = state;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf8');
+      fs.renameSync(tmp, statePath);
+    } catch {}
+  }
+
+  _writeExecutionStateGatePaused(stepIndex) {
+    if (!this.execDir) return;
+    const statePath = path.join(this.execDir, 'execution-state.json');
+    const tmp       = statePath + '.tmp';
+    const state = {
+      ...(this._executionState || {}),
+      status:         'paused_gate',
+      pausedAtStep:   stepIndex,
+      pauseStartedAt: new Date().toISOString(),
+    };
+    this._executionState = state;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf8');
+      fs.renameSync(tmp, statePath);
+    } catch {}
+  }
+
   // ── Execute ───────────────────────────────────────────────────────────────
 
   async execute() {
@@ -601,12 +695,20 @@ class OrchestrationExecutor extends EventEmitter {
     };
     fs.writeFileSync(path.join(this.execDir, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
 
+    this._startedAt = startedAt;
+    this._executionState = null;
+
+    // Git checkpointing (Fase 4)
+    const gitAvailable = this.project.gitEnabled
+      ? await gitCheckpointer.isGitRepo(this.project.path)
+      : false;
+
     this.state = 'running';
     this._log('info', `Orquestación iniciada: "${orchestration.name}"`);
     this._log('info', `Proveedor: ${provider} | Pasos: ${orchestration.agents.length}`);
 
-    const orchTimeout  = orchestration.executionConfig?.timeout || 300_000;
-    const startTime    = Date.now();
+    const orchTimeout  = orchestration.executionConfig?.timeout || 1_800_000;
+    let   startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
 
@@ -636,6 +738,29 @@ class OrchestrationExecutor extends EventEmitter {
       const agentName = orchestration.agents[i];
       this.currentStep = i;
 
+      // Si es una reanudación, saltar los pasos ya completados
+      if (this._resumeFromStep !== undefined && i < this._resumeFromStep) {
+        const savedStep = this._executionState?.steps?.[i];
+        if (savedStep) {
+          const stub = {
+            stepIndex:     i,
+            agentName,
+            input:         { systemPrompt: '', userMessage: '' },
+            output:        { response: '[Paso completado en ejecución anterior]' },
+            filesModified: savedStep.filesModified || [],
+            tokensUsed:    { input: 0, output: 0 },
+            estimatedCost: 0,
+            duration:      0,
+            status:        savedStep.status,
+            backupPath:    null,
+          };
+          this.results.push(stub);
+          agentOutputs[i] = { response: stub.output.response, handoff: null, filesModified: stub.filesModified, estimatedCost: 0 };
+          stepsCompleted++;
+        }
+        continue;
+      }
+
       if (this.cancelled) break;
 
       // Check global orchestration timeout before starting each step
@@ -646,8 +771,8 @@ class OrchestrationExecutor extends EventEmitter {
         break;
       }
 
-      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" (${Math.round(remaining / 1000)}s restantes) ━━`);
       this.emit('step-start', { stepIndex: i, agentName, totalSteps: orchestration.agents.length });
+      this._log('info', `━━ Paso ${i + 1}/${orchestration.agents.length}: "${agentName}" (${Math.round(remaining / 1000)}s restantes) ━━`);
 
       let snapshot;
       try {
@@ -661,9 +786,119 @@ class OrchestrationExecutor extends EventEmitter {
       const stepStart = Date.now();
       let stepResult;
 
-      try {
+      // ── Script determinístico ─────────────────────────────────────────────
+      if (scriptsRegistry.isScript(agentName)) {
+        const scriptName = scriptsRegistry.getScriptName(agentName);
+        this._log('info', `Paso ${i + 1}: ejecutando script determinístico "${scriptName}"`);
+
         const systemPrompt = this._buildSystemPrompt(i);
         const userMessage  = this._buildUserMessage(i);
+        this.emit('step-input', { stepIndex: i, agentName, userMessage });
+
+        // scriptParams live in the incoming edge (nodes[i-1]); nodes[i] is the outgoing edge used for gateAfter
+        const scriptNode   = i > 0 ? orchestration.nodes[i - 1] : orchestration.inputNode;
+        const scriptParams = scriptNode?.scriptParams ?? {};
+        try {
+          const scriptResult = await scriptsRegistry.run(scriptName, {
+            projectPath:   this.project.path,
+            orchestration: this.orchestration,
+            stepIndex:     i,
+            prevResult:    this.results[i - 1] || null,
+            agentOutputs,
+            scriptParams,
+          });
+          stepResult = {
+            stepIndex:     i,
+            agentName,
+            input:         { systemPrompt: '', userMessage: '' },
+            output:        { response: scriptResult.output },
+            filesModified: scriptResult.filesModified || [],
+            tokensUsed:    { input: 0, output: 0 },
+            estimatedCost: 0,
+            duration:      Date.now() - stepStart,
+            status:        'success',
+            backupPath:    snapshot?.snapshotPath || null,
+          };
+          agentOutputs[i] = { response: scriptResult.output, handoff: null, filesModified: scriptResult.filesModified || [], estimatedCost: 0 };
+          this.results.push(stepResult);
+          stepsCompleted++;
+          this._log('info', `Paso ${i + 1}: script "${scriptName}" completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
+          this.emit('step-done', stepResult);
+          this._writeExecutionState(i, stepResult);
+
+          // ── Gate HITL para scripts ───────────────────────────────────────────
+          const scriptNodeAfter = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
+          if (scriptNodeAfter?.gateAfter && i < orchestration.agents.length - 1) {
+            this._log('info', `Paso ${i + 1}: gate HITL activo — esperando decisión del operador`);
+            const pauseStart = Date.now();
+            this._writeExecutionStateGatePaused(i);
+            this._pendingGate = { stepIndex: i, agentName, executionId: this.executionId };
+            this.emit('gate-open', this._pendingGate);
+
+            let decision;
+            try {
+              decision = await _waitForGate(this.executionId, i);
+            } catch {
+              this._log('error', 'Gate cancelado');
+              this._pendingGate = null;
+              break;
+            }
+            this._pendingGate = null;
+
+            startTime += (Date.now() - pauseStart);
+            this._log('info', `Gate paso ${i + 1}: decisión = ${decision.action}`);
+
+            if (decision.action === 'cancel') break;
+
+            if (decision.action === 'revise') {
+              this._revisionFeedback = this._revisionFeedback || {};
+              if (!this._revisionFeedback[i]) this._revisionFeedback[i] = [];
+              this._revisionFeedback[i].push({
+                at: new Date().toISOString(),
+                feedback: decision.feedbackText || null,
+                previousFilesModified: stepResult.filesModified || [],
+              });
+              this.results.pop();
+              stepsCompleted--;
+              i--;
+              continue;
+            }
+          }
+        } catch (err) {
+          this._log('error', `Paso ${i + 1}: script "${scriptName}" error: ${err.message}`);
+          const isBudgetExceeded = err.category === 'budget_exceeded';
+          stepResult = {
+            stepIndex:     i,
+            agentName,
+            input:         { systemPrompt: '', userMessage: '' },
+            output:        { response: '' },
+            filesModified: [],
+            tokensUsed:    { input: 0, output: 0 },
+            estimatedCost: 0,
+            duration:      Date.now() - stepStart,
+            status:        'error',
+            error:         { message: err.message, category: err.category || 'script_error', recoverable: false, data: err.data },
+            backupPath:    snapshot?.snapshotPath || null,
+          };
+          this.results.push(stepResult);
+          this.emit('step-done', stepResult);
+          this._writeExecutionState(i, stepResult);
+          if (isBudgetExceeded) {
+            const cancelData = { executionId: this.executionId, reason: 'budget_exceeded', data: err.data };
+            this._cancelledData = cancelData;  // replay for late SSE clients
+            this.emit('cancelled', cancelData);
+            return;
+          }
+          if (orchestration.executionConfig?.stopOnError !== false) break;
+        }
+        continue;
+      }
+      // ── Agente IA (código existente) ──────────────────────────────────────
+
+      let userMessage = '';
+      try {
+        const systemPrompt = this._buildSystemPrompt(i);
+        userMessage        = this._buildUserMessage(i);
 
         // Emit the input so the frontend can display what each agent receives
         this.emit('step-input', { stepIndex: i, agentName, userMessage });
@@ -723,7 +958,7 @@ class OrchestrationExecutor extends EventEmitter {
 
           const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
           const extraArgs = provider === 'cli'
-            ? ['--dangerously-skip-permissions', '--max-turns', maxTurns]
+            ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
             : [];
           const rich = await callAIRich(fullPrompt, {
             timeout:   stepRemaining,
@@ -763,11 +998,19 @@ class OrchestrationExecutor extends EventEmitter {
           }
 
           // Estimate cost from token counts (api/github)
-          stepCostUSD  = calcAnthropicCost('claude-sonnet-4-20250514', inputTokens, outputTokens);
+          stepCostUSD  = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', inputTokens, outputTokens);
+        }
+
+        // Fallback: if no cost yet (provider without token tracking), estimate from response length
+        let stepCostIsEstimated = false;
+        if (stepCostUSD === 0 && response.trim().length > 0) {
+          const outToks = Math.ceil(response.length / 4);
+          stepCostUSD = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', 0, outToks);
+          stepCostIsEstimated = true;
         }
 
         this._log('info', `Paso ${i + 1}: tokens entrada=${inputTokens} salida=${outputTokens}` +
-          (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}` : ''));
+          (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}${stepCostIsEstimated ? ' (estimado)' : ''}` : ''));
 
         const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
         if (filesModified.length > 0) {
@@ -789,17 +1032,155 @@ class OrchestrationExecutor extends EventEmitter {
           output:       { response: cleanResponse, handoff: handoff || undefined },
           filesModified,
           tokensUsed:   { input: inputTokens, output: outputTokens },
-          estimatedCost: stepCostUSD,
+          estimatedCost:     stepCostUSD,
+          costIsEstimated:   stepCostIsEstimated,
           duration:     Date.now() - stepStart,
           status:       'success',
           backupPath:   snapshot?.snapshotPath || null,
         };
 
-        agentOutputs[i] = { response: cleanResponse, handoff, filesModified };
+        stepResult.revisions = this._revisionFeedback?.[i] || [];
+
+        agentOutputs[i] = { response: cleanResponse, handoff, filesModified, estimatedCost: stepResult.estimatedCost ?? 0, costIsEstimated: stepCostIsEstimated, tokensUsed: { input: inputTokens, output: outputTokens }, model: agent?.model || null };
         this.results.push(stepResult);
         stepsCompleted++;
         this._log('info', `Paso ${i + 1}: Completado en ${((Date.now() - stepStart) / 1000).toFixed(1)}s`);
         this.emit('step-done', stepResult);
+        this._writeExecutionState(i, stepResult);
+
+        // Quality score (determinístico, sin IA)
+        try {
+          const qsResult = await scriptsRegistry.run('quality-score', {
+            projectPath:   this.project.path,
+            orchestration: this.orchestration,
+            stepIndex:     i,
+            prevResult:    stepResult,
+            agentOutputs,
+          });
+          stepResult.qualityScore = qsResult.data?.qualityScore || null;
+          if (stepResult.qualityScore) {
+            this._log('info', `Paso ${i + 1}: quality score ${stepResult.qualityScore.score}/100 (${stepResult.qualityScore.grade})`);
+          }
+        } catch {}
+
+        // Validación post-escritura automática (Fase 3)
+        if (orchestration.executionConfig?.validateAfterEachStep) {
+          try {
+            const validation = await scriptsRegistry.run('validate-output', {
+              projectPath:   this.project.path,
+              orchestration: this.orchestration,
+              stepIndex:     i,
+              prevResult:    stepResult,
+              agentOutputs,
+            });
+            if (validation.data && !validation.data.passed) {
+              this._log('warn', `Paso ${i + 1}: validación post-escritura falló: ${JSON.stringify(validation.data.issues)}`);
+              this.emit('step-warning', { stepIndex: i, issues: validation.data.issues });
+              stepResult.status = 'warning';
+            }
+          } catch {}
+        }
+
+        // ── Gate HITL ──────────────────────────────────────────────────────
+        const nodeAfterStep = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
+        if (nodeAfterStep?.gateAfter && i < orchestration.agents.length - 1) {
+          this._log('info', `Paso ${i + 1}: gate HITL activo — esperando decisión del operador`);
+          const pauseStart = Date.now();
+          this._writeExecutionStateGatePaused(i);
+          this._pendingGate = { stepIndex: i, agentName, executionId: this.executionId };
+          this.emit('gate-open', this._pendingGate);
+
+          let decision;
+          try {
+            decision = await _waitForGate(this.executionId, i);
+          } catch {
+            this._log('error', 'Gate cancelado');
+            this._pendingGate = null;
+            break;
+          }
+          this._pendingGate = null;
+
+          // Descontar el tiempo de pausa del reloj global
+          startTime += (Date.now() - pauseStart);
+
+          this._log('info', `Gate paso ${i + 1}: decisión = ${decision.action}`);
+
+          if (decision.action === 'cancel') break;
+
+          if (decision.action === 'revise') {
+            const feedback = decision.feedbackText || null;
+            this._log('info', `Paso ${i + 1}: REVISE — backup + re-ejecución`);
+
+            // Backup de ficheros modificados en este paso
+            const reviseBackupDir = path.join(
+              this.project.path, '.agent-hub', 'backups',
+              `step-${i}-revise-${Date.now()}`
+            );
+            ensureDir(reviseBackupDir);
+            for (const relPath of (stepResult.filesModified || [])) {
+              try {
+                const src = path.join(this.project.path, relPath);
+                const dst = path.join(reviseBackupDir, relPath.replace(/[\\/]/g, '_'));
+                fs.copyFileSync(src, dst);
+              } catch {}
+            }
+
+            // Revertir al snapshot pre-paso
+            try { await this.rollbackStep(i); } catch {}
+
+            // Registrar feedback para la re-ejecución
+            this._revisionFeedback = this._revisionFeedback || {};
+            if (!this._revisionFeedback[i]) this._revisionFeedback[i] = [];
+            this._revisionFeedback[i].push({
+              at:                    new Date().toISOString(),
+              feedback,
+              previousFilesModified: stepResult.filesModified || [],
+            });
+
+            // Eliminar el resultado de este paso y re-ejecutarlo
+            this.results.pop();
+            stepsCompleted--;
+            i--;
+            continue;
+          }
+          // action === 'approve': continuar normalmente
+        }
+
+        // Ops ledger (Fase 6)
+        if (filesModified.length > 0) {
+          try {
+            const now    = new Date().toISOString();
+            const newOps = filesModified.map(filePath => ({
+              id:              `op-${crypto.randomBytes(4).toString('hex')}`,
+              executionId:     this.executionId,
+              orchestrationId: this.orchestration.id,
+              stepIndex:       i,
+              agentName,
+              kind:            'modify',
+              filePath,
+              status:          'applied',
+              createdAt:       now,
+              appliedAt:       now,
+            }));
+            opsLedger.appendOps(this.project.path, this.orchestration.id, newOps);
+          } catch {}
+        }
+
+        // Git checkpoint (Fase 4)
+        if (gitAvailable) {
+          try {
+            const sha = await gitCheckpointer.checkpoint(
+              this.project.path,
+              `agenthub: paso ${i + 1} (${agentName}) [exec:${this.executionId.slice(-6)}]`,
+            );
+            if (sha) {
+              stepResult.gitCommitSha = sha;
+              this._log('info', `Paso ${i + 1}: git checkpoint → ${sha.slice(0, 7)}`);
+            }
+          } catch (gitErr) {
+            this._log('warn', `Paso ${i + 1}: git checkpoint falló: ${gitErr.message}`);
+          }
+        }
 
       } catch (err) {
         this._log('error', `Paso ${i + 1}: Error: ${err.message}`);
@@ -824,6 +1205,7 @@ class OrchestrationExecutor extends EventEmitter {
 
         this.results.push(stepResult);
         this.emit('step-done', stepResult);
+        this._writeExecutionState(i, stepResult);
 
         if (orchestration.executionConfig?.stopOnError !== false) {
           this._log('error', `Deteniendo ejecución (stopOnError=true)`);
@@ -854,9 +1236,10 @@ class OrchestrationExecutor extends EventEmitter {
 
     const completedAt = new Date().toISOString();
 
-    const totalIn   = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
-    const totalOut  = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
-    const totalCost = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    const totalIn            = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
+    const totalOut           = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
+    const totalCost          = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    const totalCostIsApprox  = this.results.some(r => r.costIsEstimated);
 
     const executionResult = {
       orchestrationId: orchestration.id,
@@ -868,8 +1251,9 @@ class OrchestrationExecutor extends EventEmitter {
       status,
       stepsCompleted,
       totalSteps:      orchestration.agents.length,
-      totalTokensUsed: { input: totalIn, output: totalOut },
-      estimatedCost:   totalCost,
+      totalTokensUsed:      { input: totalIn, output: totalOut },
+      estimatedCost:        totalCost,
+      estimatedCostIsApprox: totalCostIsApprox,
       results:         this.results,
       errors:          this.results.filter(r => r.status === 'error').map(r => r.error),
       summary:         { filesModified: allFiles.size, filesCreated: 0, filesDeleted: 0, linesAdded: 0, linesRemoved: 0 },
@@ -887,10 +1271,30 @@ class OrchestrationExecutor extends EventEmitter {
     } catch {}
 
     this.state = 'completed';
+    this._completedResult = executionResult;  // replay for late SSE clients
     this._log('info', `━━ Orquestación finalizada: ${status.toUpperCase()} ━━`);
     this.emit('completed', executionResult);
     return executionResult;
   }
+}
+
+// ── HITL Gate registry ────────────────────────────────────────────────────────
+
+const _pendingGates = new Map(); // `${execId}-${stepIndex}` → { resolve, reject }
+
+function _waitForGate(executionId, stepIndex) {
+  return new Promise((resolve, reject) => {
+    _pendingGates.set(`${executionId}-${stepIndex}`, { resolve, reject });
+  });
+}
+
+function resolveGate(executionId, stepIndex, decision) {
+  const key     = `${executionId}-${stepIndex}`;
+  const pending = _pendingGates.get(key);
+  if (!pending) return false;
+  _pendingGates.delete(key);
+  pending.resolve(decision);
+  return true;
 }
 
 // ── Active executor registry (for SSE) ───────────────────────────────────────
@@ -913,7 +1317,7 @@ module.exports = {
   OrchestrationExecutor,
   registerExecutor,
   getExecutor,
-  // Exported for testing
+  resolveGate,
   extractHandoff,
   stripHandoff,
 };

@@ -15,11 +15,13 @@ export interface Project {
   id: string;
   name: string;
   categoryId: string;
+  /** @deprecated techId is no longer used in new projects — kept for backward compat */
   techId?: string;
   path: string;
   description?: string;
   status: 'active' | 'paused' | 'archived';
   aiProviders: string[]; // Replaces aiProvider
+  skills?: string[];
   selectedAgents?: string[];
   excludedAgents?: string[];
   includedAgents?: string[];
@@ -28,6 +30,7 @@ export interface Project {
   // enriched by listProjectsWithStatus
   pendingUpdates?: number;
   pathExists?: boolean;
+  gitEnabled?: boolean;
 }
 
 export interface ProjectProvider {
@@ -53,11 +56,17 @@ export interface Agent {
   tools?: string[];
   system?: string;
   optimized?: boolean;
-  level?: 'global' | 'section' | 'tech' | 'project';
+  level?: 'global' | 'section' | 'project' | 'uncategorized';
   categoryId?: string;
-  techId?: string;
   projectId?: string;
   suggested?: boolean;
+  skills?: string[];
+}
+
+export interface Skill {
+  name:        string;
+  description: string;
+  content:     string;
 }
 
 export type AIProvider =
@@ -239,6 +248,8 @@ export interface OrchestrateNode {
   to:           number;
   dataFlow:     DataFlow;
   contextExtra: ContextExtra;
+  gateAfter?:   boolean;
+  scriptParams?: Record<string, unknown>;
 }
 
 export interface ExecutionConfig {
@@ -267,6 +278,34 @@ export interface Orchestration {
   executionCount:       number;
 }
 
+export interface QualityScore {
+  score:         number;
+  grade:         'green' | 'amber' | 'red';
+  filesProduced: number;
+  filesExpected: number;
+  jsonValid:     boolean | null;
+  coverageRatio: number | null;
+  checks:        Array<{ name: string; passed: boolean; detail?: string }>;
+}
+
+export interface ExecutionState {
+  executionId:       string;
+  orchestrationId:   string;
+  projectId:         string;
+  status:            'running' | 'completed' | 'failed' | 'paused_gate';
+  lastCompletedStep: number;
+  startedAt:         string;
+  pauseStartedAt?:   string;
+  pausedAtStep?:     number;
+  steps:             Record<string, { status: 'success' | 'error' | 'warning'; filesModified: string[] }>;
+}
+
+export interface StepRevision {
+  at:                    string;
+  feedback:              string | null;
+  previousFilesModified: string[];
+}
+
 export interface StepResult {
   stepIndex:     number;
   agentName:     string;
@@ -279,6 +318,9 @@ export interface StepResult {
   status:        'success' | 'error' | 'warning';
   error?:        { message: string; category: string; recoverable: boolean };
   backupPath:    string | null;
+  qualityScore?: QualityScore;
+  revisions?:    StepRevision[];
+  gitCommitSha?: string;
 }
 
 export interface ExecutionSummary {
@@ -317,9 +359,8 @@ export interface ExecutionLog {
 
 export interface PendingAgentToEdit {
   name: string;
-  level: 'global' | 'section' | 'tech' | 'uncategorized' | 'project';
+  level: 'global' | 'section' | 'uncategorized' | 'project';
   categoryId?: string | null;
-  techId?: string | null;
   projectId?: string | null;
 }
 
@@ -342,13 +383,12 @@ export interface DashboardNotification {
   action:     'open-agent' | 'open-project' | 'sync-project' | 'generate-context' | 'optimize-agent';
   level?:     string;
   categoryId?: string | null;
-  techId?:    string | null;
 }
 
 export interface DashboardData {
   agents:         { total: number; global: number; section: number; tech: number; uncategorized: number };
   projects:       { total: number; active: number; paused: number; archived: number; withPending: number; totalPending: number };
-  orchestrations: { total: number; success: number; failed: number; partial: number; neverRun: number };
+  orchestrations: { total: number; success: number; failed: number; partial: number; neverRun: number; totalCost: number; totalCostIsApprox: boolean };
   lastSyncAt: string | null;
   dirStatus: { enabled: boolean; syncing: boolean; lastSync: string | null; pendingConflicts: SyncConflict[]; lastResult: any };
   projectHealth?: Array<{
@@ -372,7 +412,6 @@ export interface SyncPreviewAgent {
   name: string;
   level: string;
   categoryId: string | null;
-  techId: string | null;
 }
 
 export interface SyncPreview {
@@ -392,9 +431,8 @@ export interface SyncPreview {
 }
 
 export interface SelectedNode {
-  level: 'global' | 'section' | 'tech' | 'project' | 'uncategorized';
+  level: 'global' | 'section' | 'project' | 'uncategorized';
   categoryId: string | null;
-  techId: string | null;
   projectId: string | null;
 }
 
@@ -422,6 +460,27 @@ export interface ProjectContextInfo {
   isDefault:  boolean;
   sizeBytes:  number;
   lastUpdated: string | null;
+}
+
+export interface AtomicOp {
+  id:              string;
+  executionId:     string;
+  orchestrationId: string;
+  stepIndex:       number;
+  agentName:       string;
+  kind:            'add' | 'modify' | 'remove';
+  filePath:        string;
+  status:          'applied' | 'reverted';
+  createdAt:       string;
+  appliedAt:       string;
+  revertedAt?:     string;
+}
+
+export interface OpsLedger {
+  projectId?:       string;
+  orchestrationId:  string;
+  ops:              AtomicOp[];
+  lastUpdated?:     string;
 }
 
 export type ToastType = 'ok' | 'err' | 'info' | 'warn';

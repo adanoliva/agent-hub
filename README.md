@@ -4,11 +4,13 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 
 ## Qué hace
 
-- **Agentes**: crea, edita y sincroniza agentes Claude Code (archivos `.md` con frontmatter YAML) organizados en una jerarquía de 4 niveles: global → categoría → tecnología → proyecto.
-- **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`CLAUDE.md` / `copilot-instructions.md`), sincronización de agentes y ejecución directa.
+- **Agentes**: crea, edita y sincroniza agentes Claude Code (archivos `.md` con frontmatter YAML) organizados en tres niveles: global → categoría → proyecto.
+- **Skills**: bloques de contexto tecnológico (React, PostgreSQL, Unity…) que se inyectan automáticamente en el system prompt del agente al ejecutar. Generables con IA en ES/EN.
+- **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`CLAUDE.md` / `copilot-instructions.md`), sincronización de agentes, skills asignadas y ejecución directa.
 - **Chat**: conversación multi-turno con agentes activos, soporte `@mention`, historial por proyecto.
-- **Orquestaciones**: cadenas de agentes que se ejecutan en secuencia, con protocolo de handoff entre pasos para eficiencia de tokens.
-- **Directorio de agentes**: sincronización automática desde un repositorio GitHub externo con resolución de conflictos.
+- **Orquestaciones**: cadenas de agentes que se ejecutan en secuencia con protocolo HANDOFF, **scripts determinísticos** (sin IA), **gates HITL** para revisión humana entre pasos, **quality score** automático por paso, **git checkpointing**, **ops ledger** de operaciones y reanudación de ejecuciones interrumpidas.
+- **Directorio de agentes**: sincronización automática (agentes + skills) desde un repositorio GitHub externo con resolución de conflictos.
+- **Búsqueda**: búsqueda global de agentes y skills por nombre y descripción con debounce y badges de origen.
 
 ## Stack
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { req, API_BASE } from '../../api';
-import type { Agent, BrowserStatus, Orchestration, ExecutionLog, ExecutionResult, StepResult } from '../../types';
+import type { Agent, BrowserStatus, Orchestration, ExecutionLog, ExecutionResult, StepResult, QualityScore, AtomicOp, OpsLedger } from '../../types';
 import { useStore } from '../../store';
 
 interface Props {
@@ -30,9 +30,43 @@ const STATUS_ICONS: Record<string, string> = {
   failed:  'ti-circle-x',
 };
 
+function fmtAgentName(name: string): string {
+  if (name.startsWith('__script:')) {
+    return name.replace('__script:', '').replace('__', '').replace(/-/g, ' ');
+  }
+  return name;
+}
+
+function QualityBadge({ qs }: { qs: QualityScore }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const colorMap = { green: 'green', amber: 'amber', red: 'coral' } as const;
+  const iconMap  = { green: 'ti-check', amber: 'ti-alert-triangle', red: 'ti-x' } as const;
+  return (
+    <div className="orch-quality-badge-wrap">
+      <button
+        className={`badge ${colorMap[qs.grade]} orch-quality-badge`}
+        onClick={() => setExpanded(v => !v)}
+        title="Quality Score — click para ver detalles"
+      >
+        <i className={`ti ${iconMap[qs.grade]}`} />
+        QS {qs.score}/100
+      </button>
+      {expanded && (
+        <div className="orch-quality-checks">
+          {qs.checks.map((c, i) => (
+            <div key={i} className={`orch-quality-check ${c.passed ? 'passed' : 'failed'}`}>
+              <i className={`ti ${c.passed ? 'ti-check' : 'ti-x'}`} />
+              <span>{c.name}{c.detail ? ` (${c.detail})` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const addToast           = useStore(s => s.addToast);
-  const navigateTo         = useStore(s => s.navigateTo);
   const setIsOrchestrating = useStore(s => s.setIsOrchestrating);
   const config             = useStore(s => s.config);
 
@@ -49,12 +83,25 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [logs,        setLogs]        = useState<ExecutionLog[]>([]);
   const [result,      setResult]      = useState<ExecutionResult | null>(null);
   const [executionId, setExecutionId] = useState<string | null>(null);
-  const [stepsDone,      setStepsDone]      = useState<StepResult[]>([]);
-  const [stepInputs,     setStepInputs]     = useState<StepInput[]>([]);
+  const [stepsDone,        setStepsDone]        = useState<StepResult[]>([]);
+  const [stepInputs,       setStepInputs]       = useState<StepInput[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(-1);
   const [rollingBack,    setRollingBack]     = useState<number | null>(null);
   const [cancelling,     setCancelling]      = useState(false);
+  const [cancelReason,   setCancelReason]    = useState<{ type: 'budget_exceeded'; spent: number; limit: number } | null>(null);
   const [browserPause,   setBrowserPause]    = useState<{ stepIndex: number; agentName: string } | null>(null);
   const [browserContinuing, setBrowserContinuing] = useState(false);
+
+  // Ops ledger state
+  const [opsLedger,      setOpsLedger]      = useState<OpsLedger | null>(null);
+  const [opsTab,         setOpsTab]         = useState<'steps' | 'ops'>('steps');
+  const [revertingOpId,  setRevertingOpId]  = useState<string | null>(null);
+
+  // Gate HITL state
+  const [gateOpen,      setGateOpen]      = useState<{ stepIndex: number; agentName: string } | null>(null);
+  const [gateDecision,  setGateDecision]  = useState<'revise' | null>(null);
+  const [gateFeedback,  setGateFeedback]  = useState('');
+  const [gateResolving, setGateResolving] = useState(false);
 
   // Agent objects — loaded to detect browser tools
   const [agentObjects,     setAgentObjects]     = useState<Agent[]>([]);
@@ -66,8 +113,10 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [browserBusy,    setBrowserBusy]    = useState(false);
   const [browserMsg,     setBrowserMsg]     = useState('');
 
-  const logsEndRef = useRef<HTMLDivElement>(null);
-  const esRef      = useRef<EventSource | null>(null);
+  const logsEndRef     = useRef<HTMLDivElement>(null);
+  const esRef          = useRef<EventSource | null>(null);
+  const execStartedAt  = useRef<string>(new Date().toISOString());
+  const stepsDoneRef   = useRef<StepResult[]>([]);
 
   // Collect all temporal context fields: inputNode first, then inter-agent nodes
   const temporalFields = [
@@ -212,8 +261,12 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
     setResult(null);
     setStepsDone([]);
     setStepInputs([]);
+    setCurrentStepIndex(0);
     setCancelling(false);
+    setCancelReason(null);
     setIsOrchestrating(true);
+    execStartedAt.current  = new Date().toISOString();
+    stepsDoneRef.current   = [];
 
     try {
       const resp = await req<{ executionId: string; status: string }>(
@@ -230,6 +283,14 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         try { setLogs(prev => [...prev, JSON.parse(e.data)]); } catch {}
       });
 
+      es.addEventListener('step-start', e => {
+        try {
+          const payload = JSON.parse(e.data);
+          const data = payload.data || payload;
+          setCurrentStepIndex(data.stepIndex);
+        } catch {}
+      });
+
       es.addEventListener('step-input', e => {
         try {
           const payload = JSON.parse(e.data);
@@ -242,7 +303,25 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         try {
           const payload = JSON.parse(e.data);
           const step: StepResult = payload.data || payload;
-          setStepsDone(prev => [...prev, step]);
+          setStepsDone(prev => { const next = [...prev, step]; stepsDoneRef.current = next; return next; });
+        } catch {}
+      });
+
+      es.addEventListener('step-warning', e => {
+        try {
+          const payload = JSON.parse(e.data);
+          const data = payload.data || payload;
+          addToast(`Advertencia en paso ${data.stepIndex + 1}: ${JSON.stringify(data.issues)}`, 'warn');
+        } catch {}
+      });
+
+      es.addEventListener('gate-open', e => {
+        try {
+          const payload = JSON.parse(e.data);
+          const data    = payload.data || payload;
+          setGateOpen({ stepIndex: data.stepIndex, agentName: data.agentName });
+          setGateDecision(null);
+          setGateFeedback('');
         } catch {}
       });
 
@@ -261,13 +340,43 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         setBrowserContinuing(false);
       });
 
-      es.addEventListener('cancelled', () => {
+      es.addEventListener('cancelled', e => {
+        let payload: any = null;
+        try { payload = JSON.parse((e as MessageEvent).data); } catch {}
+        const isBudget = payload?.reason === 'budget_exceeded';
+        const budgetData = isBudget && payload?.data ? payload.data : null;
+        if (budgetData) {
+          setCancelReason({ type: 'budget_exceeded', spent: budgetData.spent, limit: budgetData.limit });
+        }
+        const now = new Date().toISOString();
+        const doneSteps = stepsDoneRef.current;
+        setResult(prev => prev ?? {
+          orchestrationId: orchestration.id,
+          projectId,
+          executionId:     executionId ?? '',
+          startedAt:       execStartedAt.current,
+          completedAt:     now,
+          duration:        Date.now() - new Date(execStartedAt.current).getTime(),
+          status:          'failed' as const,
+          stepsCompleted:  doneSteps.length,
+          totalSteps:      orchestration.agents.length,
+          totalTokensUsed: { input: 0, output: 0 },
+          estimatedCost:   0,
+          results:         doneSteps,
+          errors:          budgetData
+            ? [{ message: `Presupuesto agotado: $${budgetData.spent?.toFixed(4)} de $${budgetData.limit?.toFixed(4)}`, category: 'budget_exceeded', recoverable: false }]
+            : [{ message: 'Ejecución cancelada', category: 'cancelled', recoverable: false }],
+          summary:         { filesModified: 0, filesCreated: 0, filesDeleted: 0, linesAdded: 0, linesRemoved: 0 },
+          changes:         [],
+          backups:         {},
+        });
         setIsRunning(false);
         setIsOrchestrating(false);
         setCancelling(false);
         setBrowserPause(null);
+        setGateOpen(null);
         es.close();
-        addToast('Ejecución cancelada', 'warn');
+        addToast(isBudget ? 'Presupuesto agotado — ejecución detenida' : 'Ejecución cancelada', isBudget ? 'err' : 'warn');
       });
 
       es.addEventListener('completed', e => {
@@ -277,7 +386,11 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         } catch {}
         setIsRunning(false);
         setIsOrchestrating(false);
+        setGateOpen(null);
         es.close();
+        // Load ops ledger after execution completes
+        req<OpsLedger>('GET', `/orchestrations/${orchestration.id}/ops`)
+          .then(setOpsLedger).catch(() => {});
       });
 
       es.addEventListener('error', () => {
@@ -291,6 +404,29 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
       addToast(`Error al iniciar: ${e.message}`, 'err');
       setIsRunning(false);
       setIsOrchestrating(false);
+    }
+  };
+
+  const handleResolveGate = async (action: 'approve' | 'revise' | 'cancel') => {
+    if (!executionId || !gateOpen || gateResolving) return;
+    if (action === 'revise' && gateDecision !== 'revise') {
+      setGateDecision('revise');
+      return;
+    }
+    setGateResolving(true);
+    try {
+      await req('POST', `/orchestrations/${orchestration.id}/executions/${executionId}/gate`, {
+        action,
+        feedbackText: action === 'revise' ? gateFeedback : undefined,
+        stepIndex:    gateOpen.stepIndex,
+      });
+      setGateOpen(null);
+      setGateDecision(null);
+      setGateFeedback('');
+    } catch (e: any) {
+      addToast(`Error al resolver gate: ${e.message}`, 'err');
+    } finally {
+      setGateResolving(false);
     }
   };
 
@@ -316,6 +452,22 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
       setIsRunning(false);
       setIsOrchestrating(false);
       setCancelling(false);
+    }
+  };
+
+  const handleRevertOp = async (opId: string) => {
+    if (revertingOpId) return;
+    setRevertingOpId(opId);
+    try {
+      const { op } = await req<{ ok: boolean; op: AtomicOp }>(
+        'POST', `/orchestrations/${orchestration.id}/ops/${opId}/revert`
+      );
+      setOpsLedger(prev => prev ? { ...prev, ops: prev.ops.map(o => o.id === opId ? op : o) } : prev);
+      addToast('Operación marcada como revertida', 'ok');
+    } catch (e: any) {
+      addToast(`Error: ${e.message}`, 'err');
+    } finally {
+      setRevertingOpId(null);
     }
   };
 
@@ -353,7 +505,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             </div>
             <div className="orch-exec-info-item">
               <i className="ti ti-clock" />
-              <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 300000) / 1000)}s por paso</span>
+              <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 1_800_000) / 1000)}s total</span>
             </div>
             {orchestration.executionConfig?.stopOnError && (
               <div className="orch-exec-info-item">
@@ -532,7 +684,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                 <div>
                   <div className="orch-browser-pause-title">Autenticación requerida</div>
                   <div className="orch-browser-pause-sub">
-                    Paso {browserPause.stepIndex + 1}: <strong>{browserPause.agentName}</strong>
+                    Paso {browserPause.stepIndex + 1}: <strong>{fmtAgentName(browserPause.agentName)}</strong>
                   </div>
                 </div>
               </div>
@@ -578,12 +730,48 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             </div>
           )}
 
+          {/* Gate HITL panel */}
+          {gateOpen && (
+            <div className="orch-gate-panel">
+              <div className="orch-gate-header">
+                <i className="ti ti-user-check" />
+                <span>Revisión requerida — Paso {gateOpen.stepIndex + 1}: <strong>{gateOpen.agentName}</strong></span>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--text1)' }}>El paso anterior ha completado. Revisa el resultado antes de continuar.</p>
+              {gateDecision === 'revise' && (
+                <textarea
+                  className="orch-gate-feedback"
+                  placeholder="Feedback para el agente (opcional)…"
+                  value={gateFeedback}
+                  onChange={e => setGateFeedback(e.target.value)}
+                />
+              )}
+              <div className="orch-gate-actions">
+                <button className="btn primary" onClick={() => handleResolveGate('approve')} disabled={gateResolving}>
+                  <i className="ti ti-check" /> Aprobar
+                </button>
+                {gateDecision !== 'revise' ? (
+                  <button className="btn" onClick={() => handleResolveGate('revise')} disabled={gateResolving}>
+                    <i className="ti ti-refresh" /> Revisar
+                  </button>
+                ) : (
+                  <button className="btn" onClick={() => handleResolveGate('revise')} disabled={gateResolving}>
+                    {gateResolving ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-send" />} Enviar feedback
+                  </button>
+                )}
+                <button className="btn danger" onClick={() => handleResolveGate('cancel')} disabled={gateResolving}>
+                  <i className="ti ti-x" /> Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Step-by-step data flow */}
           <div className="orch-steps-flow">
             {orchestration.agents.map((agentName, i) => {
               const done    = stepsDone.find(s => s.stepIndex === i);
               const input   = stepInputs.find(s => s.stepIndex === i);
-              const isActive = !done && i === stepsDone.length;
+              const isActive = !done && i === currentStepIndex;
               return (
                 <div key={i} className={`orch-step-flow-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
                   <div className="orch-step-flow-head">
@@ -596,7 +784,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                         <span>{i + 1}</span>
                       )}
                     </div>
-                    <span className="orch-step-name">{agentName}</span>
+                    <span className="orch-step-name">{fmtAgentName(agentName)}</span>
                     {done && <span className="orch-step-dur">{fmtDuration(done.duration)}</span>}
                   </div>
 
@@ -672,6 +860,18 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
 
     return (
       <div className="orch-exec-panel">
+        {cancelReason?.type === 'budget_exceeded' && (
+          <div className="orch-budget-exceeded-banner">
+            <div className="orch-budget-exceeded-icon"><i className="ti ti-coins-off" /></div>
+            <div className="orch-budget-exceeded-body">
+              <strong>Presupuesto agotado</strong>
+              <p>
+                La orquestación se detuvo al alcanzar el límite configurado.
+                Gastado: <code>${cancelReason.spent.toFixed(4)}</code> de <code>${cancelReason.limit.toFixed(4)}</code>.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="orch-exec-result">
           <div className={`orch-result-header status-${result.status}`}>
             <i className={`ti ${statusIcon}`} />
@@ -718,20 +918,50 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             </section>
           )}
 
+          {/* Tabs: Pasos / Operaciones */}
+          <div className="orch-result-tabs">
+            <button
+              className={`orch-result-tab${opsTab === 'steps' ? ' active' : ''}`}
+              onClick={() => setOpsTab('steps')}
+            >
+              <i className="ti ti-list-details" /> Pasos
+            </button>
+            <button
+              className={`orch-result-tab${opsTab === 'ops' ? ' active' : ''}`}
+              onClick={() => setOpsTab('ops')}
+            >
+              <i className="ti ti-files" /> Operaciones
+              {opsLedger && opsLedger.ops.length > 0 && (
+                <span className="orch-ops-count">{opsLedger.ops.length}</span>
+              )}
+            </button>
+          </div>
+
           {/* Steps detail with full data flow */}
-          <section className="orch-result-section">
-            <h4><i className="ti ti-list-details" /> Resultados por paso</h4>
+          {opsTab === 'steps' && <section className="orch-result-section">
+            <h4 style={{ display: 'none' }} />
             {result.results.map((step, i) => (
               <div key={i} className={`orch-step-result status-${step.status}`}>
                 <div className="orch-step-result-header">
                   <div className="orch-step-result-title">
                     <span className="orch-step-num">{i + 1}</span>
-                    <span className="orch-step-result-name">{step.agentName}</span>
+                    <span className="orch-step-result-name">{fmtAgentName(step.agentName)}</span>
                     <span className={`orch-step-badge ${step.status}`}>
                       {step.status === 'success' && <><i className="ti ti-check" /> Exitoso</>}
                       {step.status === 'error'   && <><i className="ti ti-x" /> Error</>}
                       {step.status === 'warning' && <><i className="ti ti-alert-triangle" /> Advertencia</>}
                     </span>
+                    {step.qualityScore && <QualityBadge qs={step.qualityScore} />}
+                    {step.revisions && step.revisions.length > 0 && (
+                      <span className="badge amber" title={`${step.revisions.length} revisión(es)`}>
+                        <i className="ti ti-history" />{step.revisions.length}
+                      </span>
+                    )}
+                    {step.gitCommitSha && (
+                      <span className="orch-step-git-sha" title={step.gitCommitSha}>
+                        <i className="ti ti-git-commit" />{step.gitCommitSha.slice(0, 7)}
+                      </span>
+                    )}
                     <span className="orch-step-dur">{fmtDuration(step.duration)}</span>
                     {(step.tokensUsed.input + step.tokensUsed.output) > 0 && (
                       <span className="orch-step-tokens">
@@ -813,7 +1043,37 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                 )}
               </div>
             ))}
-          </section>
+          </section>}
+
+          {/* Operaciones tab */}
+          {opsTab === 'ops' && (
+            <section className="orch-result-section">
+              {!opsLedger || opsLedger.ops.length === 0 ? (
+                <p style={{ color: 'var(--text3)', fontSize: 12 }}>No hay operaciones registradas para esta ejecución.</p>
+              ) : (
+                <div className="orch-exec-ops">
+                  {opsLedger.ops.map(op => (
+                    <div key={op.id} className={`orch-exec-op-row${op.status === 'reverted' ? ' reverted' : ''}`}>
+                      <i className={`ti ${op.kind === 'add' ? 'ti-file-plus' : op.kind === 'remove' ? 'ti-file-minus' : 'ti-file-pencil'}`} />
+                      <span className="orch-exec-op-path">{op.filePath}</span>
+                      <span className="orch-exec-op-agent">{fmtAgentName(op.agentName)}</span>
+                      <span className={`badge ${op.status === 'reverted' ? 'gray' : 'green'}`}>{op.status}</span>
+                      {op.status === 'applied' && (
+                        <button
+                          className="btn ghost xs"
+                          disabled={revertingOpId === op.id}
+                          onClick={() => handleRevertOp(op.id)}
+                          title="Marcar como revertida"
+                        >
+                          {revertingOpId === op.id ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-arrow-back" />}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="orch-result-section">
             <details>
@@ -836,11 +1096,6 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             <button className="btn" onClick={() => { setResult(null); setLogs([]); setStepsDone([]); setStepInputs([]); }}>
               <i className="ti ti-refresh" /> Ejecutar de nuevo
             </button>
-            {result.status !== 'failed' && (
-              <button className="btn ghost" onClick={() => navigateTo('chat')}>
-                <i className="ti ti-message-chatbot" /> Discutir en chat
-              </button>
-            )}
           </div>
         </div>
       </div>

@@ -2,12 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { OrchestrateNode, DataFlow, ContextExtra, TemporalContext } from '../../types';
 import { useElectron } from '../../hooks/useElectron';
 
+export interface ScriptParamSchema {
+  key:         string;
+  label:       string;
+  type:        'number' | 'text' | 'boolean';
+  required:    boolean;
+  placeholder?: string;
+  hint?:       string;
+}
+
 interface Props {
-  node:        OrchestrateNode;
-  fromAgent:   string;
-  toAgent:     string;
+  node:         OrchestrateNode;
+  fromAgent:    string;
+  toAgent:      string;
   isInputNode?: boolean;
-  onUpdate:    (node: OrchestrateNode) => void;
+  onUpdate:     (node: OrchestrateNode) => void;
+  /** Params schema for toAgent if it's a script with declared params */
+  scriptParams?: ScriptParamSchema[];
 }
 
 function generateTempId(): string {
@@ -24,29 +35,35 @@ function normalizeContextExtra(ce: ContextExtra): ContextExtra {
   };
 }
 
-export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode = false, onUpdate }: Props) {
-  const [dataFlow,     setDataFlow]     = useState<DataFlow>(node.dataFlow);
-  const [contextExtra, setContextExtra] = useState<ContextExtra>(() => normalizeContextExtra(node.contextExtra));
-  const [dirty, setDirty]              = useState(false);
+export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode = false, onUpdate, scriptParams = [] }: Props) {
+  const [dataFlow,        setDataFlow]        = useState<DataFlow>(node.dataFlow);
+  const [contextExtra,    setContextExtra]    = useState<ContextExtra>(() => normalizeContextExtra(node.contextExtra));
+  const [gateAfter,       setGateAfter]       = useState<boolean>(node.gateAfter ?? false);
+  const [nodeScriptParams, setNodeScriptParams] = useState<Record<string, unknown>>(node.scriptParams ?? {});
+  const [dirty, setDirty]                    = useState(false);
 
   // Keep refs in sync so the cleanup effect can read latest values
-  const dataFlowRef     = useRef(dataFlow);
-  const contextExtraRef = useRef(contextExtra);
-  const dirtyRef        = useRef(dirty);
-  const nodeRef         = useRef(node);
-  const onUpdateRef     = useRef(onUpdate);
+  const dataFlowRef          = useRef(dataFlow);
+  const contextExtraRef      = useRef(contextExtra);
+  const gateAfterRef         = useRef(gateAfter);
+  const nodeScriptParamsRef  = useRef(nodeScriptParams);
+  const dirtyRef             = useRef(dirty);
+  const nodeRef              = useRef(node);
+  const onUpdateRef          = useRef(onUpdate);
 
-  useEffect(() => { dataFlowRef.current     = dataFlow;     }, [dataFlow]);
-  useEffect(() => { contextExtraRef.current = contextExtra; }, [contextExtra]);
-  useEffect(() => { dirtyRef.current        = dirty;        }, [dirty]);
-  useEffect(() => { nodeRef.current         = node;         }, [node]);
-  useEffect(() => { onUpdateRef.current     = onUpdate;     }, [onUpdate]);
+  useEffect(() => { dataFlowRef.current         = dataFlow;         }, [dataFlow]);
+  useEffect(() => { contextExtraRef.current     = contextExtra;     }, [contextExtra]);
+  useEffect(() => { gateAfterRef.current        = gateAfter;        }, [gateAfter]);
+  useEffect(() => { nodeScriptParamsRef.current = nodeScriptParams; }, [nodeScriptParams]);
+  useEffect(() => { dirtyRef.current            = dirty;            }, [dirty]);
+  useEffect(() => { nodeRef.current             = node;             }, [node]);
+  useEffect(() => { onUpdateRef.current         = onUpdate;         }, [onUpdate]);
 
   // Auto-save on node switch if dirty; reset state for new node
   useEffect(() => {
     return () => {
       if (dirtyRef.current) {
-        onUpdateRef.current({ ...nodeRef.current, dataFlow: dataFlowRef.current, contextExtra: contextExtraRef.current });
+        onUpdateRef.current({ ...nodeRef.current, dataFlow: dataFlowRef.current, contextExtra: contextExtraRef.current, gateAfter: gateAfterRef.current, scriptParams: nodeScriptParamsRef.current });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,6 +72,8 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
   useEffect(() => {
     setDataFlow(node.dataFlow);
     setContextExtra(normalizeContextExtra(node.contextExtra));
+    setGateAfter(node.gateAfter ?? false);
+    setNodeScriptParams(node.scriptParams ?? {});
     setDirty(false);
   }, [node.id]);
 
@@ -69,8 +88,13 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
   };
 
   const handleSave = () => {
-    onUpdate({ ...node, dataFlow, contextExtra });
+    onUpdate({ ...node, dataFlow, contextExtra, gateAfter, scriptParams: nodeScriptParams });
     setDirty(false);
+  };
+
+  const patchScriptParam = (key: string, value: unknown) => {
+    setNodeScriptParams(p => ({ ...p, [key]: value }));
+    setDirty(true);
   };
 
   const handleAddTemporal = () => {
@@ -206,6 +230,70 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
           <i className="ti ti-plus" /> Agregar campo
         </button>
       </section>
+
+      {/* Script params — solo si el script destino tiene parámetros declarados */}
+      {scriptParams.length > 0 && (
+        <section className="orch-config-section orch-script-params">
+          <h4><i className="ti ti-adjustments-horizontal" /> Parámetros del script</h4>
+          {scriptParams.map(param => {
+            const val = nodeScriptParams[param.key];
+            const missing = param.required && (val === undefined || val === null || val === '');
+            if (param.type === 'boolean') {
+              return (
+                <div key={param.key} className="orch-script-param-row">
+                  <label className="orch-check-row">
+                    <input
+                      type="checkbox"
+                      checked={!!val}
+                      onChange={e => patchScriptParam(param.key, e.target.checked)}
+                    />
+                    <span>{param.label}</span>
+                  </label>
+                  {param.hint && <p className="orch-param-hint">{param.hint}</p>}
+                </div>
+              );
+            }
+            return (
+              <div key={param.key} className="orch-script-param-row">
+                <label className={`orch-label${missing ? ' orch-label-required' : ''}`}>
+                  {param.label}
+                  {param.required && <span className="orch-param-required-dot" title="Requerido">*</span>}
+                </label>
+                <input
+                  type={param.type === 'number' ? 'number' : 'text'}
+                  className={`input sm orch-script-param-input${missing ? ' input-missing' : ''}`}
+                  placeholder={param.placeholder ?? ''}
+                  step={param.type === 'number' ? 'any' : undefined}
+                  min={param.type === 'number' ? 0 : undefined}
+                  value={val !== undefined && val !== null ? String(val) : ''}
+                  onChange={e => patchScriptParam(param.key, e.target.value)}
+                />
+                {missing && <p className="orch-param-hint warn">Este campo es obligatorio para que el script funcione.</p>}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Gate HITL — solo para conexiones inter-agente */}
+      {!isInputNode && (
+        <section className="orch-config-section">
+          <h4><i className="ti ti-user-check" /> Gate de revisión humana</h4>
+          <label className="orch-check-row">
+            <input
+              type="checkbox"
+              checked={gateAfter}
+              onChange={e => { setGateAfter(e.target.checked); setDirty(true); }}
+            />
+            <span>Pausar y esperar aprobación tras este paso</span>
+          </label>
+          {gateAfter && (
+            <p className="orch-gate-hint">
+              La orquestación se pausará después de completar este paso. El operador podrá aprobar, revisar o cancelar antes de continuar.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="orch-conn-apply">
         <button

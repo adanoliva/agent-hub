@@ -306,24 +306,21 @@ app.get('/api/agents', (req, res) => {
   }
 });
 
-// GET /api/agents/applicable?projectId= OR ?categoryId=&techId=
+// GET /api/agents/applicable?projectId= OR ?categoryId=
 app.get('/api/agents/applicable', (req, res) => {
-  let { categoryId, techId, projectId } = req.query;
-  if (projectId && (!categoryId || !techId)) {
+  let { categoryId, projectId } = req.query;
+  if (projectId && !categoryId) {
     const project = readConfig().projects.find(p => p.id === projectId);
-    if (project) {
-      categoryId = categoryId || project.categoryId;
-      techId     = techId     || project.techId;
-    }
+    if (project) categoryId = project.categoryId;
   }
-  res.json(getApplicableAgents(categoryId, techId));
+  res.json(getApplicableAgents(categoryId));
 });
 
 app.post('/api/agents', (req, res) => {
-  const { level, categoryId, techId, agent } = req.body;
+  const { level, categoryId, agent } = req.body;
   if (!level || !agent) return res.status(400).json({ error: 'level and agent required' });
   try {
-    const result = createAgent(level, categoryId, techId, agent);
+    const result = createAgent(level, categoryId, null, agent);
     if (level === 'global') syncGlobalAgentsToClaudeDir();
     res.json(result);
   } catch (e) {
@@ -332,10 +329,10 @@ app.post('/api/agents', (req, res) => {
 });
 
 app.put('/api/agents', (req, res) => {
-  const { level, categoryId, techId, oldName, agent } = req.body;
+  const { level, categoryId, oldName, agent } = req.body;
   if (!level || !oldName || !agent) return res.status(400).json({ error: 'level, oldName and agent required' });
   try {
-    const result = updateAgent(level, categoryId, techId, oldName, agent);
+    const result = updateAgent(level, categoryId, null, oldName, agent);
     if (level === 'global') syncGlobalAgentsToClaudeDir();
     res.json(result);
   } catch (e) {
@@ -344,9 +341,9 @@ app.put('/api/agents', (req, res) => {
 });
 
 app.delete('/api/agents', (req, res) => {
-  const { level, categoryId, techId, name } = req.body;
+  const { level, categoryId, name } = req.body;
   if (!level || !name) return res.status(400).json({ error: 'level and name required' });
-  deleteAgent(level, categoryId, techId, name);
+  deleteAgent(level, categoryId, null, name);
   if (level === 'global') syncGlobalAgentsToClaudeDir();
   res.json({ ok: true });
 });
@@ -401,24 +398,24 @@ app.get('/api/projects', (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents } = req.body;
+  const { name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(await createProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }));
+    res.json(await createProject({ name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills }));
   } catch (e) {
     res.status(e.message.includes('already exists') ? 409 : 500).json({ error: e.message });
   }
 });
 
 app.post('/api/projects/import', async (req, res) => {
-  const { name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents } = req.body;
+  const { name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills } = req.body;
   if (!name || !categoryId || !projectPath) {
     return res.status(400).json({ error: 'name, categoryId and projectPath required' });
   }
   try {
-    res.json(await importProject({ name, categoryId, techId, projectPath, description, status, aiProviders, selectedAgents }));
+    res.json(await importProject({ name, categoryId, projectPath, description, status, aiProviders, selectedAgents, skills }));
   } catch (e) {
     res.status(e.message.includes('not exist') ? 404 : 409).json({ error: e.message });
   }
@@ -611,7 +608,6 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
     const existingReadme = safeRead(path.join(project.path, 'README.md'), 2000) || safeRead(path.join(project.path, 'readme.md'), 2000);
 
     const cat  = (cfg.categories || []).find(c => c.id === project.categoryId);
-    const tech = (cat?.technologies || []).find(t => t.id === project.techId);
     const fileLabel = `${config.contextFile} (${config.label})`;
 
     const contextFilePath = getContextFilePath(project, ctxType);
@@ -619,7 +615,6 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 
     const projectInfo = `**Nombre:** ${project.name}
 **Categoría:** ${cat?.name || project.categoryId || 'N/A'}
-**Tecnología:** ${tech?.name || project.techId || 'N/A'}
 **Lenguajes:** ${detectedLanguages.join(', ')}
 **Librerías:** ${mainLibraries.slice(0, 8).join(', ') || 'No detectadas'}
 **Testing:** ${testingFramework} · **Build:** ${buildTool} · **Lint:** ${lintingTool}
@@ -635,7 +630,7 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
     });
 
     const { callAI } = require('./ai');
-    const content = await callAI(analysisPrompt);
+    const content = await callAI(analysisPrompt, { cwd: project.path });
     res.json({ content });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -646,6 +641,7 @@ app.post('/api/projects/:id/generate-context', async (req, res) => {
 
 function buildOrchestrationStats(projects) {
   let total = 0, success = 0, failed = 0, partial = 0;
+  let totalCost = 0, totalCostIsApprox = false;
   for (const project of projects) {
     if (!project.path || project.pathExists === false) continue;
     const orchDir = path.join(project.path, '.agent-hub', 'orchestrations');
@@ -658,11 +654,15 @@ function buildOrchestrationStats(projects) {
           if      (orch.lastExecutionStatus === 'success') success++;
           else if (orch.lastExecutionStatus === 'failed')  failed++;
           else if (orch.lastExecutionStatus === 'partial') partial++;
+          if (orch.lastExecutionCost) {
+            totalCost += orch.lastExecutionCost;
+            if (orch.lastExecutionCostIsApprox) totalCostIsApprox = true;
+          }
         } catch { /* skip corrupt JSON */ }
       }
     } catch { /* skip unreadable dir */ }
   }
-  return { total, success, failed, partial, neverRun: total - success - failed - partial };
+  return { total, success, failed, partial, neverRun: total - success - failed - partial, totalCost, totalCostIsApprox };
 }
 
 function buildDashboardNotifications(allAgents, projects, categories = []) {
@@ -672,23 +672,15 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
   const notifications = [];
 
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || id || 'N/A';
-  const techName = (catId, techId) => {
-    const cat = categories.find((c) => c.id === catId);
-    return cat?.technologies?.find((t) => t.id === techId)?.name || techId || 'N/A';
-  };
   const agentScopeLabel = (agent) => {
     if (agent.level === 'global') return 'Global';
     if (agent.level === 'section') return `Categoría: ${categoryName(agent.categoryId)}`;
-    if (agent.level === 'tech') {
-      return `Tecnología: ${categoryName(agent.categoryId)} / ${techName(agent.categoryId, agent.techId)}`;
-    }
     if (agent.level === 'uncategorized') return 'Sin categoría';
     return agent.level || 'Desconocido';
   };
   const agentScopeKey = (agent) => [
     agent.level || 'unknown',
     agent.categoryId || 'none',
-    agent.techId || 'none',
   ].join('-');
 
   for (const agent of allAgents) {
@@ -703,11 +695,7 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
         action:     'open-agent',
         level:      agent.level,
         categoryId: agent.categoryId || null,
-        techId:     agent.techId     || null,
       };
-      if (agent.name === 'readme') {
-        console.log(`📬 Created notification for 'readme':`, {level: notif.level, categoryId: notif.categoryId, techId: notif.techId});
-      }
       notifications.push(notif);
     }
     if (!agent.optimized && agent.system && agent.system.length > 30) {
@@ -721,7 +709,6 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
         action:     'optimize-agent',
         level:      agent.level,
         categoryId: agent.categoryId || null,
-        techId:     agent.techId     || null,
       });
     }
   }
@@ -1144,6 +1131,7 @@ const {
   getSuggestions,
   generateProjectSuggestions,
   clearSuggestionsCache,
+  callAI,
   callAIChat,
   getSessionUsage,
   resetSessionUsage,
@@ -1194,6 +1182,19 @@ app.post('/api/ai/generate-prompt', async (req, res) => {
       description, name, level, categoryId, techId, tools, language, existingAgents,
     });
     res.json({ system });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/ai/generate-skill — generate skill content from name + description
+app.post('/api/ai/generate-skill', async (req, res) => {
+  const { name, description, language = 'en' } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  try {
+    const prompt = prompts.skillContent({ name, description, language });
+    const content = await callAI(prompt);
+    res.json({ content });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1328,8 +1329,7 @@ async function getProjectSuggestionsImpl(projectId, force = false, alreadySugges
   const providers = project.aiProviders || ['claude'];
   const provider  = providers.includes('github') ? 'github' : providers[0];
   const ctx       = getContextFile(project, provider);
-  const cat       = (cfg.categories || []).find(c => c.id === project.categoryId);
-  const tech      = (cat?.technologies || []).find(t => t.id === project.techId);
+  const cat         = (cfg.categories || []).find(c => c.id === project.categoryId);
   const existing    = listProjectAgents(project.path, providers).map(a => a.name);
   const allExcluded = [...new Set([...existing, ...alreadySuggested])];
 
@@ -1337,7 +1337,7 @@ async function getProjectSuggestionsImpl(projectId, force = false, alreadySugges
     project,
     contextContent: ctx.content || '',
     categoryName:   cat?.name || project.categoryId || '',
-    techName:       tech?.name || project.techId || '',
+    techName:       '',
     existingAgents: allExcluded,
   });
 
@@ -1438,15 +1438,12 @@ app.delete('/api/chat/history', (req, res) => {
 app.get('/api/agents/flat', (req, res) => {
   const cfg = readConfig();
   const all = [];
-  const collect = (level, catId, techId) => {
-    try { all.push(...listAgentsByLevel(level, catId, techId)); } catch {}
+  const collect = (level, catId) => {
+    try { all.push(...listAgentsByLevel(level, catId)); } catch {}
   };
   collect('global');
   collect('uncategorized');
-  for (const cat of (cfg.categories || [])) {
-    collect('section', cat.id);
-    for (const tech of (cat.technologies || [])) collect('tech', cat.id, tech.id);
-  }
+  for (const cat of (cfg.categories || [])) collect('section', cat.id);
   res.json(all);
 });
 
@@ -1561,7 +1558,7 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
       projectContext: projectContext || '',
       provider,
       maxTurns:       maxTurns  || 10,
-      timeout:        timeout   || 300_000,
+      timeout:        timeout   || 1_800_000,
       useBrowser:     useBrowser || false,
     });
     res.json(result);
@@ -1573,7 +1570,10 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
 // ── Orchestrations ────────────────────────────────────────────────────────────
 
 const workflows                         = require('./workflows');
-const { OrchestrationExecutor, registerExecutor, getExecutor } = require('./orchestrator');
+const { OrchestrationExecutor, registerExecutor, getExecutor, resolveGate } = require('./orchestrator');
+const scriptsRegistry                   = require('./scripts-registry');
+const skills                            = require('./skills');
+const opsLedger                         = require('./ops-ledger');
 
 /**
  * Finds the project that owns a given orchestration id by scanning all projects.
@@ -1685,9 +1685,11 @@ app.post('/api/orchestrations/:id/execute', async (req, res) => {
         if (current) {
           workflows.update(orch.id, project.path, {
             ...current,
-            lastExecutedAt:     result.completedAt,
-            lastExecutionStatus: result.status,
-            executionCount:      (current.executionCount || 0) + 1,
+            lastExecutedAt:           result.completedAt,
+            lastExecutionStatus:      result.status,
+            executionCount:           (current.executionCount || 0) + 1,
+            lastExecutionCost:        result.estimatedCost        || 0,
+            lastExecutionCostIsApprox: result.estimatedCostIsApprox || false,
           });
         }
       } catch {}
@@ -1715,14 +1717,33 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
 
   // Replay existing logs
   for (const log of executor.logs) send('message', log);
-  // Replay pending browser-required pause if client connected after it was emitted
+
+  // If execution already finished before this SSE client connected, replay terminal event immediately
+  if (executor._completedResult) {
+    send('completed', { type: 'completed', data: executor._completedResult });
+    res.end();
+    return;
+  }
+  if (executor._cancelledData) {
+    send('cancelled', { type: 'cancelled', data: executor._cancelledData });
+    res.end();
+    return;
+  }
+
+  // Replay pending gate or browser-required pause if client connected after the event fired
+  if (executor._pendingGate) {
+    send('gate-open', { type: 'gate-open', data: executor._pendingGate });
+  }
   if (executor._pendingBrowserRequired) {
     send('browser-required', { type: 'browser-required', data: executor._pendingBrowserRequired });
   }
 
   const onLog             = (log)    => send('message', log);
+  const onStepStart       = (data)   => send('step-start',       { type: 'step-start',       data });
   const onStepInput       = (data)   => send('step-input',       { type: 'step-input',       data });
   const onStepDone        = (result) => send('step-done',        { type: 'step-done',        data: result });
+  const onStepWarning     = (data)   => send('step-warning',     { type: 'step-warning',     data });
+  const onGateOpen        = (data)   => send('gate-open',        { type: 'gate-open',        data });
   const onBrowserRequired = (data)   => send('browser-required', { type: 'browser-required', data });
   const onBrowserContinued= (data)   => send('browser-continued',{ type: 'browser-continued',data });
   const onCancelled       = (data)   => { send('cancelled', { type: 'cancelled', data }); cleanup(); res.end(); };
@@ -1739,8 +1760,11 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
 
   const cleanup = () => {
     executor.off('log',              onLog);
+    executor.off('step-start',       onStepStart);
     executor.off('step-input',       onStepInput);
     executor.off('step-done',        onStepDone);
+    executor.off('step-warning',     onStepWarning);
+    executor.off('gate-open',        onGateOpen);
     executor.off('browser-required', onBrowserRequired);
     executor.off('browser-continued',onBrowserContinued);
     executor.off('cancelled',        onCancelled);
@@ -1749,8 +1773,11 @@ app.get('/api/orchestrations/:id/execute/stream', (req, res) => {
   };
 
   executor.on('log',              onLog);
+  executor.on('step-start',       onStepStart);
   executor.on('step-input',       onStepInput);
   executor.on('step-done',        onStepDone);
+  executor.on('step-warning',     onStepWarning);
+  executor.on('gate-open',        onGateOpen);
   executor.on('browser-required', onBrowserRequired);
   executor.on('browser-continued',onBrowserContinued);
   executor.on('cancelled',        onCancelled);
@@ -1819,6 +1846,143 @@ app.post('/api/orchestrations/:id/executions/:executionId/rollback', async (req,
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Skills endpoints ──────────────────────────────────────────────────────────
+// Skills are flat (no level/category/tech) — referenced by name from agents.
+
+// GET /api/skills  |  GET /api/skills/flat — lista todos los skills
+app.get('/api/skills/flat', (req, res) => {
+  try { res.json(skills.listSkills()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/skills', (req, res) => {
+  try { res.json(skills.listSkills()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/skills — crea skill
+app.post('/api/skills', (req, res) => {
+  const { skill } = req.body;
+  if (!skill?.name) return res.status(400).json({ error: 'name requerido' });
+  try { skills.createSkill(skill); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/skills — actualiza skill
+app.put('/api/skills', (req, res) => {
+  const { skill } = req.body;
+  if (!skill?.name) return res.status(400).json({ error: 'name requerido' });
+  try { skills.updateSkill(skill); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/skills?name=
+app.delete('/api/skills', (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'name requerido' });
+  try { skills.deleteSkill(name); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/scripts — lista los scripts determinísticos (built-in + externos)
+app.get('/api/scripts', (req, res) => {
+  try {
+    res.json(scriptsRegistry.listScripts());
+  } catch (e) {
+    console.error('[scripts] listScripts error:', e);
+    // Fallback: return only built-in scripts so the UI doesn't break
+    const builtins = [
+      { name: 'prepare-context',    label: 'Preparar contexto',        description: 'Analiza el proyecto y genera el índice canónico.', builtin: true },
+      { name: 'generate-file-index', label: 'Índice de archivos',      description: 'Lista estructurada de todos los archivos.',        builtin: true },
+      { name: 'diff-since-step',    label: 'Diff desde paso anterior', description: 'Compara el filesystem con un paso anterior.',       builtin: true },
+      { name: 'validate-json',      label: 'Validar JSON',             description: 'Verifica que el output es JSON válido.',            builtin: true },
+      { name: 'quality-score',      label: 'Quality Score',            description: 'Calcula puntuación de calidad del paso anterior.',  builtin: true },
+      { name: 'validate-output',    label: 'Validar output',           description: 'Valida el output según reglas configurables.',      builtin: true },
+    ];
+    res.json({ scripts: builtins, warnings: [`Error cargando scripts externos: ${e.message}`] });
+  }
+});
+
+// GET /api/scripts/validate — valida estáticamente todos los scripts externos
+app.get('/api/scripts/validate', (req, res) => {
+  try {
+    res.json(scriptsRegistry.validateExternalScripts());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/orchestrations/:id/executions/:execId/resume — reanuda ejecución tras crash
+app.post('/api/orchestrations/:id/executions/:execId/resume', async (req, res) => {
+  const { projectId } = req.body;
+  if (!projectId) return res.status(400).json({ error: 'projectId requerido' });
+
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orquestación no encontrada' });
+
+  const execDir = workflows.findExecutionDir(req.params.execId, project.path);
+  if (!execDir) return res.status(404).json({ error: 'Ejecución no encontrada' });
+
+  const statePath = path.join(execDir, 'execution-state.json');
+  if (!fs.existsSync(statePath)) {
+    return res.status(404).json({ error: 'Estado de ejecución no encontrado (execution-state.json)' });
+  }
+
+  let savedState;
+  try { savedState = JSON.parse(fs.readFileSync(statePath, 'utf8')); }
+  catch { return res.status(500).json({ error: 'Error al leer el estado de ejecución' }); }
+
+  if (savedState.status === 'completed') {
+    return res.status(409).json({ error: 'La ejecución ya estaba completada' });
+  }
+
+  const orch = workflows.read(req.params.id, project.path);
+  if (!orch) return res.status(404).json({ error: 'Orquestación no encontrada' });
+
+  // Build temporal context values from saved state if needed
+  const executor = new OrchestrationExecutor(orch, project, {});
+  executor.execDir       = execDir;
+  executor._resumeFromStep = savedState.lastCompletedStep + 1;
+  executor._executionState = savedState;
+
+  registerExecutor(executor);
+  executor.execute().catch(e => console.error('Resume error:', e.message));
+
+  res.json({ executionId: executor.executionId, status: 'resumed' });
+});
+
+// GET /api/orchestrations/:id/ops?projectId= — lee ops-ledger
+app.get('/api/orchestrations/:id/ops', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orquestación no encontrada' });
+  try {
+    const ledger = opsLedger.readLedger(project.path, req.params.id);
+    res.json(ledger);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/orchestrations/:id/ops/:opId/revert?projectId= — marca op como revertida
+app.post('/api/orchestrations/:id/ops/:opId/revert', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orquestación no encontrada' });
+  try {
+    const op = opsLedger.markOpReverted(project.path, req.params.id, req.params.opId);
+    if (!op) return res.status(404).json({ error: 'Operación no encontrada o ya revertida' });
+    res.json({ ok: true, op });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/orchestrations/:id/executions/:execId/gate — resuelve gate HITL
+app.post('/api/orchestrations/:id/executions/:execId/gate', (req, res) => {
+  const { action, feedbackText, stepIndex } = req.body;
+  if (!action) return res.status(400).json({ error: 'action requerida' });
+  if (stepIndex === undefined || stepIndex === null) return res.status(400).json({ error: 'stepIndex requerido' });
+
+  const resolved = resolveGate(req.params.execId, Number(stepIndex), { action, feedbackText });
+  if (!resolved) return res.status(404).json({ error: 'Gate no encontrado o ya resuelto' });
+  res.json({ ok: true });
 });
 
 // ── Browser automation routes ──────────────────────────────────────────────────

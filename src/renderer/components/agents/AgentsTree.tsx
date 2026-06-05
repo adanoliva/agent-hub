@@ -3,6 +3,8 @@ import { useStore } from '../../store';
 import { useCategoryHelpers } from '../../hooks/useCategoryHelpers';
 import type { SelectedNode } from '../../types';
 
+export type AgentsMode = 'agents' | 'skills';
+
 interface Props {
   selected: SelectedNode;
   expanded: Set<string>;
@@ -10,16 +12,17 @@ interface Props {
   onToggle: (key: string) => void;
   search: string;
   onSearchChange: (v: string) => void;
+  mode: AgentsMode;
+  onModeChange: (m: AgentsMode) => void;
 }
 
-function isActive(selected: SelectedNode, level: string, catId: string | null, techId: string | null, projId: string | null) {
+function isActive(selected: SelectedNode, level: string, catId: string | null, projId: string | null) {
   return selected.level === level
     && selected.categoryId === catId
-    && selected.techId === techId
     && selected.projectId === projId;
 }
 
-export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onSearchChange }: Props) {
+export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onSearchChange, mode, onModeChange }: Props) {
   const config   = useStore((s) => s.config);
   const projects = useStore((s) => s.projects);
   const { catColor } = useCategoryHelpers();
@@ -28,12 +31,28 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onS
   const catsOpen  = expanded.has('cats');
   const projsOpen = expanded.has('projs');
 
-  function selectNode(level: SelectedNode['level'], catId: string | null, techId: string | null, projId: string | null) {
-    onSelect({ level, categoryId: catId ?? null, techId: techId ?? null, projectId: projId ?? null });
+  function selectNode(level: SelectedNode['level'], catId: string | null, projId: string | null) {
+    onSelect({ level, categoryId: catId ?? null, projectId: projId ?? null });
   }
 
   return (
     <div className="agents-tree" id="agents-tree">
+      {/* Mode toggle */}
+      <div className="tree-mode-toggle">
+        <button
+          className={`tree-mode-btn${mode === 'agents' ? ' active' : ''}`}
+          onClick={() => onModeChange('agents')}
+        >
+          <i className="ti ti-cpu" /> Agentes
+        </button>
+        <button
+          className={`tree-mode-btn${mode === 'skills' ? ' active' : ''}`}
+          onClick={() => onModeChange('skills')}
+        >
+          <i className="ti ti-puzzle" /> Skills
+        </button>
+      </div>
+
       {/* Search */}
       <div className="tree-search">
         <i className="ti ti-search tree-search-icon" />
@@ -53,8 +72,8 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onS
 
       {/* Global */}
       <div
-        className={`tree-node${isActive(selected, 'global', null, null, null) ? ' active' : ''}`}
-        onClick={() => selectNode('global', null, null, null)}
+        className={`tree-node${isActive(selected, 'global', null, null) ? ' active' : ''}`}
+        onClick={() => selectNode('global', null, null)}
       >
         <i className="ti ti-world tree-icon" style={{ color: 'var(--green)' }} />
         <span className="tree-label">Global</span>
@@ -69,41 +88,17 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onS
       </div>
 
       {catsOpen && cats.map((cat) => {
-        const catOpen   = expanded.has('cat-' + cat.id);
-        const catActive = isActive(selected, 'section', cat.id, null, null);
+        const catActive = isActive(selected, 'section', cat.id, null);
         return (
-          <React.Fragment key={cat.id}>
-            <div
-              className={`tree-node${catActive ? ' active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggle('cat-' + cat.id); selectNode('section', cat.id, null, null); }}
-            >
-              <div className="tree-indent" />
-              <i className={`ti ti-chevron-right tree-chevron${catOpen ? ' open' : ''}`} />
-              <i className={`ti ${cat.icon || 'ti-folder'} tree-icon`} style={{ color: cat.color }} />
-              <span className="tree-label">{cat.name}</span>
-            </div>
-            {catOpen && (
-              <>
-                {cat.technologies?.map((tech) => (
-                  <div
-                    key={tech.id}
-                    className={`tree-node${isActive(selected, 'tech', cat.id, tech.id, null) ? ' active' : ''}`}
-                    onClick={() => selectNode('tech', cat.id, tech.id, null)}
-                  >
-                    <div className="tree-indent" />
-                    <div className="tree-indent" />
-                    <i className="ti ti-code tree-icon" style={{ color: cat.color }} />
-                    <span className="tree-label">{tech.name}</span>
-                  </div>
-                ))}
-                {!cat.technologies?.length && (
-                  <div className="tree-node" style={{ paddingLeft: 40, color: 'var(--text3)', fontSize: 11, pointerEvents: 'none' }}>
-                    Sin tecnologías
-                  </div>
-                )}
-              </>
-            )}
-          </React.Fragment>
+          <div
+            key={cat.id}
+            className={`tree-node${catActive ? ' active' : ''}`}
+            onClick={() => selectNode('section', cat.id, null)}
+          >
+            <div className="tree-indent" />
+            <i className={`ti ${cat.icon || 'ti-folder'} tree-icon`} style={{ color: cat.color }} />
+            <span className="tree-label">{cat.name}</span>
+          </div>
         );
       })}
 
@@ -122,8 +117,8 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onS
             return (
               <div
                 key={p.id}
-                className={`tree-node${isActive(selected, 'project', null, null, p.id) ? ' active' : ''}`}
-                onClick={() => selectNode('project', null, null, p.id)}
+                className={`tree-node${isActive(selected, 'project', null, p.id) ? ' active' : ''}`}
+                onClick={() => selectNode('project', null, p.id)}
               >
                 <div className="tree-indent" />
                 <i className="ti ti-folder tree-icon" style={{ color: catColor(p.categoryId) }} />
@@ -146,9 +141,9 @@ export function AgentsTree({ selected, expanded, onSelect, onToggle, search, onS
 
       {/* Sin Categoría — agents from directory that don't follow standard folder naming */}
       <div
-        className={`tree-node${isActive(selected, 'uncategorized', null, null, null) ? ' active' : ''}`}
+        className={`tree-node${isActive(selected, 'uncategorized', null, null) ? ' active' : ''}`}
         style={{ marginTop: 8 }}
-        onClick={() => selectNode('uncategorized', null, null, null)}
+        onClick={() => selectNode('uncategorized', null, null)}
       >
         <i className="ti ti-folder-question tree-icon" style={{ color: 'var(--text3)' }} />
         <span className="tree-label" style={{ color: 'var(--text2)' }}>Sin categoría</span>

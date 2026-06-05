@@ -3,7 +3,7 @@ import { req } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useStore } from '../../store';
 import { TOOL_GROUPS } from '../../constants/tools';
-import type { Agent, SelectedNode } from '../../types';
+import type { Agent, Skill, SelectedNode } from '../../types';
 
 interface Props {
   agent: Agent;
@@ -18,12 +18,13 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const toast    = useToast();
   const projects = useStore((s) => s.projects);
 
-  const [a,       setA]       = useState<Agent>({ ...initial });
-  const [lang,    setLang]    = useState<'es' | 'en'>('en');
-  const [aiDesc,  setAiDesc]  = useState('');
-  const [genBusy, setGenBusy] = useState(false);
-  const [optBusy, setOptBusy] = useState(false);
-  const [saveBusy,setSaveBusy]= useState(false);
+  const [a,        setA]        = useState<Agent>({ ...initial });
+  const [lang,     setLang]     = useState<'es' | 'en'>('en');
+  const [aiDesc,   setAiDesc]   = useState('');
+  const [genBusy,  setGenBusy]  = useState(false);
+  const [optBusy,  setOptBusy]  = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [allSkills, setAllSkills] = useState<Skill[]>([]);
 
   // Always-fresh ref — avoids stale closure in async save().
   const aRef = React.useRef<Agent>(a);
@@ -40,6 +41,12 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
     }
   }, [initial, isNew]);
 
+  useEffect(() => {
+    if (node.level === 'project') {
+      req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
+    }
+  }, [node.level]);
+
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
 
   function toggleTool(tool: string, checked: boolean) {
@@ -52,7 +59,6 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const levelPath = (() => {
     if (node.level === 'global')  return '~/.claude/agents/global/';
     if (node.level === 'section') return `agents/section-${node.categoryId}/`;
-    if (node.level === 'tech')    return `agents/tech-${node.categoryId}-${node.techId}/`;
     const p = projects.find((x) => x.id === node.projectId);
     return p ? `${p.path}\\.claude\\agents\\` : '';
   })();
@@ -66,7 +72,6 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
         name:        a.name || 'agent',
         level:       node.level,
         categoryId:  node.categoryId,
-        techId:      node.techId,
         tools:       a.tools ?? [],
         language:    lang,
         existingAgents: [],
@@ -105,8 +110,8 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
       } else {
         await req(isNew ? 'POST' : 'PUT', '/agents',
           isNew
-            ? { level: node.level, categoryId: node.categoryId, techId: node.techId, agent: agentToSave }
-            : { level: node.level, categoryId: node.categoryId, techId: node.techId, oldName: initial.name, agent: agentToSave });
+            ? { level: node.level, categoryId: node.categoryId, agent: agentToSave }
+            : { level: node.level, categoryId: node.categoryId, oldName: initial.name, agent: agentToSave });
       }
       toast(`Agente "${agentToSave.name}" guardado`);
       onSaved(agentToSave);
@@ -120,7 +125,7 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
       if (node.level === 'project') {
         await req('DELETE', `/projects/${node.projectId}/agents/${a.name}`);
       } else {
-        await req('DELETE', '/agents', { level: node.level, categoryId: node.categoryId, techId: node.techId, name: a.name });
+        await req('DELETE', '/agents', { level: node.level, categoryId: node.categoryId, name: a.name });
       }
       toast(`Agente "${a.name}" eliminado`);
       onDeleted();
@@ -213,6 +218,44 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
             })}
           </div>
         </div>
+
+        {/* Skills — solo en agentes de proyecto */}
+        {node.level === 'project' && (allSkills.length > 0 || (a.skills || []).length > 0) && (
+          <div className="field">
+            <label>Skills asociadas</label>
+            <div className="agent-skills-selector">
+              {(a.skills || []).map(skillName => (
+                <span key={skillName} className="tool-pill agent-skill-chip">
+                  <i className="ti ti-puzzle" />
+                  {skillName}
+                  <button
+                    className="agent-skill-remove"
+                    onClick={() => update({ skills: (a.skills || []).filter(s => s !== skillName) })}
+                    title="Quitar"
+                  >×</button>
+                </span>
+              ))}
+              {allSkills.filter(s => !(a.skills || []).includes(s.name)).length > 0 && (
+                <select
+                  className="input sm agent-skill-add"
+                  value=""
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    update({ skills: [...(a.skills || []), e.target.value] });
+                  }}
+                >
+                  <option value="">Añadir skill…</option>
+                  {allSkills.filter(s => !(a.skills || []).includes(s.name)).map(s => (
+                    <option key={s.name} value={s.name}>{s.name}{s.description ? ` — ${s.description}` : ''}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <p className="agent-hint">
+              Las skills inyectan conocimiento tecnológico en el system prompt. Mantén el prompt enfocado en la tarea; el contexto técnico va en skills.
+            </p>
+          </div>
+        )}
 
         {/* AI generate */}
         <div className="field">

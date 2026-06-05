@@ -10,12 +10,15 @@ import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomA
 
 type Tab = 'general' | 'cats' | 'ext-agents';
 
+interface ScriptValidationIssue { severity: 'error' | 'warn'; code: string; message: string; }
+interface ScriptValidationResult { file: string; name: string; status: 'ok' | 'warn' | 'error'; issues: ScriptValidationIssue[]; }
+interface ScriptValidationReport { validatedAt: string; summary: { ok: number; warn: number; error: number }; results: ScriptValidationResult[]; }
+
 type CLICheck = { found: boolean; path: string | null };
 
 // ── Modals state types ─────────────────────────────────────────────────────────
 
 interface AddCatForm  { id: string; name: string; color: string }
-interface AddTechForm { catId: string; catName: string; id: string; name: string }
 interface ImportAgentReview {
   agent: Partial<Agent>;
   dest: string;
@@ -40,6 +43,11 @@ export function Settings() {
   const [updateMsg,   setUpdateMsg]   = useState('');
   const [importUrl,   setImportUrl]   = useState('');
   const [importBusy,  setImportBusy]  = useState(false);
+
+  // External scripts validation
+  const [scriptValidating,  setScriptValidating]  = useState(false);
+  const [scriptReport,      setScriptReport]       = useState<ScriptValidationReport | null>(null);
+  const [scriptExpandedIdx, setScriptExpandedIdx]  = useState<number | null>(null);
 
   // Custom Providers
   const [customProviders, setCustomProviders] = useState<CustomAIProvider[]>(config?.customProviders ?? []);
@@ -101,7 +109,6 @@ export function Settings() {
 
   // modals
   const [addCat,      setAddCat]      = useState<AddCatForm | null>(null);
-  const [addTech,     setAddTech]     = useState<AddTechForm | null>(null);
   const [importReview,setImportReview]= useState<ImportAgentReview | null>(null);
 
   // import review local form
@@ -236,6 +243,22 @@ export function Settings() {
   }
 
 
+  // ── external scripts ─────────────────────────────────────────────────────────
+
+  async function validateScripts() {
+    setScriptValidating(true);
+    setScriptReport(null);
+    setScriptExpandedIdx(null);
+    try {
+      const report = await req<ScriptValidationReport>('GET', '/scripts/validate');
+      setScriptReport(report);
+    } catch {
+      toast('Error al validar scripts', 'err');
+    } finally {
+      setScriptValidating(false);
+    }
+  }
+
   // ── updates ──────────────────────────────────────────────────────────────────
 
   async function checkUpdate() {
@@ -272,24 +295,6 @@ export function Settings() {
     await req('DELETE', `/categories/${id}`);
     await refreshConfig();
     toast('Categoría eliminada');
-  }
-
-  async function handleAddTech() {
-    if (!addTech) return;
-    const { catId, id, name } = addTech;
-    const cleanId = id.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!cleanId || !name.trim()) { toast('Rellena ID y nombre', 'err'); throw new Error('validation'); }
-    await req('POST', `/categories/${catId}/technologies`, { id: cleanId, name: name.trim() });
-    await refreshConfig();
-    toast(`Tecnología "${name.trim()}" añadida`);
-    setAddTech(null);
-  }
-
-  async function deleteTech(catId: string, techId: string) {
-    if (!confirm('¿Eliminar esta tecnología?')) return;
-    await req('DELETE', `/categories/${catId}/technologies/${techId}`);
-    await refreshConfig();
-    toast('Tecnología eliminada');
   }
 
   // ── agents directory ─────────────────────────────────────────────────────────
@@ -345,11 +350,10 @@ export function Settings() {
 
   async function confirmImport() {
     if (!irName.trim()) { toast('El nombre es obligatorio', 'err'); throw new Error('validation'); }
-    let level = 'global', categoryId: string | undefined, techId: string | undefined;
-    if (irDest.startsWith('tech:'))    { const [, c, t] = irDest.split(':'); level = 'tech';    categoryId = c; techId = t; }
-    else if (irDest.startsWith('section:')) { const [, c] = irDest.split(':'); level = 'section'; categoryId = c; }
+    let level = 'global', categoryId: string | undefined;
+    if (irDest.startsWith('section:')) { const [, c] = irDest.split(':'); level = 'section'; categoryId = c; }
     await req('POST', '/agents', {
-      level, categoryId, techId,
+      level, categoryId,
       agent: { name: irName.trim(), description: irDesc.trim(), model: irModel, tools: irTools, system: irSystem.trim() },
     });
     toast(`Agente "${irName.trim()}" importado`);
@@ -433,13 +437,7 @@ export function Settings() {
   // Destination options for import modal
   const destOptions: { value: string; label: string }[] = [
     { value: 'global', label: 'Global (disponible en todos los proyectos)' },
-    ...cats.flatMap((cat) => [
-      { value: `section:${cat.id}`, label: `Sección: ${cat.name}` },
-      ...(cat.technologies ?? []).map((tech) => ({
-        value: `tech:${cat.id}:${tech.id}`,
-        label: `Tech: ${cat.name} › ${tech.name}`,
-      })),
-    ]),
+    ...cats.map((cat) => ({ value: `section:${cat.id}`, label: `Sección: ${cat.name}` })),
   ];
 
   return (
@@ -803,6 +801,70 @@ export function Settings() {
                 </div>
               </div>
 
+            {/* Scripts personalizados */}
+            <div className="settings-section">
+              <div className="settings-head">Scripts personalizados</div>
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 0, marginBottom: 12 }}>
+                Añade ficheros <code>.js</code> a la carpeta <code>user-scripts/</code> junto al ejecutable para crear pasos de orquestación sin IA. <a
+                  href="#"
+                  style={{ color: 'var(--accent)' }}
+                  onClick={e => { e.preventDefault(); (window as any).api?.openPath?.(config ? '' : ''); }}
+                >Ver guía</a>
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <code style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--bg3)', padding: '3px 8px', borderRadius: 5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  user-scripts/
+                </code>
+                <button className="btn sm ghost" onClick={() => (window as any).api?.openPath?.('user-scripts')}>
+                  <i className="ti ti-folder-open" /> Abrir carpeta
+                </button>
+                <button className="btn sm" onClick={validateScripts} disabled={scriptValidating}>
+                  {scriptValidating
+                    ? <><i className="ti ti-loader-2" /> Validando…</>
+                    : <><i className="ti ti-shield-check" /> Validar scripts</>
+                  }
+                </button>
+              </div>
+
+              {scriptReport && (
+                <div style={{ fontSize: 12 }}>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 10, color: 'var(--text2)' }}>
+                    <span style={{ color: 'var(--green)' }}><i className="ti ti-check" /> {scriptReport.summary.ok} correctos</span>
+                    {scriptReport.summary.warn > 0 && <span style={{ color: 'var(--amber)' }}><i className="ti ti-alert-triangle" /> {scriptReport.summary.warn} advertencia{scriptReport.summary.warn !== 1 ? 's' : ''}</span>}
+                    {scriptReport.summary.error > 0 && <span style={{ color: 'var(--coral)' }}><i className="ti ti-x" /> {scriptReport.summary.error} error{scriptReport.summary.error !== 1 ? 'es' : ''}</span>}
+                  </div>
+                  {scriptReport.results.length === 0 ? (
+                    <div style={{ color: 'var(--text3)', fontStyle: 'italic' }}>No se encontraron ficheros .js en la carpeta user-scripts/</div>
+                  ) : (
+                    scriptReport.results.map((r, idx) => (
+                      <div key={r.file} style={{ background: 'var(--bg2)', border: `1px solid ${r.status === 'error' ? 'var(--coral)' : r.status === 'warn' ? 'var(--amber)' : 'var(--border)'}`, borderRadius: 6, marginBottom: 6, overflow: 'hidden' }}>
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: r.issues.length > 0 ? 'pointer' : 'default' }}
+                          onClick={() => r.issues.length > 0 && setScriptExpandedIdx(scriptExpandedIdx === idx ? null : idx)}
+                        >
+                          {r.status === 'ok'    && <i className="ti ti-check"          style={{ color: 'var(--green)', fontSize: 13 }} />}
+                          {r.status === 'warn'  && <i className="ti ti-alert-triangle" style={{ color: 'var(--amber)', fontSize: 13 }} />}
+                          {r.status === 'error' && <i className="ti ti-x"              style={{ color: 'var(--coral)', fontSize: 13 }} />}
+                          <code style={{ flex: 1, color: 'var(--text1)' }}>{r.file}</code>
+                          {r.issues.length > 0 && <i className={`ti ti-chevron-${scriptExpandedIdx === idx ? 'up' : 'down'}`} style={{ color: 'var(--text3)', fontSize: 11 }} />}
+                        </div>
+                        {scriptExpandedIdx === idx && r.issues.length > 0 && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {r.issues.map((issue, ii) => (
+                              <div key={ii} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                                <code style={{ fontSize: 10, color: issue.severity === 'error' ? 'var(--coral)' : 'var(--amber)', whiteSpace: 'nowrap', flexShrink: 0 }}>{issue.code}</code>
+                                <span style={{ color: 'var(--text2)' }}>{issue.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Row 2: Application (Compact: Close behavior + Updates + Wizard on the right) */}
             <div className="settings-section">
               <div className="settings-head">Aplicación</div>
@@ -838,37 +900,25 @@ export function Settings() {
         {/* ── Tab: Categorías ── */}
         {tab === 'cats' && (
           <div className="settings-section">
-            <div className="settings-head">Categorías y tecnologías</div>
+            <div className="settings-head">Categorías</div>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 0, marginBottom: 12 }}>
+              Las categorías agrupan agentes por dominio. La especificidad tecnológica se define mediante skills en cada proyecto.
+            </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
               <button className="btn sm" onClick={() => setAddCat({ id: '', name: '', color: '#7c6af7' })}>
                 <i className="ti ti-plus" /> Nueva categoría
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
               {cats.map((cat) => (
                 <div key={cat.id} className="cat-item">
                   <div className="cat-item-head">
                     <div className="cat-dot" style={{ background: cat.color }} />
+                    <i className={`ti ${cat.icon || 'ti-folder'}`} style={{ color: cat.color, fontSize: 14 }} />
                     <span className="cat-item-name">{cat.name}</span>
-                    <button className="btn ghost sm" onClick={() => setAddTech({ catId: cat.id, catName: cat.name, id: '', name: '' })}>
-                      <i className="ti ti-plus" /> Tech
-                    </button>
                     <button className="btn ghost sm danger" onClick={() => deleteCat(cat.id)}>
                       <i className="ti ti-trash" />
                     </button>
-                  </div>
-                  <div className="tech-pills">
-                    {(cat.technologies ?? []).map((t) => (
-                      <span key={t.id} className="tech-pill">
-                        {t.name}
-                        <span className="del" onClick={() => deleteTech(cat.id, t.id)} title="Eliminar">
-                          <i className="ti ti-x" />
-                        </span>
-                      </span>
-                    ))}
-                    {!(cat.technologies ?? []).length && (
-                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sin tecnologías</span>
-                    )}
                   </div>
                 </div>
               ))}
@@ -1017,20 +1067,6 @@ export function Settings() {
           <div className="field">
             <label>Color</label>
             <input type="color" value={addCat.color} onChange={(e) => setAddCat({ ...addCat, color: e.target.value })} style={{ height: 36, padding: 2 }} />
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Modal: Nueva tecnología ── */}
-      {addTech && (
-        <Modal title={`Nueva tecnología en ${addTech.catName}`} confirmLabel="Añadir" onConfirm={handleAddTech} onClose={() => setAddTech(null)}>
-          <div className="field">
-            <label>ID (único dentro de la categoría)</label>
-            <input value={addTech.id} onChange={(e) => setAddTech({ ...addTech, id: e.target.value })} placeholder="python" />
-          </div>
-          <div className="field">
-            <label>Nombre</label>
-            <input value={addTech.name} onChange={(e) => setAddTech({ ...addTech, name: e.target.value })} placeholder="Python" />
           </div>
         </Modal>
       )}

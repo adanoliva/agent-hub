@@ -11,8 +11,8 @@ const fs     = require('fs');
 const https  = require('https');
 const crypto = require('crypto');
 
-const { AGENTS_DIR, CACHE_DIR, ensureDir } = require('./config');
-const { syncGlobalAgentsToClaudeDir }       = require('./agents');
+const { AGENTS_DIR, CACHE_DIR, APP_DIR, SKILLS_DIR, ensureDir } = require('./config');
+const { syncGlobalAgentsToClaudeDir }                            = require('./agents');
 
 const META_FILE = path.join(CACHE_DIR, 'agents-meta.json');
 
@@ -34,13 +34,18 @@ function parseGitHubUrl(url) {
 }
 
 // ── Remote → local path mapping ───────────────────────────────────────────────
-// Standard dirs: global, section-{x}, tech-{x}-{y}, uncategorized
-// Non-standard → uncategorized
+// Standard dirs: global, section-{x}, uncategorized
+// Non-standard (including legacy tech-{x}-{y}) → uncategorized
 
 function mapRemotePathToLocal(remotePath) {
+  // Skills: rutas que empiezan por 'skills/' → estructura plana en agents/skills/
+  if (remotePath.startsWith('skills/')) {
+    return path.join(SKILLS_DIR, path.basename(remotePath));
+  }
+
   // Strip leading 'agents/' prefix if present
   const normalized = remotePath.replace(/^agents\//, '');
-  const isStandard = /^(global|section-[^/]+|tech-[^/]+-[^/]+|uncategorized)\/[^/]+\.md$/.test(normalized);
+  const isStandard = /^(global|section-[^/]+|uncategorized)\/[^/]+\.md$/.test(normalized);
 
   if (isStandard) {
     return path.join(AGENTS_DIR, ...normalized.split('/'));

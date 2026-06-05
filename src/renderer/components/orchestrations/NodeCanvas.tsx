@@ -2,22 +2,27 @@ import React from 'react';
 import type { OrchestrateNode } from '../../types';
 
 interface Props {
-  agents:          string[];
-  nodes:           OrchestrateNode[];
-  inputNode?:      OrchestrateNode;
-  selectedNode:    number | null;      // -1 = inputNode selected
-  onSelectNode:    (idx: number) => void;
-  onNodeDragStart: (idx: number, e: React.DragEvent) => void;
-  onDropAtZone:    (zone: number) => void;
-  dragOverZone:    number | null;
-  onDragOverZone:  (zone: number | null) => void;
-  isDragging:      boolean;
-  draggingNodeIdx: number | null;
-  onRemoveAgent:   (idx: number) => void;
-  agentModels?:    Record<string, string>;
+  agents:              string[];
+  nodes:               OrchestrateNode[];
+  inputNode?:          OrchestrateNode;
+  selectedNode:        number | null;      // -1 = inputNode selected
+  onSelectNode:        (idx: number) => void;
+  onNodeDragStart:     (idx: number, e: React.DragEvent) => void;
+  onDropAtZone:        (zone: number) => void;
+  dragOverZone:        number | null;
+  onDragOverZone:      (zone: number | null) => void;
+  isDragging:          boolean;
+  draggingNodeIdx:     number | null;
+  onRemoveAgent:       (idx: number) => void;
+  agentModels?:        Record<string, string>;
+  agentDescriptions?:  Record<string, string>;
+  externalScriptNames?: Set<string>;
+  /** Scripts that require params — para mostrar advertencia si faltan */
+  scriptsWithRequiredParams?: Set<string>;
 }
 
 export function getAgentIcon(name: string): string {
+  if (name.startsWith('__script:')) return 'ti-terminal-2';
   const n = name.toLowerCase();
   if (n.includes('test'))     return 'ti-flask';
   if (n.includes('refactor')) return 'ti-wand';
@@ -28,6 +33,10 @@ export function getAgentIcon(name: string): string {
   if (n.includes('debug'))    return 'ti-bug';
   if (n.includes('api'))      return 'ti-api';
   return 'ti-cpu';
+}
+
+function getScriptLabel(name: string): string {
+  return name.replace(/^__script:/, '').replace(/__$/, '');
 }
 
 function hasConfig(node: OrchestrateNode): boolean {
@@ -68,6 +77,8 @@ export function NodeCanvas({
   agents, nodes, inputNode, selectedNode, onSelectNode,
   onNodeDragStart, onDropAtZone, dragOverZone, onDragOverZone,
   isDragging, draggingNodeIdx, onRemoveAgent, agentModels = {},
+  agentDescriptions = {}, externalScriptNames = new Set(),
+  scriptsWithRequiredParams = new Set(),
 }: Props) {
   const n = agents.length;
 
@@ -214,13 +225,23 @@ export function NodeCanvas({
 
       {/* ── Agent nodes ── */}
       {agents.map((agentName, i) => {
-        const model = agentModels[agentName] || '';
+        const model       = agentModels[agentName] || '';
+        const isScript    = agentName.startsWith('__script:');
+        const scriptName  = isScript ? getScriptLabel(agentName) : '';
+        const isExternal  = isScript && externalScriptNames.has(scriptName);
+        const label       = isScript ? scriptName : agentName;
+        const description = agentDescriptions[agentName] || '';
+        // La conexión que llega a este nodo es nodes[i-1]; su scriptParams se aplica al agente i
+        const prevNode    = i > 0 ? nodes[i - 1] : null;
+        const missingParams = isScript && scriptsWithRequiredParams.has(scriptName)
+          && !(prevNode?.scriptParams && Object.keys(prevNode.scriptParams).length > 0);
         return (
           <div
             key={i}
-            className={`orch-node-agent${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
+            className={`orch-node-agent${isScript ? ' orch-node-script' : ''}${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
             draggable
             onDragStart={e => onNodeDragStart(i, e)}
+            title={description || label}
             style={{
               position: 'absolute',
               top:      yNodeTop(i),
@@ -234,8 +255,16 @@ export function NodeCanvas({
             <div className="orch-node-index">{i + 1}</div>
             <div className="orch-node-icon"><i className={`ti ${getAgentIcon(agentName)}`} /></div>
             <div className="orch-node-info">
-              <div className="orch-node-name" title={agentName}>{agentName}</div>
-              {model && <span className={`orch-node-model model-${model}`}>{model}</span>}
+              <div className="orch-node-name">
+                {label}
+                {missingParams && (
+                  <i className="ti ti-alert-triangle" style={{ color: 'var(--amber)', fontSize: 11, marginLeft: 5 }} title="Faltan parámetros obligatorios — abre la conexión entrante para configurarlos" />
+                )}
+              </div>
+              {isScript
+                ? <span className={`orch-node-model ${isExternal ? 'model-script-external' : 'model-script'}`}>{isExternal ? 'personalizado' : 'script'}</span>
+                : model && <span className={`orch-node-model model-${model}`}>{model}</span>
+              }
             </div>
             <button
               className="btn ghost xs orch-node-remove"
