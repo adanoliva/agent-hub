@@ -126,26 +126,33 @@ function resolveInitialAgentSelection(categoryId, selectedAgents) {
 async function copyAgentsToProject(projectPath, categoryId, providers = ['claude'], selectedAgents = null) {
   const selection  = resolveInitialAgentSelection(categoryId, selectedAgents);
   const applicable = selection.agentsToCopy;
-  const hashes     = {};
 
   for (const provider of providers) {
-    const agentsDir = getAgentsDirForProvider(projectPath, provider);
-    ensureDir(agentsDir);
-    for (const agent of applicable) {
-      const content = await serializeAgentForProviderAsync(agent, provider);
-      fs.writeFileSync(path.join(agentsDir, `${agent.name}.md`), content, 'utf8');
-    }
+    ensureDir(getAgentsDirForProvider(projectPath, provider));
   }
 
-  for (const agent of applicable) {
-    hashes[agent.name] = {
+  // Serialize all agents for all providers in parallel
+  await Promise.all(
+    applicable.flatMap(agent =>
+      providers.map(async provider => {
+        const content = await serializeAgentForProviderAsync(agent, provider);
+        fs.writeFileSync(
+          path.join(getAgentsDirForProvider(projectPath, provider), `${agent.name}.md`),
+          content, 'utf8',
+        );
+      }),
+    ),
+  );
+
+  const now = new Date().toISOString();
+  const hashes = Object.fromEntries(
+    applicable.map(agent => [agent.name, {
       hash:       hashAgent(agent),
-      copiedAt:   new Date().toISOString(),
+      copiedAt:   now,
       level:      agent.level,
       categoryId: agent.categoryId || null,
-    };
-  }
-
+    }]),
+  );
   return hashes;
 }
 
