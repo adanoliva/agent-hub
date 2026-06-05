@@ -795,7 +795,8 @@ class OrchestrationExecutor extends EventEmitter {
         const userMessage  = this._buildUserMessage(i);
         this.emit('step-input', { stepIndex: i, agentName, userMessage });
 
-        const scriptNode   = i < orchestration.nodes.length ? orchestration.nodes[i] : null;
+        // scriptParams live in the incoming edge (nodes[i-1]); nodes[i] is the outgoing edge used for gateAfter
+        const scriptNode   = i > 0 ? orchestration.nodes[i - 1] : orchestration.inputNode;
         const scriptParams = scriptNode?.scriptParams ?? {};
         try {
           const scriptResult = await scriptsRegistry.run(scriptName, {

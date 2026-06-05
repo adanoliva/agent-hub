@@ -233,6 +233,7 @@ const SCRIPTS = {
       err.category = 'budget_config_error';
       throw err;
     }
+    const softLimit = !!scriptParams?.softLimit;
 
     const outputs = Object.values(agentOutputs);
 
@@ -245,12 +246,12 @@ const SCRIPTS = {
     }, 0);
 
     if (spent >= limit) {
-      if (isEstimated) {
-        // Soft warning — estimated values are approximate, don't hard-stop
+      if (softLimit || isEstimated) {
+        const reason = isEstimated ? ' (coste aproximado — proveedor sin tracking nativo)' : '';
         return {
-          output:        `⚠ budget-guard: coste estimado $${spent.toFixed(4)} supera el límite de $${limit.toFixed(4)} (proveedor sin tracking nativo — valores aproximados). La orquestación continúa.`,
+          output:        `⚠ budget-guard: $${spent.toFixed(4)} superan el límite de $${limit.toFixed(4)}${reason}. La orquestación continúa.`,
           filesModified: [],
-          data:          { spent, limit, isEstimated: true, limitExceeded: true },
+          data:          { spent, limit, isEstimated, softLimit, limitExceeded: true },
         };
       }
       const err = new Error(
@@ -265,7 +266,7 @@ const SCRIPTS = {
     return {
       output:        `Presupuesto OK: $${spent.toFixed(4)}${note} de $${limit.toFixed(4)} (${((spent / limit) * 100).toFixed(1)}% usado)`,
       filesModified: [],
-      data:          { spent, limit, remaining: limit - spent, isEstimated },
+      data:          { spent, limit, remaining: limit - spent, isEstimated, softLimit },
     };
   },
 
@@ -566,6 +567,7 @@ function listScripts() {
       builtin:     true,
       params: [
         { key: 'maxBudgetUSD', label: 'Presupuesto máximo ($)', type: 'number', required: true, placeholder: '0.05' },
+        { key: 'softLimit', label: 'No parar si se supera el presupuesto (mostrar aviso)', type: 'boolean', required: false, hint: 'La orquestación continuará aunque se supere el límite.' },
       ],
     },
   ];

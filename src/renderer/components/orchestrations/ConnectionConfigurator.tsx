@@ -5,9 +5,10 @@ import { useElectron } from '../../hooks/useElectron';
 export interface ScriptParamSchema {
   key:         string;
   label:       string;
-  type:        'number' | 'text';
+  type:        'number' | 'text' | 'boolean';
   required:    boolean;
   placeholder?: string;
+  hint?:       string;
 }
 
 interface Props {
@@ -237,6 +238,21 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
           {scriptParams.map(param => {
             const val = nodeScriptParams[param.key];
             const missing = param.required && (val === undefined || val === null || val === '');
+            if (param.type === 'boolean') {
+              return (
+                <div key={param.key} className="orch-script-param-row">
+                  <label className="orch-check-row">
+                    <input
+                      type="checkbox"
+                      checked={!!val}
+                      onChange={e => patchScriptParam(param.key, e.target.checked)}
+                    />
+                    <span>{param.label}</span>
+                  </label>
+                  {param.hint && <p className="orch-param-hint">{param.hint}</p>}
+                </div>
+              );
+            }
             return (
               <div key={param.key} className="orch-script-param-row">
                 <label className={`orch-label${missing ? ' orch-label-required' : ''}`}>
@@ -245,15 +261,12 @@ export function ConnectionConfigurator({ node, fromAgent, toAgent, isInputNode =
                 </label>
                 <input
                   type={param.type === 'number' ? 'number' : 'text'}
-                  className={`input sm${missing ? ' input-missing' : ''}`}
+                  className={`input sm orch-script-param-input${missing ? ' input-missing' : ''}`}
                   placeholder={param.placeholder ?? ''}
                   step={param.type === 'number' ? 'any' : undefined}
                   min={param.type === 'number' ? 0 : undefined}
                   value={val !== undefined && val !== null ? String(val) : ''}
-                  onChange={e => {
-                    const raw = e.target.value;
-                    patchScriptParam(param.key, param.type === 'number' ? (raw === '' ? '' : parseFloat(raw)) : raw);
-                  }}
+                  onChange={e => patchScriptParam(param.key, e.target.value)}
                 />
                 {missing && <p className="orch-param-hint warn">Este campo es obligatorio para que el script funcione.</p>}
               </div>

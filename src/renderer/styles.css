@@ -871,12 +871,13 @@ select option{background:var(--bg2)}
 .orch-gate-hint{margin:0;font-size:11px;color:var(--text2);line-height:1.5}
 
 /* Script params section */
-.orch-script-params{border:1px solid rgba(251,191,36,.2);background:rgba(251,191,36,.04);border-radius:8px}
+.orch-script-params{border:1px solid rgba(251,191,36,.2);background:rgba(251,191,36,.04);border-radius:8px;padding:0 10px 10px}
 .orch-script-param-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .orch-script-param-row:last-child{margin-bottom:0}
+.orch-script-param-input{width:100%;box-sizing:border-box}
 .orch-label-required{color:var(--text0)}
 .orch-param-required-dot{color:var(--coral);margin-left:3px;font-weight:700}
-.orch-param-hint{margin:0;font-size:11px;line-height:1.4}
+.orch-param-hint{margin:0;font-size:11px;line-height:1.4;color:var(--text3)}
 .orch-param-hint.warn{color:var(--amber)}
 .input-missing{border-color:var(--amber) !important;background:rgba(251,191,36,.06) !important}
 
