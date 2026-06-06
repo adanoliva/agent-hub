@@ -187,7 +187,7 @@ export function Orchestrations() {
                 ))}
               </select>
               {selectedProjectId && (
-                <button className="btn primary sm" onClick={() => setShowCreate(true)}>
+                <button className="btn primary sm" style={{ marginLeft: 12 }} onClick={() => setShowCreate(true)}>
                   <i className="ti ti-plus" /> Nueva orquestación
                 </button>
               )}

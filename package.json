@@ -8,6 +8,8 @@
     "predev": "node scripts/kill-dev-ports.js",
     "dev": "concurrently -k --success first -n vite,electron -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "dev:vite": "vite",
+    "dev:backend": "node src/backend/server-standalone.js",
+    "dev:web": "concurrently -k -n backend,vite -c green,cyan \"node src/backend/server-standalone.js\" \"vite\"",
     "build:renderer": "vite build",
     "test:backend": "node --test tests/backend/*.test.js",
     "prepare:build": "npm run build:renderer && node scripts/generate-icon.js",
