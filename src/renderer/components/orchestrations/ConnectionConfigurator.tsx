@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { OrchestrateNode, DataFlow, ContextExtra, TemporalContext } from '../../types';
+import type { OrchestrationNode, DataFlow, ContextExtra, TemporalContext } from '../../types';
 import { useElectron } from '../../hooks/useElectron';
 
 export interface ScriptParamSchema {
@@ -12,11 +12,11 @@ export interface ScriptParamSchema {
 }
 
 interface Props {
-  node:         OrchestrateNode;
+  node:         OrchestrationNode;
   fromAgent:    string;
   toAgent:      string;
   isInputNode?: boolean;
-  onUpdate:     (node: OrchestrateNode) => void;
+  onUpdate:     (node: OrchestrationNode) => void;
   /** Params schema for toAgent if it's a script with declared params */
   scriptParams?: ScriptParamSchema[];
 }

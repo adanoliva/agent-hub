@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-04 · Versión: 2.2.0
+> Última actualización: 2026-06-06 · Versión: 2.3.0-dev
 
 ---
 
@@ -769,6 +769,13 @@ execute(prompt, systemPrompt, config)
 
 Gestiona la persistencia de las definiciones de orquestación en `{projectPath}/.agent-hub/orchestrations/{id}.json`.
 
+**Migración automática de formato lineal → DAG:** `migrateOrchestration(raw)` detecta orquestaciones en formato antiguo (`agents: string[]` + `nodes: OrchestrateNode[]`) y las convierte al nuevo modelo DAG en el momento de lectura (no modifica el JSON en disco hasta el próximo guardado). La migración:
+- Por cada `agents[i]`: crea `OrchestrationNode` con `id = "node-i"`, `agentName = agents[i]`, `dependsOn = i === 0 ? [] : ["node-(i-1)"]`.
+- El `inputNode` antiguo (Orquestador → Agent[0]) mapea sus `dataFlow`/`contextExtra` al nodo raíz.
+- Las conexiones `nodes[i]` pasan a ser `dataFlow`/`contextExtra`/`gateAfter`/`scriptParams` del nodo destino.
+
+`migrateOrchestration` se aplica en `read()`, `list()` y `create()` (si el payload viene en formato antiguo). Es transparente para el motor.
+
 ### Funciones exportadas
 
 | Función | Descripción |
@@ -786,21 +793,35 @@ Gestiona la persistencia de las definiciones de orquestación en `{projectPath}/
 
 ## 12. Orquestaciones — Motor de ejecución (`orchestrator.js`)
 
-Implementa la ejecución secuencial de una orquestación, paso a paso. Extiende `EventEmitter` para emitir eventos de progreso vía SSE.
+Implementa la ejecución **DAG** de una orquestación: los nodos sin dependencias entre sí se ejecutan en paralelo usando `Promise.allSettled`. Extiende `EventEmitter` para emitir eventos de progreso vía SSE.
+
+### Modelo de ejecución DAG
+
+El motor calcula los **niveles topológicos** del grafo al inicio. Cada nivel es un conjunto de nodos que pueden ejecutarse en paralelo porque sus dependencias ya han completado. El algoritmo:
+
+```
+1. Calcular niveles topológicos (BFS desde nodos raíz)
+2. Para cada nivel:
+   a. Promise.allSettled([ejecutarNodo(n) for n in nivel])
+   b. Cada nodo corre de forma independiente (tokensUsed, cost, handoff propios)
+3. Si algún nodo falla y stopOnError=true → abortar niveles siguientes
+```
+
+Los handoffs de un nivel anterior se agregan (merged) para los nodos del siguiente nivel que los consuman.
 
 ### Eventos emitidos
 
 | Evento | Payload |
 |---|---|
-| `step-start` | `{ stepIndex, agentName, totalSteps }` |
-| `step-input` | `{ stepIndex, agentName, userMessage }` |
-| `step-done` | `{ stepIndex, result: StepResult }` |
-| `step-warning` | `{ stepIndex, issues }` |
-| `gate-open` | `{ stepIndex, agentName, executionId }` — gate HITL activo |
+| `step-start` | `{ stepIndex, agentName, nodeId, totalSteps }` |
+| `step-input` | `{ stepIndex, agentName, nodeId, userMessage }` |
+| `step-done` | `{ stepIndex, result: StepResult }` — `StepResult.nodeId` identifica el nodo |
+| `step-warning` | `{ stepIndex, nodeId, issues }` |
+| `gate-open` | `{ stepIndex, agentName, nodeId, executionId }` — gate HITL activo |
 | `browser-required` | `{ stepIndex, agentName, executionId }` |
 | `browser-continued` | `{ executionId }` |
 | `complete` | `ExecutionResult` |
-| `cancelled` | `{ executionId }` |
+| `cancelled` | `{ executionId, reason?, data? }` — `reason='budget_exceeded'` si aplica |
 | `error` | `{ message }` |
 | `log` | `{ timestamp, level, message, data? }` — persiste en `logs.jsonl` |
 

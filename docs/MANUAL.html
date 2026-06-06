@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Hub — Manual de uso v2.1.0</title>
+<title>Agent Hub — Manual de uso v2.3.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -215,7 +215,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 <nav class="nav">
   <div class="nav-logo">
     <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Agent Hub</div>
-    <div class="nav-logo-sub">Manual de uso · v2.1.0</div>
+    <div class="nav-logo-sub">Manual de uso · v2.3.0</div>
   </div>
 
   <div class="nav-section">Primeros pasos</div>
@@ -231,7 +231,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <a class="nav-item" href="#skills"><i class="ti ti-puzzle" aria-hidden="true"></i> Skills</a>
   <a class="nav-item" href="#chat"><i class="ti ti-message-chatbot" aria-hidden="true"></i> Vista Chat</a>
   <a class="nav-item" href="#orquestaciones"><i class="ti ti-circuit-diode" aria-hidden="true"></i> Vista Orquestaciones</a>
-  <a class="nav-item" href="#scripts-deterministicos"><i class="ti ti-terminal-2" aria-hidden="true"></i> Scripts determinísticos</a>
+  <a class="nav-item" href="#scripts-deterministicos"><i class="ti ti-terminal-2" aria-hidden="true"></i> Scripts (built-in y custom)</a>
   <a class="nav-item" href="#gates-hitl"><i class="ti ti-user-check" aria-hidden="true"></i> Gates HITL</a>
   <a class="nav-item" href="#quality-score"><i class="ti ti-chart-bar" aria-hidden="true"></i> Quality Score</a>
   <a class="nav-item" href="#git-checkpointer"><i class="ti ti-git-commit" aria-hidden="true"></i> Git Checkpointer</a>
@@ -269,9 +269,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- Hero                   -->
   <!-- ══════════════════════ -->
   <div class="hero" id="inicio">
-    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.1.0</div>
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.3.0</div>
     <h1 class="hero-title">Agent <span>Hub</span></h1>
-    <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
+    <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Incluye orquestaciones DAG con ejecución paralela, scripts determinísticos, gates HITL, skills por agente y mucho más. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
     <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
   </div>
 
@@ -327,10 +327,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p class="section-intro">Al ejecutar Agent Hub por primera vez aparece el wizard de tres pasos. Puedes saltarlo en cualquier momento y configurar todo después desde Ajustes.</p>
 
     <div class="screenshot">
-      <!-- Sube screenshots/wizard.png para mostrar aquí la captura del wizard -->
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/wizard.png</span>
+        <span>screenshots/00-wizard.png</span>
         <em>Captura del wizard de primer arranque</em>
       </div>
     </div>
@@ -466,7 +465,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/vista-dashboard.png</span>
+        <span>screenshots/01-dashboard.png</span>
         <em>Vista Dashboard con las seis tarjetas de estado</em>
       </div>
     </div>
@@ -596,10 +595,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p class="section-intro">La vista principal. Muestra todos tus proyectos agrupados por categoría en tarjetas. Desde aquí gestionas el ciclo de vida de cada proyecto.</p>
 
     <div class="screenshot">
-      <!-- Sube screenshots/vista-proyectos.png para mostrar aquí la captura -->
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/vista-proyectos.png</span>
+        <span>screenshots/02-projects.png</span>
         <em>Vista principal de proyectos con tarjetas y badges de sync</em>
       </div>
     </div>
@@ -649,11 +647,10 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p class="section-intro">Panel de dos columnas: árbol de navegación a la izquierda y cuadrícula de agentes a la derecha. Al seleccionar un agente, se abre el editor en la columna central.</p>
 
     <div class="screenshot">
-      <!-- Sube screenshots/vista-agentes.png para mostrar aquí la captura -->
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/vista-agentes.png</span>
-        <em>Vista de agentes con árbol, cuadrícula y editor lateral</em>
+        <span>screenshots/03-agents.png</span>
+        <em>Vista de agentes con árbol de navegación y cuadrícula de agentes</em>
       </div>
     </div>
 
@@ -851,6 +848,27 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="card-body">Si creas una skill de convenciones de documentación o estilos de escritura del equipo, puedes generarla en español.</div>
       </div>
     </div>
+
+    <h4>Skills en agentes de nivel Proyecto</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Los agentes creados directamente en un proyecto (nivel 4) pueden tener sus propias skills asociadas, independientes de las skills del proyecto. Se configuran en el campo <strong>Skills asociadas</strong> del editor de agente — visible solo cuando el agente es de nivel proyecto.
+    </p>
+
+    <div class="screenshot">
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/05-project-agent-editor.png</span>
+        <em>Editor de agente de proyecto con la sección "Skills asociadas" al pie del formulario</em>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Dos capas de skills</div>
+        <div class="callout-text">Cuando ejecutas un agente de proyecto, se inyectan <strong>primero</strong> las skills del proyecto y <strong>después</strong> las skills propias del agente. Esto permite skills generales del proyecto (React, TypeScript) y skills especializadas por agente (por ejemplo, una skill de convenciones de testing solo para el agente test-writer).</div>
+      </div>
+    </div>
   </div>
 
   <div class="sep"></div>
@@ -864,10 +882,9 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p class="section-intro">Chat de IA multi-turno integrado en la app. Conversa con el proveedor configurado usando tus agentes como contexto activo y con historial por proyecto.</p>
 
     <div class="screenshot">
-      <!-- Sube screenshots/vista-chat.png para mostrar aquí la captura -->
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/vista-chat.png</span>
+        <span>screenshots/10-chat.png</span>
         <em>Vista del chat con chips de agentes activos y acciones sugeridas</em>
       </div>
     </div>
@@ -950,40 +967,40 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <div class="section" id="orquestaciones">
     <div class="section-badge">La aplicación</div>
     <h2 class="section-title">Vista <span>Orquestaciones</span></h2>
-    <p class="section-intro">Crea y ejecuta workflows de múltiples agentes en secuencia sobre tu proyecto. El output de cada agente se inyecta como contexto al siguiente, con control granular del flujo de datos, contexto estático y dinámico, rollback paso a paso y auditoría completa de ejecución.</p>
+    <p class="section-intro">Crea y ejecuta workflows de múltiples agentes en paralelo y en secuencia sobre tu proyecto mediante un modelo <strong>DAG</strong> (grafo dirigido acíclico). Los nodos sin dependencias entre sí se ejecutan simultáneamente, con control granular del flujo de datos entre pasos, contexto estático y dinámico, gates HITL, rollback paso a paso y auditoría completa.</p>
 
     <div class="callout note">
       <i class="ti ti-topology-ring-2" aria-hidden="true"></i>
       <div class="callout-body">
         <div class="callout-title">Por qué es la función más potente de Agent Hub</div>
-        <div class="callout-text">Un agente solo puede hacer una cosa a la vez, y cuando termina su contexto desaparece. Las orquestaciones encadenan agentes en un pipeline inteligente: el reviewer analiza, el refactorizador actúa sobre ese análisis, el test-writer genera tests para los cambios resultantes — todo de forma automática, sin intervención manual entre pasos, con los ficheros reales del proyecto como base de trabajo.</div>
+        <div class="callout-text">Un agente solo puede hacer una cosa a la vez. Las orquestaciones encadenan agentes en un pipeline inteligente con ejecución paralela: el reviewer y el security-auditor analizan a la vez, el refactorizador actúa sobre ambos análisis, el test-writer genera tests para los cambios. Todo automático, con los ficheros reales del proyecto como base de trabajo.</div>
       </div>
     </div>
 
     <div class="screenshot">
-          <div class="screenshot-placeholder">
-            <i class="ti ti-photo" aria-hidden="true"></i>
-            <span>screenshots/orquestaciones-lista.png</span>
-            <em>Vista principal de orquestaciones — listado de cards por proyecto</em>
-          </div>
-        </div>
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/06-orchestrations.png</span>
+        <em>Vista principal de orquestaciones — listado de cards por proyecto</em>
+      </div>
+    </div>
 
     <h4>Conceptos clave</h4>
     <div class="grid2" style="margin-bottom:16px">
       <div class="card accent-l">
         <div class="card-icon"><i class="ti ti-topology-ring-2" style="color:var(--accent)"></i></div>
-        <div class="card-title">Orquestación</div>
-        <div class="card-body">Definición persistente de un workflow: lista ordenada de agentes + configuración de cada conexión entre ellos + configuración de ejecución. Se guarda como JSON en <code>.agent-hub/orchestrations/</code> dentro del proyecto.</div>
+        <div class="card-title">DAG — Grafo de nodos</div>
+        <div class="card-body">La orquestación es un grafo dirigido acíclico. Cada nodo declara de qué nodos depende (<code>dependsOn</code>). Los nodos sin dependencias entre sí se ejecutan en paralelo (<code>Promise.allSettled</code>). Los nodos dependientes esperan a que sus predecesores terminen.</div>
       </div>
       <div class="card blue-l">
         <div class="card-icon"><i class="ti ti-arrows-transfer-down" style="color:var(--blue)"></i></div>
-        <div class="card-title">Conexión (nodo)</div>
-        <div class="card-body">El enlace entre dos agentes consecutivos. En cada conexión defines qué información fluye del agente anterior al siguiente: su respuesta, los ficheros que modificó, el CLAUDE.md del proyecto, y contexto extra.</div>
+        <div class="card-title">Arista (conexión)</div>
+        <div class="card-body">El enlace entre dos nodos del grafo. Se representa como una curva SVG en el lienzo. Al hacer clic en el punto central de la arista, el panel derecho muestra el configurador de DataFlow, contexto y gate HITL.</div>
       </div>
       <div class="card green-l">
         <div class="card-icon"><i class="ti ti-database" style="color:var(--green)"></i></div>
         <div class="card-title">Contexto fijo</div>
-        <div class="card-body">Texto libre o ficheros del proyecto que se incluyen siempre en una conexión concreta, independientemente de lo que haya ocurrido antes. Se configura una sola vez al editar la orquestación.</div>
+        <div class="card-body">Texto libre o ficheros del proyecto que se incluyen siempre en un nodo concreto, independientemente de lo que haya ocurrido antes. Se configura una sola vez al editar la orquestación.</div>
       </div>
       <div class="card amber-l">
         <div class="card-icon"><i class="ti ti-forms" style="color:var(--amber)"></i></div>
@@ -1001,7 +1018,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/orquestaciones-cards.png</span>
+        <span>screenshots/06-orchestrations.png</span>
         <em>Tarjetas de orquestación con estado de última ejecución y contadores</em>
       </div>
     </div>
@@ -1026,16 +1043,24 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     </p>
 
     <!-- ── Editor visual ── -->
-    <h4>Editor visual — los tres paneles</h4>
+    <h4>Editor visual DAG — los tres paneles</h4>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      Al crear o editar una orquestación, la vista cambia a un editor de tres paneles en paralelo.
+      Al crear o editar una orquestación, la vista cambia a un editor de tres paneles. El lienzo central es un canvas 2D interactivo donde los nodos son draggables y las aristas son curvas Bézier SVG.
     </p>
 
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/orquestaciones-editor.png</span>
-        <em>Editor visual con los tres paneles: paleta de agentes, lienzo y configurador de conexión</em>
+        <span>screenshots/07-orchestration-editor.png</span>
+        <em>Editor DAG — paleta de agentes y scripts, lienzo interactivo 2D y configurador de conexión</em>
+      </div>
+    </div>
+
+    <div class="screenshot" style="margin-top:16px">
+      <div class="screenshot-placeholder">
+        <i class="ti ti-photo" aria-hidden="true"></i>
+        <span>screenshots/08-orchestration-editor-active.png</span>
+        <em>Editor DAG con una arista seleccionada y el panel de configuración a la derecha</em>
       </div>
     </div>
 
@@ -1043,25 +1068,25 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="card accent-l">
         <div class="card-icon"><i class="ti ti-list" style="color:var(--accent)"></i></div>
         <div class="card-title">Panel izquierdo — Paleta</div>
-        <div class="card-body">Listado buscable de todos los agentes disponibles (global, sección, tecnología y proyecto). Arrastra cualquier agente al lienzo central para añadirlo al workflow.</div>
+        <div class="card-body">Dos tabs: <strong>Agentes</strong> (global, sección, proyecto) y <strong>Scripts</strong> (built-in + personalizados). Arrastra cualquier elemento al lienzo. La paleta es colapsable para ganar espacio en el canvas. Un agente solo puede aparecer una vez; los scripts se pueden repetir.</div>
       </div>
       <div class="card blue-l">
         <div class="card-icon"><i class="ti ti-layout-kanban" style="color:var(--blue)"></i></div>
-        <div class="card-title">Panel central — Lienzo</div>
-        <div class="card-body">Visualización vertical del workflow. Los agentes aparecen como nodos conectados por líneas. Las conexiones son clicables para abrir su configurador. Los nodos son arrastrables para reordenar.</div>
+        <div class="card-title">Panel central — Lienzo DAG</div>
+        <div class="card-body">Canvas 2D interactivo con nodos draggables y aristas SVG. Un nodo <em>Orquestador</em> estático representa la entrada. Crea conexiones haciendo clic en el port inferior de un nodo y arrastrando hasta el port superior del destino. El botón "Reordenar" aplica auto-layout topológico.</div>
       </div>
       <div class="card green-l">
         <div class="card-icon"><i class="ti ti-adjustments" style="color:var(--green)"></i></div>
         <div class="card-title">Panel derecho — Configurador</div>
-        <div class="card-body">Aparece al hacer clic en una conexión del lienzo. Muestra los controles de DataFlow, contexto fijo, contexto temporal y configuración de ejecución. Auto-guarda al cambiar de conexión.</div>
+        <div class="card-body">Se abre al hacer clic en el punto central de una arista SVG. Muestra DataFlow, contexto fijo, contexto temporal, parámetros del script (si aplica) y toggle de Gate HITL. Auto-guarda al cambiar de arista.</div>
       </div>
     </div>
 
     <div class="callout tip">
       <i class="ti ti-drag-drop" aria-hidden="true"></i>
       <div class="callout-body">
-        <div class="callout-title">Drag &amp; drop para construir el flujo</div>
-        <div class="callout-text">Arrastra agentes desde la paleta izquierda a cualquier posición del lienzo. Para reordenar, arrastra el icono de grip (<i class="ti ti-grip-vertical" style="font-size:11px"></i>) del nodo a la posición deseada. Las conexiones se regeneran automáticamente preservando su configuración.</div>
+        <div class="callout-title">Drag &amp; drop para construir el grafo</div>
+        <div class="callout-text">Arrastra agentes o scripts desde la paleta al lienzo. Si sueltas sobre un nodo existente, el nuevo se conecta automáticamente debajo. Conecta nodos haciendo clic en su port inferior (círculo) y arrastrando hasta el port superior del nodo destino. El sistema detecta ciclos y los impide automáticamente.</div>
       </div>
     </div>
 
@@ -1159,63 +1184,70 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     </div>
 
     <!-- ── Crear una orquestación ── -->
-    <h4>Crear una orquestación paso a paso</h4>
+    <h4>Crear una orquestación DAG paso a paso</h4>
     <div class="steps">
       <div class="step">
         <div class="step-num accent">1</div>
         <div class="step-body">
           <div class="step-title">Selecciona el proyecto en el topbar</div>
-          <div class="step-desc">El selector de proyecto en la barra superior de la vista Orquestaciones filtra las orquestaciones por proyecto. Si cambias de proyecto se descarta el editor en curso.</div>
+          <div class="step-desc">El selector de proyecto en la barra superior de la vista Orquestaciones filtra las orquestaciones por proyecto.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">2</div>
         <div class="step-body">
           <div class="step-title">Pulsa "Nueva orquestación"</div>
-          <div class="step-desc">Un modal pide nombre y descripción. Al aceptar, la orquestación se crea en disco (vacía, sin agentes) y el editor visual se abre directamente.</div>
+          <div class="step-desc">Un modal pide nombre y descripción. Al aceptar, la orquestación se crea en disco (vacía) y el editor DAG se abre directamente.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">3</div>
         <div class="step-body">
-          <div class="step-title">Arrastra agentes desde la paleta al lienzo</div>
-          <div class="step-desc">Busca en la paleta izquierda el primer agente del workflow y arrástralo al lienzo. Repite con el segundo, tercero… El lienzo los muestra en orden vertical con flechas de conexión entre ellos.</div>
+          <div class="step-title">Arrastra agentes y scripts al lienzo</div>
+          <div class="step-desc">Desde la paleta izquierda (tab <strong>Agentes</strong> o <strong>Scripts</strong>) arrastra los elementos al canvas. Cada elemento se convierte en un nodo. El nodo <em>Orquestador</em> es el punto de entrada fijo.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">4</div>
         <div class="step-body">
-          <div class="step-title">Haz clic en cada conexión para configurarla</div>
-          <div class="step-desc">La flecha entre dos agentes representa la conexión. Al hacer clic, el panel derecho muestra el configurador: activa los canales de DataFlow que necesites, añade contexto fijo si aplica y define campos temporales si quieres que te los pidan en cada run.</div>
+          <div class="step-title">Conecta los nodos</div>
+          <div class="step-desc">Haz clic en el port inferior de un nodo (círculo pequeño) y arrastra hasta el port superior del nodo destino. Para ejecución paralela, conecta múltiples nodos al mismo predecesor — todos se ejecutarán a la vez cuando su predecesor termine. El sistema detecta ciclos y los impide.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">5</div>
         <div class="step-body">
-          <div class="step-title">Ajusta la configuración de ejecución</div>
-          <div class="step-desc">En el panel derecho, la sección inferior permite cambiar <code>stopOnError</code>, <code>maxTurns</code> y <code>timeout</code>. El botón "Aplicar cambios" guarda la conexión activa; al cambiar de conexión el auto-save lo hace automáticamente.</div>
+          <div class="step-title">Configura cada arista</div>
+          <div class="step-desc">Haz clic en el punto central de una arista SVG. El panel derecho muestra: DataFlow (output del agente anterior, ficheros modificados), contexto fijo, contexto temporal, parámetros del script (si aplica) y toggle de Gate HITL. Auto-guarda al cambiar de arista.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num accent">6</div>
         <div class="step-body">
+          <div class="step-title">Usa "Reordenar" si el canvas está desordenado</div>
+          <div class="step-desc">El botón <i class="ti ti-layout-distribute-vertical" style="font-size:11px"></i> <strong>Reordenar</strong> aplica auto-layout topológico: centra los nodos raíz, distribuye los niveles y deja espacio para las conexiones. Disponible cuando hay más de un nodo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">7</div>
+        <div class="step-body">
           <div class="step-title">Ejecuta</div>
-          <div class="step-desc">Usa el botón <strong>Ejecutar</strong> en el topbar del editor para lanzar la orquestación directamente desde el editor, o vuelve al listado y usa el botón de ejecución de la tarjeta.</div>
+          <div class="step-desc">Botón <strong>Ejecutar</strong> en el topbar del editor. También puedes volver al listado y usar el botón de la tarjeta.</div>
         </div>
       </div>
     </div>
 
     <!-- ── Panel de ejecución ── -->
-    <h4>Panel de ejecución</h4>
+    <h4>Panel de ejecución paralela</h4>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
-      El panel de ejecución tiene tres fases secuenciales.
+      El motor calcula los <strong>niveles topológicos</strong> del DAG al inicio. Cada nivel agrupa los nodos que pueden ejecutarse en paralelo porque sus dependencias ya completaron. Los niveles se ejecutan uno a uno; dentro de cada nivel los nodos corren simultáneamente con <code>Promise.allSettled</code>.
     </p>
 
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/orquestaciones-ejecucion.png</span>
-        <em>Panel de ejecución en curso — logs SSE por paso con estados en tiempo real</em>
+        <span>screenshots/09-execution-panel.png</span>
+        <em>Panel de ejecución paralela — dos agentes corriendo simultáneamente en el mismo nivel topológico</em>
       </div>
     </div>
 
@@ -1231,7 +1263,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="step-num amber">2</div>
         <div class="step-body">
           <div class="step-title">Ejecución en tiempo real</div>
-          <div class="step-desc">Los logs de cada paso se reciben en tiempo real vía SSE. Para cada paso se muestra: nombre del agente, estado (ejecutando / completado / error), ficheros modificados hasta ese momento y progreso general del workflow. Los eventos de tipo <code>step-progress</code> aparecen como líneas de log con su nivel (info / warn / error).</div>
+          <div class="step-desc">Los logs de cada paso se reciben vía SSE. Cuando un nivel tiene más de un nodo, la UI muestra el bloque <strong>"Nivel N/M [K en paralelo]"</strong> con todos sus nodos activos al mismo tiempo. El canvas refleja el estado con animaciones: <em>ejecutando</em> (pulso acento), <em>completado</em> (borde verde), <em>error</em> (borde coral). Ficheros modificados, tokens y duración se acumulan por nodo en tiempo real.</div>
         </div>
       </div>
       <div class="step">
@@ -1333,8 +1365,12 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <h4>Casos de uso habituales</h4>
     <div class="grid3" style="margin-bottom:16px">
       <div class="card accent-l">
-        <div class="card-title"><i class="ti ti-git-pull-request" style="margin-right:6px;color:var(--accent)"></i>Review → Refactor → Tests</div>
-        <div class="card-body">El reviewer analiza el código y produce un informe. El refactorizador aplica mejoras basándose en ese informe. El test-writer genera tests para los cambios introducidos. DataFlow: output + ficheros modificados en ambas conexiones.</div>
+        <div class="card-title"><i class="ti ti-git-merge" style="margin-right:6px;color:var(--accent)"></i>Review ∥ Security → Refactor → Tests</div>
+        <div class="card-body">El reviewer y el security-auditor analizan en <strong>paralelo</strong>. El refactorizador actúa sobre ambos análisis. El test-writer genera tests para los cambios. Ejecución en 3 niveles topológicos: {reviewer, security-auditor} → refactor → test-writer.</div>
+      </div>
+      <div class="card accent-l" style="border-left-color:var(--green)">
+        <div class="card-title"><i class="ti ti-git-pull-request" style="margin-right:6px;color:var(--green)"></i>Review → Refactor → Tests (secuencial)</div>
+        <div class="card-body">El reviewer analiza, el refactorizador aplica mejoras, el test-writer genera tests. Modelo lineal clásico. DataFlow: output + ficheros modificados en ambas conexiones.</div>
       </div>
       <div class="card blue-l">
         <div class="card-title"><i class="ti ti-shield-check" style="margin-right:6px;color:var(--blue)"></i>Security Audit → Fix</div>
@@ -1409,8 +1445,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- ══════════════════════════════ -->
   <div class="section" id="scripts-deterministicos">
     <div class="section-badge">La aplicación</div>
-    <h2 class="section-title">Scripts <span>determinísticos</span></h2>
-    <p class="section-intro">Los scripts son nodos especiales de una orquestación que ejecutan lógica Node.js predefinida sin llamar a la IA. Son instantáneos, reproducibles y no consumen tokens. Se identifican por el prefijo <code>__script:</code> y aparecen en el lienzo con un badge azul <span class="mock-script-badge">script</span>.</p>
+    <h2 class="section-title">Scripts <span>determinísticos y personalizados</span></h2>
+    <p class="section-intro">Los scripts son nodos especiales de una orquestación que ejecutan lógica Node.js predefinida sin llamar a la IA. Son instantáneos, reproducibles y no consumen tokens. Se identifican por el prefijo <code>__script:</code> y aparecen en el lienzo con un badge azul <span class="mock-script-badge">script</span>. Existen dos tipos: <strong>built-in</strong> (incluidos con Agent Hub) y <strong>externos</strong> (creados por el usuario en la carpeta <code>user-scripts/</code>).</p>
 
     <div class="callout note">
       <i class="ti ti-terminal-2" aria-hidden="true"></i>
@@ -1446,6 +1482,31 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="card-title"><i class="ti ti-circle-check" style="margin-right:6px;color:var(--blue)"></i>validate-output</div>
         <div class="card-body">Valida el output del agente anterior según reglas configurables. Devuelve <code>{ passed, issues[] }</code> para que el siguiente paso o la lógica de <code>stopOnError</code> actúe en consecuencia.</div>
       </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-currency-dollar" style="margin-right:6px;color:var(--blue)"></i>budget-guard</div>
+        <div class="card-body">Requiere el parámetro <strong>maxBudgetUSD</strong> (configurable en el configurador de conexión). Suma el coste estimado de todos los pasos anteriores y detiene la orquestación si el total supera el límite. El panel muestra un banner coral de presupuesto agotado.</div>
+      </div>
+    </div>
+
+    <h4>Scripts personalizados</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Además de los scripts built-in, puedes crear tus propios scripts Node.js y colocarlos en <code>{carpeta-de-Agent-Hub}/user-scripts/</code>. Se cargan en caliente sin reiniciar la app y aparecen en la paleta bajo la tab <strong>Scripts personalizados</strong> con un badge diferenciado.
+    </p>
+    <div class="code-block" style="margin-bottom:12px">
+<span class="dim">// user-scripts/mi-script.js</span><br>
+<span class="acc">exports.label</span>       <span class="dim">= </span><span class="grn">'Mi script'</span><span class="dim">;</span><br>
+<span class="acc">exports.description</span> <span class="dim">= </span><span class="grn">'Descripción breve'</span><span class="dim">;</span><br>
+<span class="acc">exports.run</span> <span class="dim">= async (</span><span class="hi">{ projectPath, prevResult, fs, path }</span><span class="dim">) => {</span><br>
+<span class="dim">  const content = await fs.readFile(</span><span class="grn">'README.md'</span><span class="dim">);</span><br>
+<span class="dim">  return { output: content.slice(0, 500), filesModified: [], data: {} };</span><br>
+<span class="dim">};</span>
+    </div>
+    <div class="callout info">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">API de filesystem disponible en scripts</div>
+        <div class="callout-text">Los scripts externos reciben una API <code>fs</code> sandboxed: <code>readFile</code>, <code>writeFile</code>, <code>exists</code>, <code>listDir</code>, <code>readJSON</code>, <code>writeJSON</code>. Todas las rutas son relativas al <code>projectPath</code>. Las rutas con <code>..</code> que escapan del proyecto lanzan un error de seguridad.</div>
+      </div>
     </div>
 
     <h4>Cómo añadir un script al workflow</h4>
@@ -1453,8 +1514,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="step">
         <div class="step-num blue">1</div>
         <div class="step-body">
-          <div class="step-title">Despliega la sección "Scripts" en la paleta</div>
-          <div class="step-desc">En el panel izquierdo del editor de orquestaciones, además de los agentes IA, aparece la sección <strong>Scripts</strong> con la lista de scripts disponibles.</div>
+          <div class="step-title">Cambia a la tab "Scripts" en la paleta</div>
+          <div class="step-desc">En el panel izquierdo del editor de orquestaciones hay dos tabs: <strong>Agentes</strong> y <strong>Scripts</strong>. La tab Scripts muestra los scripts built-in en la primera sección y los personalizados en la segunda. Los scripts externos con parámetros mal configurados muestran un icono ámbar de aviso.</div>
         </div>
       </div>
       <div class="step">
@@ -1709,8 +1770,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/vista-ajustes.png</span>
-        <em>Vista de ajustes con las cuatro secciones y toggle de tema en el topbar</em>
+        <span>screenshots/11-settings.png</span>
+        <em>Vista de ajustes con las cuatro secciones</em>
       </div>
     </div>
 
@@ -1900,8 +1961,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/drawer-proyecto.png</span>
-        <em>Drawer del proyecto con las dos pestañas y footer de acciones</em>
+        <span>screenshots/02-projects.png</span>
+        <em>Vista de proyectos con tarjetas y drawer de acciones</em>
       </div>
     </div>
 
@@ -2018,8 +2079,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
-        <span>screenshots/editor-agente.png</span>
-        <em>Editor de agente con el panel de generación IA</em>
+        <span>screenshots/04-agents-editor.png</span>
+        <em>Editor de agente global con el panel de generación IA</em>
       </div>
     </div>
 
@@ -2563,6 +2624,26 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Para qué sirve el Git Checkpointer en orquestaciones?</div>
         <div class="faq-a">Cuando activas <code>gitEnabled</code> en un proyecto que es un repo git, Agent Hub hace un commit automático tras cada paso de la orquestación. Esto permite rollback exacto usando <code>git reset --hard</code> al SHA del commit anterior, más preciso que el snapshot de ficheros. Actívalo en el modal de edición del proyecto.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Cómo funciona la ejecución paralela en el DAG?</div>
+        <div class="faq-a">El motor calcula los <strong>niveles topológicos</strong> del grafo al inicio de la ejecución. Cada nivel agrupa los nodos cuyos predecesores ya han terminado. Los nodos de un mismo nivel se lanzan simultáneamente con <code>Promise.allSettled</code> — si alguno falla, los demás del nivel continúan. Una vez todos terminan, el motor avanza al nivel siguiente. El panel de ejecución muestra el bloque "Nivel N/M [K en paralelo]" con el estado de cada nodo en tiempo real.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Cómo conecto nodos para que se ejecuten en paralelo?</div>
+        <div class="faq-a">Para ejecución paralela, conecta múltiples nodos al mismo nodo predecesor (o al Orquestador). Por ejemplo: Orquestador → code-reviewer y Orquestador → security-auditor ejecutarán ambos a la vez. Luego conecta code-reviewer y security-auditor → refactor-agent para que espere a ambos antes de empezar. Arrastra desde el port inferior de un nodo hasta el port superior de otro para crear la conexión.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Qué son las "Skills asociadas" en un agente de proyecto?</div>
+        <div class="faq-a">Los agentes de nivel proyecto pueden tener sus propias skills además de las del proyecto. Se configuran en el campo <strong>Skills asociadas</strong> del editor de agente (visible solo para agentes de proyecto). Cuando se ejecuta el agente, se inyectan primero las skills del proyecto y luego las del agente. Es útil para dar a un agente específico (como test-writer) contexto adicional de convenciones de testing sin aplicarlo a todos los agentes del proyecto.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Cómo creo mis propios scripts determinísticos?</div>
+        <div class="faq-a">Crea un fichero <code>.js</code> CommonJS en la carpeta <code>user-scripts/</code> junto al ejecutable de Agent Hub. Debe exportar <code>exports.label</code>, <code>exports.description</code> y <code>exports.run = async (context) => ({ output, filesModified, data })</code>. La app los carga en caliente — no necesitas reiniciarla. Aparecen en la paleta bajo "Scripts personalizados". Un script externo con el mismo nombre que un built-in es ignorado.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Para qué sirve el script budget-guard?</div>
+        <div class="faq-a">El script <code>budget-guard</code> suma el coste estimado (en USD) de todos los pasos anteriores y detiene la orquestación si supera el límite configurado. Añádelo como nodo entre pasos y configura el parámetro <strong>maxBudgetUSD</strong> en el panel configurador. Si se alcanza el límite, el panel muestra un banner coral de "presupuesto agotado" y la ejecución se cancela limpiamente. Solo tiene efecto con proveedores API que reportan uso de tokens (API de Anthropic principalmente).</div>
       </div>
     </div>
   </div>

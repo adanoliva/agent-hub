@@ -1976,11 +1976,11 @@ app.post('/api/orchestrations/:id/ops/:opId/revert', (req, res) => {
 
 // POST /api/orchestrations/:id/executions/:execId/gate — resuelve gate HITL
 app.post('/api/orchestrations/:id/executions/:execId/gate', (req, res) => {
-  const { action, feedbackText, stepIndex } = req.body;
+  const { action, feedbackText, nodeId } = req.body;
   if (!action) return res.status(400).json({ error: 'action requerida' });
-  if (stepIndex === undefined || stepIndex === null) return res.status(400).json({ error: 'stepIndex requerido' });
+  if (!nodeId)  return res.status(400).json({ error: 'nodeId requerido' });
 
-  const resolved = resolveGate(req.params.execId, Number(stepIndex), { action, feedbackText });
+  const resolved = resolveGate(req.params.execId, nodeId, { action, feedbackText });
   if (!resolved) return res.status(404).json({ error: 'Gate no encontrado o ya resuelto' });
   res.json({ ok: true });
 });

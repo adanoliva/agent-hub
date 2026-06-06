@@ -1,24 +1,33 @@
-import React from 'react';
-import type { OrchestrateNode } from '../../types';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import type { OrchestrationNode } from '../../types';
+
+export const NODE_W = 244;
+export const NODE_H = 80;
+const CTRL_OFFSET = 80;
+
+export interface SelectedEdge {
+  fromId: string | null;  // null = root node (no predecessor)
+  toId:   string;
+}
+
+interface ScriptMeta {
+  name:    string;
+  label:   string;
+  builtin: boolean;
+}
 
 interface Props {
-  agents:              string[];
-  nodes:               OrchestrateNode[];
-  inputNode?:          OrchestrateNode;
-  selectedNode:        number | null;      // -1 = inputNode selected
-  onSelectNode:        (idx: number) => void;
-  onNodeDragStart:     (idx: number, e: React.DragEvent) => void;
-  onDropAtZone:        (zone: number) => void;
-  dragOverZone:        number | null;
-  onDragOverZone:      (zone: number | null) => void;
-  isDragging:          boolean;
-  draggingNodeIdx:     number | null;
-  onRemoveAgent:       (idx: number) => void;
-  agentModels?:        Record<string, string>;
-  agentDescriptions?:  Record<string, string>;
-  externalScriptNames?: Set<string>;
-  /** Scripts that require params — para mostrar advertencia si faltan */
+  nodes:                      OrchestrationNode[];
+  onNodesChange:              (nodes: OrchestrationNode[]) => void;
+  selectedEdge:               SelectedEdge | null;
+  onSelectEdge:               (edge: SelectedEdge | null) => void;
+  executionState?:            Map<string, 'pending' | 'running' | 'done' | 'error'>;
+  scripts?:                   ScriptMeta[];
+  agentModels?:               Record<string, string>;
+  agentDescriptions?:         Record<string, string>;
+  externalScriptNames?:       Set<string>;
   scriptsWithRequiredParams?: Set<string>;
+  isDraggingFromPalette?:     boolean;
 }
 
 export function getAgentIcon(name: string): string {
@@ -39,7 +48,7 @@ function getScriptLabel(name: string): string {
   return name.replace(/^__script:/, '').replace(/__$/, '');
 }
 
-function hasConfig(node: OrchestrateNode): boolean {
+function hasNodeConfig(node: OrchestrationNode): boolean {
   return !!(
     node.contextExtra?.fixed?.freeText?.trim() ||
     (node.contextExtra?.fixed?.files?.length ?? 0) > 0 ||
@@ -47,156 +56,369 @@ function hasConfig(node: OrchestrateNode): boolean {
   );
 }
 
-const NODE_H = 80;
-const ZONE_H = 48;  // connection gap between nodes
+function bezierPt(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const mt = 1 - t;
+  return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+}
 
-export const CANVAS_SLOT_H        = NODE_H + ZONE_H;   // 128
-export const CANVAS_PAD_TOP       = 16;
-export const CANVAS_ZONE_H        = ZONE_H;
-export const CANVAS_W_CONST       = 300;
-export const CANVAS_ORCH_NODE_H   = NODE_H;             // same height as agent nodes
-export const CANVAS_ORCH_CONN_H   = 0;
-export const CANVAS_AGENTS_OFFSET = CANVAS_PAD_TOP + CANVAS_ORCH_NODE_H + CANVAS_ORCH_CONN_H;
+function topologicalLevels(nodes: OrchestrationNode[]): string[][] {
+  const inDeg = new Map(nodes.map(n => [n.id, n.dependsOn.length]));
+  const succ  = new Map<string, string[]>(nodes.map(n => [n.id, []]));
+  for (const n of nodes)
+    for (const dep of n.dependsOn)
+      succ.get(dep)?.push(n.id);
 
-const ORCH_NODE_H = CANVAS_ORCH_NODE_H;
-const NODE_W      = 244;
-const SLOT_H      = CANVAS_SLOT_H;
-const PAD_TOP     = CANVAS_PAD_TOP;
-const PAD_BOT     = 24;
-const CANVAS_W    = CANVAS_W_CONST;
-const CX          = CANVAS_W / 2;
-const ORCH_CONN_H = CANVAS_ORCH_CONN_H;
+  const levels: string[][] = [];
+  let frontier = nodes.filter(n => n.dependsOn.length === 0).map(n => n.id);
+  while (frontier.length > 0) {
+    levels.push(frontier);
+    const next: string[] = [];
+    for (const id of frontier)
+      for (const s of (succ.get(id) ?? [])) {
+        const d = (inDeg.get(s) ?? 0) - 1;
+        inDeg.set(s, d);
+        if (d === 0) next.push(s);
+      }
+    frontier = next;
+  }
+  return levels;
+}
 
-// Arrow and line geometry
-const LINE_TOP_GAP = 3;    // gap from node bottom to line start
-const ARROW_H      = 13;   // height of arrowhead
-const ARROW_W      = 7;    // half-width of arrowhead
-const LINE_END_GAP = 2;    // gap from arrowhead tip to node top
+const ORCH_ABOVE = 100; // px gap between Orchestrator bottom and first level
+
+export function autoLayoutNodes(nodes: OrchestrationNode[]): OrchestrationNode[] {
+  if (nodes.length === 0) return nodes;
+  const levels = topologicalLevels(nodes);
+  const LEVEL_H  = 160;
+  const GAP_X    = 32;
+  // Leave room above for the Orchestrator node (NODE_H=80) + gap (100) + padding (20)
+  const PAD_Y    = 20 + NODE_H + ORCH_ABOVE;
+  const CENTER_X = 400;
+
+  const nodeMap = new Map(nodes.map(n => [n.id, { ...n }]));
+
+  for (let li = 0; li < levels.length; li++) {
+    const lvl    = levels[li];
+    const totalW = lvl.length * NODE_W + (lvl.length - 1) * GAP_X;
+    const startX = CENTER_X - totalW / 2;
+    lvl.forEach((id, j) => {
+      const node = nodeMap.get(id)!;
+      node.x = Math.max(20, startX + j * (NODE_W + GAP_X));
+      node.y = PAD_Y + li * LEVEL_H;
+    });
+  }
+
+  return nodes.map(n => nodeMap.get(n.id) ?? n);
+}
+
+function hasCycle(nodes: OrchestrationNode[], fromId: string, toId: string): boolean {
+  const succ = new Map<string, string[]>(nodes.map(n => [n.id, []]));
+  for (const n of nodes)
+    for (const dep of n.dependsOn)
+      succ.get(dep)?.push(n.id);
+
+  const queue   = [toId];
+  const visited = new Set([toId]);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (cur === fromId) return true;
+    for (const s of (succ.get(cur) ?? []))
+      if (!visited.has(s)) { visited.add(s); queue.push(s); }
+  }
+  return false;
+}
 
 export function NodeCanvas({
-  agents, nodes, inputNode, selectedNode, onSelectNode,
-  onNodeDragStart, onDropAtZone, dragOverZone, onDragOverZone,
-  isDragging, draggingNodeIdx, onRemoveAgent, agentModels = {},
-  agentDescriptions = {}, externalScriptNames = new Set(),
-  scriptsWithRequiredParams = new Set(),
+  nodes, onNodesChange, selectedEdge, onSelectEdge,
+  executionState, agentModels = {}, agentDescriptions = {},
+  externalScriptNames = new Set(), scriptsWithRequiredParams = new Set(),
 }: Props) {
-  const n = agents.length;
+  const [dragging,   setDragging]   = useState<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [mousePos,   setMousePos]   = useState<{ x: number; y: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const orchNodeTop  = PAD_TOP;
-  const orchNodeBot  = orchNodeTop + ORCH_NODE_H;
-  const agentsOffset = orchNodeBot + ORCH_CONN_H;
-  const canvasH      = agentsOffset + Math.max(n, 0) * SLOT_H + ZONE_H + PAD_BOT;
-  const nodeLeft     = (CANVAS_W - NODE_W) / 2;
+  // Auto-layout on mount if any node lacks position
+  useEffect(() => {
+    if (nodes.length > 0 && nodes.some(n => n.x == null || n.y == null))
+      onNodesChange(autoLayoutNodes(nodes));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const yNodeTop    = (i: number) => agentsOffset + i * SLOT_H + ZONE_H;
-  const yNodeBottom = (i: number) => agentsOffset + (i + 1) * SLOT_H;
+  // Cancel connecting on Escape
+  useEffect(() => {
+    if (!connecting) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { setConnecting(null); setMousePos(null); } };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [connecting]);
 
-  const inputCfg = !!(
-    inputNode?.contextExtra?.fixed?.freeText?.trim() ||
-    (inputNode?.contextExtra?.fixed?.files?.length ?? 0) > 0 ||
-    (inputNode?.contextExtra?.temporal?.length ?? 0) > 0
-  );
-  const inputConnEndY = n > 0 ? yNodeTop(0) : agentsOffset;
-  const inputConnMidY = (orchNodeBot + inputConnEndY) / 2;
-  const inputConnSel  = selectedNode === -1;
+  const getCanvasPos = useCallback((clientX: number, clientY: number) => {
+    const rect   = containerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const parent = containerRef.current?.parentElement;
+    return {
+      x: clientX - rect.left + (parent?.scrollLeft ?? 0),
+      y: clientY - rect.top  + (parent?.scrollTop  ?? 0),
+    };
+  }, []);
 
-  const hasSelection = selectedNode !== null;
+  const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
+    if (connecting) return;
+    e.stopPropagation();
+    const pos  = getCanvasPos(e.clientX, e.clientY);
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    setDragging({ nodeId, offsetX: pos.x - (node.x ?? 0), offsetY: pos.y - (node.y ?? 0) });
+  }, [connecting, nodes, getCanvasPos]);
 
-  // Which agent indices are "active" (participants of the selected connection)
-  function agentState(i: number): 'active' | 'inactive' | 'neutral' {
-    if (!hasSelection) return 'neutral';
-    if (selectedNode === -1) return i === 0 ? 'active' : 'inactive';
-    return (i === selectedNode || i === selectedNode + 1) ? 'active' : 'inactive';
-  }
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const pos = getCanvasPos(e.clientX, e.clientY);
+    if (connecting) setMousePos(pos);
+    if (!dragging) return;
+    onNodesChange(nodes.map(n =>
+      n.id === dragging.nodeId
+        ? { ...n, x: Math.max(0, pos.x - dragging.offsetX), y: Math.max(0, pos.y - dragging.offsetY) }
+        : n
+    ));
+  }, [dragging, connecting, nodes, onNodesChange, getCanvasPos]);
 
-  const orchState = !hasSelection ? 'neutral' : selectedNode === -1 ? 'active' : 'inactive';
+  const handleMouseUp = useCallback(() => setDragging(null), []);
 
-  function renderConn(
-    y1: number, y2: number, midY: number,
-    sel: boolean, cfg: boolean,
-    onClick: () => void,
-  ) {
-    const lineY1   = y1 + LINE_TOP_GAP;
-    const arrowTip = y2 - LINE_END_GAP;
-    const arrowBot = arrowTip - ARROW_H;
-    const lineY2   = arrowBot;
+  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+    if (connecting) { setConnecting(null); setMousePos(null); return; }
+    const t = e.target as Element;
+    if (t === containerRef.current || t.closest('.orch-canvas-svg') && !t.closest('.orch-edge-group'))
+      onSelectEdge(null);
+  }, [connecting, onSelectEdge]);
 
-    return (
-      <g style={{ cursor: 'pointer' }} onClick={onClick}>
-        {/* Click target */}
-        <rect x={CX - 22} y={y1} width={44} height={y2 - y1} fill="transparent" />
+  const handleNodeClick = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    if (dragging) return;
+    if (connecting) {
+      if (connecting === nodeId) { setConnecting(null); return; }
+      const target = nodes.find(n => n.id === nodeId);
+      if (!target || target.dependsOn.includes(connecting)) { setConnecting(null); return; }
+      if (hasCycle(nodes, connecting, nodeId)) { setConnecting(null); return; }
+      onNodesChange(nodes.map(n =>
+        n.id === nodeId ? { ...n, dependsOn: [...n.dependsOn, connecting] } : n
+      ));
+      onSelectEdge({ fromId: connecting, toId: nodeId });
+      setConnecting(null);
+      setMousePos(null);
+      return;
+    }
+    const node = nodes.find(n => n.id === nodeId);
+    if (node?.dependsOn.length === 0) onSelectEdge({ fromId: null, toId: nodeId });
+  }, [dragging, connecting, nodes, onNodesChange, onSelectEdge]);
 
-        {/* Track */}
-        <line
-          x1={CX} y1={lineY1} x2={CX} y2={lineY2}
-          stroke="rgba(124,106,247,.12)" strokeWidth={6} strokeLinecap="round"
-        />
+  const handlePortOutClick = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    setConnecting(prev => prev === nodeId ? null : nodeId);
+  }, []);
 
-        {/* Animated flow line */}
-        <line
-          x1={CX} y1={lineY1} x2={CX} y2={lineY2}
-          className={`orch-conn-flow${sel ? ' selected' : ''}`}
-          strokeWidth={sel ? 2.5 : 2}
-          strokeLinecap="round"
-          strokeDasharray="6 5"
-        />
+  const handleEdgeClick = useCallback((fromId: string, toId: string) => {
+    if (connecting) return;
+    onSelectEdge({ fromId, toId });
+  }, [connecting, onSelectEdge]);
 
-        {/* Arrowhead */}
-        <polygon
-          points={`${CX - ARROW_W},${arrowBot} ${CX + ARROW_W},${arrowBot} ${CX},${arrowTip}`}
-          className={`orch-conn-arrow${sel ? ' selected' : ''}`}
-        />
+  const handleDeleteEdge = useCallback((e: React.MouseEvent, fromId: string, toId: string) => {
+    e.stopPropagation();
+    onNodesChange(nodes.map(n =>
+      n.id === toId ? { ...n, dependsOn: n.dependsOn.filter(id => id !== fromId) } : n
+    ));
+    if (selectedEdge?.fromId === fromId && selectedEdge?.toId === toId) onSelectEdge(null);
+  }, [nodes, onNodesChange, selectedEdge, onSelectEdge]);
 
-        {/* Mid dot */}
-        <circle
-          cx={CX} cy={midY} r={12}
-          className={`orch-conn-dot${sel ? ' selected' : ''}${cfg ? ' configured' : ''}`}
-        />
-        {cfg
-          ? <text x={CX} y={midY + 4.5} textAnchor="middle" fontSize={12} className="orch-conn-dot-icon">⚙</text>
-          : <text x={CX} y={midY + 4}   textAnchor="middle" fontSize={11} className="orch-conn-dot-icon-dim">↓</text>
-        }
-      </g>
+  const handleRemoveNode = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    onNodesChange(
+      nodes.filter(n => n.id !== nodeId).map(n => ({ ...n, dependsOn: n.dependsOn.filter(id => id !== nodeId) }))
     );
-  }
+    if (selectedEdge?.toId === nodeId || selectedEdge?.fromId === nodeId) onSelectEdge(null);
+    if (connecting === nodeId) setConnecting(null);
+  }, [nodes, onNodesChange, selectedEdge, onSelectEdge, connecting]);
+
+  const handleAutoLayout = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onNodesChange(autoLayoutNodes(nodes));
+  }, [nodes, onNodesChange]);
+
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const roots   = nodes.filter(n => n.dependsOn.length === 0);
+
+  // Orchestrator node: centered above root nodes, not stored in dagNodes
+  const orchCenterX = roots.length > 0
+    ? roots.reduce((sum, n) => sum + (n.x ?? 0) + NODE_W / 2, 0) / roots.length
+    : 440;
+  const orchX = Math.max(20, orchCenterX - NODE_W / 2);
+  const orchY = roots.length > 0
+    ? Math.min(...roots.map(n => n.y ?? (NODE_H + ORCH_ABOVE + 20))) - ORCH_ABOVE - NODE_H
+    : 20;
+  const orchBottom = orchY + NODE_H;
+
+  const canvasW = Math.max(880, ...nodes.map(n => (n.x ?? 0) + NODE_W + 80), orchX + NODE_W + 80);
+  const canvasH = Math.max(520, ...nodes.map(n => (n.y ?? 0) + NODE_H + 120), orchBottom + 120);
+
+  const connectingNode = connecting ? nodeMap.get(connecting) : null;
+  const connX = connectingNode ? (connectingNode.x ?? 0) + NODE_W / 2 : 0;
+  const connY = connectingNode ? (connectingNode.y ?? 0) + NODE_H : 0;
 
   return (
-    <div className="orch-node-canvas" style={{ position: 'relative', width: CANVAS_W, height: canvasH }}>
-
-      {/* Empty state */}
-      {n === 0 && (
+    <div
+      className="orch-canvas-2d"
+      ref={containerRef}
+      style={{ position: 'relative', width: canvasW, height: canvasH, userSelect: dragging ? 'none' : undefined }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onClick={handleCanvasClick}
+    >
+      {nodes.length === 0 && (
         <div className="orch-canvas-empty" style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
           <i className="ti ti-topology-ring-2" />
           <p>Arrastra agentes desde el panel izquierdo para construir tu flujo</p>
         </div>
       )}
 
-      {/* ── SVG: connections (below nodes) ── */}
+      {nodes.length > 1 && (
+        <button className="btn ghost sm orch-auto-layout-btn" onClick={handleAutoLayout} title="Reordenar automáticamente">
+          <i className="ti ti-layout-distribute-vertical" /> Reordenar
+        </button>
+      )}
+
+      {/* SVG edges layer */}
       <svg
-        width={CANVAS_W}
+        className="orch-canvas-svg"
+        width={canvasW}
         height={canvasH}
-        style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, pointerEvents: isDragging ? 'none' : 'all' }}
+        style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, pointerEvents: 'none' }}
       >
-        {/* Orquestador → Agent[0] */}
-        {n > 0 && renderConn(
-          orchNodeBot, inputConnEndY, inputConnMidY,
-          inputConnSel, inputCfg,
-          () => onSelectNode(-1),
+        {/* Orchestrator → root node edges */}
+        {roots.map(root => {
+          const x1 = orchX + NODE_W / 2;
+          const y1 = orchBottom;
+          const x2 = (root.x ?? 0) + NODE_W / 2;
+          const y2 = root.y ?? 0;
+          const cp1x = x1; const cp1y = y1 + CTRL_OFFSET;
+          const cp2x = x2; const cp2y = y2 - CTRL_OFFSET;
+          const d = `M ${x1} ${y1} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${x2} ${y2}`;
+          const isSelected = selectedEdge?.fromId === null && selectedEdge?.toId === root.id;
+          const configured = hasNodeConfig(root);
+          const mx = bezierPt(x1, cp1x, cp2x, x2, 0.5);
+          const my = bezierPt(y1, cp1y, cp2y, y2, 0.5);
+          const adx = x2 - cp2x; const ady = y2 - cp2y;
+          const alen = Math.sqrt(adx * adx + ady * ady) || 1;
+          const anx = adx / alen; const any = ady / alen;
+          const apx = -any; const apy = anx;
+          const AL = 10; const AW = 5;
+          const aBase = { x: x2 - anx * AL, y: y2 - any * AL };
+          return (
+            <g
+              key={`orch-${root.id}`}
+              className={`orch-edge-group${isSelected ? ' selected' : ''}`}
+              style={{ pointerEvents: 'all', cursor: 'pointer' }}
+              onClick={() => !connecting && onSelectEdge({ fromId: null, toId: root.id })}
+            >
+              <path d={d} stroke="transparent" strokeWidth={16} fill="none" />
+              <path d={d} stroke="rgba(124,106,247,.12)" strokeWidth={6} fill="none" strokeLinecap="round" />
+              <path d={d} className={`orch-conn-flow${isSelected ? ' selected' : ''}`} strokeWidth={isSelected ? 2.5 : 2} fill="none" strokeLinecap="round" strokeDasharray="6 5" />
+              <polygon points={`${x2},${y2} ${aBase.x + apx * AW},${aBase.y + apy * AW} ${aBase.x - apx * AW},${aBase.y - apy * AW}`} className={`orch-conn-arrow${isSelected ? ' selected' : ''}`} />
+              <circle cx={mx} cy={my} r={12} className={`orch-conn-dot${isSelected ? ' selected' : ''}${configured ? ' configured' : ''}`} />
+              {configured
+                ? <text x={mx} y={my + 4.5} textAnchor="middle" fontSize={12} className="orch-conn-dot-icon">⚙</text>
+                : <text x={mx} y={my + 4}   textAnchor="middle" fontSize={11} className="orch-conn-dot-icon-dim">↓</text>
+              }
+            </g>
+          );
+        })}
+
+        {nodes.flatMap(toNode =>
+          toNode.dependsOn.map(fromId => {
+            const fromNode = nodeMap.get(fromId);
+            if (!fromNode) return null;
+
+            const x1 = (fromNode.x ?? 0) + NODE_W / 2;
+            const y1 = (fromNode.y ?? 0) + NODE_H;
+            const x2 = (toNode.x ?? 0) + NODE_W / 2;
+            const y2 = (toNode.y ?? 0);
+            const cp1x = x1; const cp1y = y1 + CTRL_OFFSET;
+            const cp2x = x2; const cp2y = y2 - CTRL_OFFSET;
+            const d = `M ${x1} ${y1} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${x2} ${y2}`;
+
+            const isSelected = selectedEdge?.fromId === fromId && selectedEdge?.toId === toNode.id;
+            const configured = hasNodeConfig(toNode);
+            const mx = bezierPt(x1, cp1x, cp2x, x2, 0.5);
+            const my = bezierPt(y1, cp1y, cp2y, y2, 0.5);
+
+            const adx = x2 - cp2x; const ady = y2 - cp2y;
+            const alen = Math.sqrt(adx * adx + ady * ady) || 1;
+            const anx = adx / alen; const any = ady / alen;
+            const apx = -any; const apy = anx;
+            const AL = 10; const AW = 5;
+            const aBase = { x: x2 - anx * AL, y: y2 - any * AL };
+
+            return (
+              <g
+                key={`${fromId}-${toNode.id}`}
+                className={`orch-edge-group${isSelected ? ' selected' : ''}`}
+                style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                onClick={() => handleEdgeClick(fromId, toNode.id)}
+              >
+                <path d={d} stroke="transparent" strokeWidth={16} fill="none" />
+                <path d={d} stroke="rgba(124,106,247,.12)" strokeWidth={6} fill="none" strokeLinecap="round" />
+                <path
+                  d={d}
+                  className={`orch-conn-flow${isSelected ? ' selected' : ''}`}
+                  strokeWidth={isSelected ? 2.5 : 2}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray="6 5"
+                />
+                <polygon
+                  points={`${x2},${y2} ${aBase.x + apx * AW},${aBase.y + apy * AW} ${aBase.x - apx * AW},${aBase.y - apy * AW}`}
+                  className={`orch-conn-arrow${isSelected ? ' selected' : ''}`}
+                />
+                <circle
+                  cx={mx} cy={my} r={12}
+                  className={`orch-conn-dot${isSelected ? ' selected' : ''}${configured ? ' configured' : ''}`}
+                />
+                {configured
+                  ? <text x={mx} y={my + 4.5} textAnchor="middle" fontSize={12} className="orch-conn-dot-icon">⚙</text>
+                  : <text x={mx} y={my + 4}   textAnchor="middle" fontSize={11} className="orch-conn-dot-icon-dim">↓</text>
+                }
+                {toNode.gateAfter && (
+                  <text x={mx + 20} y={my + 4} textAnchor="middle" fontSize={11} style={{ fill: 'var(--amber)', pointerEvents: 'none' }}>⏸</text>
+                )}
+                {isSelected && (
+                  <g
+                    style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                    onClick={(e) => handleDeleteEdge(e as unknown as React.MouseEvent, fromId, toNode.id)}
+                  >
+                    <circle cx={mx} cy={my - 22} r={9} fill="var(--bg2)" stroke="var(--coral)" strokeWidth={1.5} />
+                    <text x={mx} y={my - 18} textAnchor="middle" fontSize={10} style={{ fill: 'var(--coral)', fontWeight: 700, pointerEvents: 'none' }}>✕</text>
+                  </g>
+                )}
+              </g>
+            );
+          })
         )}
 
-        {/* Inter-agent connections */}
-        {nodes.map((node, i) => {
-          const y1   = yNodeBottom(i);
-          const y2   = yNodeTop(i + 1);
-          const midY = (y1 + y2) / 2;
-          return renderConn(y1, y2, midY, selectedNode === i, hasConfig(node), () => onSelectNode(i));
-        })}
+        {/* In-progress connection line */}
+        {connecting && connectingNode && mousePos && (
+          <line
+            x1={connX} y1={connY} x2={mousePos.x} y2={mousePos.y}
+            stroke="var(--accent)"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
       </svg>
 
-      {/* ── Orchestrator node — same card structure as agent nodes ── */}
+      {/* Orchestrator entry node — static, not in dagNodes */}
       <div
-        className={`orch-node-agent orch-node-entry node-${orchState}`}
-        style={{ position: 'absolute', top: orchNodeTop, left: nodeLeft, width: NODE_W, height: ORCH_NODE_H, zIndex: 2 }}
+        className="orch-node-agent orch-node-entry"
+        style={{ position: 'absolute', left: orchX, top: orchY, width: NODE_W, height: NODE_H, zIndex: 2, cursor: 'default' }}
       >
         <div className="orch-node-icon"><i className="ti ti-circuit-diode" /></div>
         <div className="orch-node-info">
@@ -206,59 +428,60 @@ export function NodeCanvas({
         <span className="orch-node-entry-badge">INICIO</span>
       </div>
 
-      {/* ── Drop zones ── */}
-      {Array.from({ length: n + 1 }, (_, zi) => (
-        <div
-          key={`zone-${zi}`}
-          className={`orch-drop-zone${dragOverZone === zi ? ' active' : ''}${isDragging ? ' dragging-active' : ''}`}
-          style={{
-            position: 'absolute',
-            top:      agentsOffset + zi * SLOT_H,
-            left:     nodeLeft,
-            width:    NODE_W,
-            height:   ZONE_H,
-            zIndex:   3,
-            pointerEvents: 'none',
-          }}
-        />
-      ))}
-
-      {/* ── Agent nodes ── */}
-      {agents.map((agentName, i) => {
-        const model       = agentModels[agentName] || '';
-        const isScript    = agentName.startsWith('__script:');
-        const scriptName  = isScript ? getScriptLabel(agentName) : '';
-        const isExternal  = isScript && externalScriptNames.has(scriptName);
-        const label       = isScript ? scriptName : agentName;
-        const description = agentDescriptions[agentName] || '';
-        // La conexión que llega a este nodo es nodes[i-1]; su scriptParams se aplica al agente i
-        const prevNode    = i > 0 ? nodes[i - 1] : null;
+      {/* Nodes */}
+      {nodes.map(node => {
+        const isScript   = node.agentName.startsWith('__script:');
+        const scriptName = isScript ? getScriptLabel(node.agentName) : '';
+        const isExternal = isScript && externalScriptNames.has(scriptName);
+        const label      = isScript ? scriptName : node.agentName;
+        const model      = agentModels[node.agentName] || '';
+        const desc       = agentDescriptions[node.agentName] || '';
         const missingParams = isScript && scriptsWithRequiredParams.has(scriptName)
-          && !(prevNode?.scriptParams && Object.keys(prevNode.scriptParams).length > 0);
+          && !(node.scriptParams && Object.keys(node.scriptParams).length > 0);
+
+        const execStatus  = executionState?.get(node.id);
+        const isSelFrom   = selectedEdge?.fromId === node.id;
+        const isSelTo     = selectedEdge?.toId   === node.id;
+        const isConnSrc   = connecting === node.id;
+        const isConnTgt   = !!(connecting && connecting !== node.id);
+        const isDragged   = dragging?.nodeId === node.id;
+
+        let cls = 'orch-node-agent';
+        if (isScript) cls += ' orch-node-script';
+        if (model)    cls += ` model-${model}`;
+        if (execStatus === 'running') cls += ' exec-running';
+        else if (execStatus === 'done')  cls += ' exec-done';
+        else if (execStatus === 'error') cls += ' exec-error';
+        else if (execStatus === 'pending') cls += ' exec-pending';
+        if (isSelFrom || isSelTo) cls += ' node-active';
+        if (isConnSrc) cls += ' connecting-source';
+
         return (
           <div
-            key={i}
-            className={`orch-node-agent${isScript ? ' orch-node-script' : ''}${model ? ` model-${model}` : ''} node-${agentState(i)}${draggingNodeIdx === i ? ' dragging' : ''}`}
-            draggable
-            onDragStart={e => onNodeDragStart(i, e)}
-            title={description || label}
+            key={node.id}
+            className={cls}
+            title={desc || label}
             style={{
               position: 'absolute',
-              top:      yNodeTop(i),
-              left:     nodeLeft,
-              width:    NODE_W,
-              height:   NODE_H,
-              zIndex:   2,
+              left:   node.x ?? 0,
+              top:    node.y ?? 0,
+              width:  NODE_W,
+              height: NODE_H,
+              zIndex: isDragged ? 10 : 2,
+              cursor: isDragged ? 'grabbing' : (connecting ? (isConnTgt ? 'crosshair' : 'not-allowed') : 'grab'),
+              opacity: (connecting && connecting !== node.id && isConnSrc === false) ? (isConnTgt ? 1 : 0.7) : 1,
             }}
+            onMouseDown={e => handleNodeMouseDown(e, node.id)}
+            onClick={e => handleNodeClick(e, node.id)}
           >
             <div className="orch-node-drag-handle"><i className="ti ti-grip-vertical" /></div>
-            <div className="orch-node-index">{i + 1}</div>
-            <div className="orch-node-icon"><i className={`ti ${getAgentIcon(agentName)}`} /></div>
+            <div className="orch-node-index">{nodes.indexOf(node) + 1}</div>
+            <div className="orch-node-icon"><i className={`ti ${getAgentIcon(node.agentName)}`} /></div>
             <div className="orch-node-info">
               <div className="orch-node-name">
                 {label}
                 {missingParams && (
-                  <i className="ti ti-alert-triangle" style={{ color: 'var(--amber)', fontSize: 11, marginLeft: 5 }} title="Faltan parámetros obligatorios — abre la conexión entrante para configurarlos" />
+                  <i className="ti ti-alert-triangle" style={{ color: 'var(--amber)', fontSize: 11, marginLeft: 5 }} title="Faltan parámetros obligatorios" />
                 )}
               </div>
               {isScript
@@ -266,13 +489,32 @@ export function NodeCanvas({
                 : model && <span className={`orch-node-model model-${model}`}>{model}</span>
               }
             </div>
+
+            {execStatus === 'running' && (
+              <i className="ti ti-loader-2 spin" style={{ color: 'var(--accent)', fontSize: 14, flexShrink: 0 }} />
+            )}
+
             <button
               className="btn ghost xs orch-node-remove"
-              onClick={e => { e.stopPropagation(); onRemoveAgent(i); }}
+              onClick={e => handleRemoveNode(e, node.id)}
               title="Quitar"
             >
               <i className="ti ti-x" />
             </button>
+
+            {/* Port-out (bottom) — shown unless in read-only execution mode */}
+            {!executionState && (
+              <div
+                className={`orch-node-port-out${isConnSrc ? ' active' : ''}`}
+                onClick={e => handlePortOutClick(e, node.id)}
+                title="Conectar con otro nodo"
+              />
+            )}
+
+            {/* Port-in indicator (top) — shown when connecting to another node */}
+            {connecting && connecting !== node.id && (
+              <div className="orch-node-port-in" />
+            )}
           </div>
         );
       })}

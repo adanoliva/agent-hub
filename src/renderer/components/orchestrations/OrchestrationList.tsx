@@ -90,23 +90,28 @@ export function OrchestrationList({ orchestrations, project, onSelect, onDelete,
             )}
 
             <div className="orch-card-agents-preview">
-              {orch.agents.slice(0, 4).map((name, i) => (
-                <React.Fragment key={i}>
-                  <span className="orch-agent-chip">{name}</span>
-                  {i < orch.agents.length - 1 && i < 3 && (
-                    <i className="ti ti-chevron-right orch-arrow" />
-                  )}
-                </React.Fragment>
-              ))}
-              {orch.agents.length > 4 && (
-                <span className="orch-agent-chip more">+{orch.agents.length - 4}</span>
+              {(orch.nodes ?? []).slice(0, 4).map((node, i) => {
+                const label = node.agentName.startsWith('__script:')
+                  ? node.agentName.replace(/^__script:/, '').replace(/__$/, '')
+                  : node.agentName;
+                return (
+                  <React.Fragment key={node.id}>
+                    <span className="orch-agent-chip">{label}</span>
+                    {i < Math.min((orch.nodes ?? []).length - 1, 3) && (
+                      <i className="ti ti-chevron-right orch-arrow" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+              {(orch.nodes ?? []).length > 4 && (
+                <span className="orch-agent-chip more">+{(orch.nodes ?? []).length - 4}</span>
               )}
             </div>
 
             <div className="orch-card-footer">
               <span className="orch-card-stat">
                 <i className="ti ti-cpu" />
-                {orch.agents.length} agente{orch.agents.length !== 1 ? 's' : ''}
+                {(orch.nodes ?? []).length} nodo{(orch.nodes ?? []).length !== 1 ? 's' : ''}
               </span>
               {orch.executionCount > 0 && (
                 <span className="orch-card-stat">
