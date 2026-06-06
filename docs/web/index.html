@@ -22,7 +22,6 @@
         <a href="#features">Funcionalidades</a>
         <a href="#how">Cómo funciona</a>
         <a href="#orchestrations">Orquestaciones</a>
-        <a href="#novedades">Novedades v2.3</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#collab">Repositorio</a>
       </div>
@@ -31,9 +30,7 @@
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-badge">
-      <i class="ti ti-sparkles"></i> v2.3.0 disponible — Orquestaciones paralelas DAG
-    </div>
+
     <h1 class="hero-title">
       Gestiona tus agentes de IA<br />
       <span class="gradient-text">como un profesional</span>
@@ -445,88 +442,6 @@
     </div>
   </section>
 
-  <!-- NOVEDADES v2.3.0 -->
-  <section class="novedades" id="novedades">
-    <div class="container">
-      <div class="section-label">Novedades v2.3.0</div>
-      <h2>Orquestaciones <span class="gradient-text">paralelas DAG</span></h2>
-      <p class="section-desc">La versión 2.3.0 reemplaza el motor lineal por un grafo dirigido acíclico (DAG): los agentes sin dependencias entre sí se ejecutan en paralelo, y el editor pasa a ser un canvas 2D interactivo.</p>
-
-      <div class="novedades-grid">
-
-        <div class="novedad-card highlight">
-          <div class="novedad-badge"><i class="ti ti-topology-ring-2"></i> Modelo DAG</div>
-          <h3>Grafo dirigido acíclico</h3>
-          <p>Cada nodo declara sus predecesores con <code>dependsOn[]</code>. Los nodos raíz (sin dependencias) se ejecutan en paralelo. Los nodos del mismo nivel topológico corren simultáneamente con <code>Promise.allSettled</code>.</p>
-          <div class="novedad-tags">
-            <span>dependsOn[]</span>
-            <span>niveles topológicos</span>
-            <span>Promise.allSettled</span>
-            <span>detección de ciclos</span>
-          </div>
-        </div>
-
-        <div class="novedad-card highlight">
-          <div class="novedad-badge accent"><i class="ti ti-vector-bezier"></i> Canvas 2D interactivo</div>
-          <h3>Editor visual de flujos</h3>
-          <p>Lienzo HTML+SVG con nodos arrastrables, aristas Bézier animadas, port-in/port-out para conectar nodos, auto-layout topológico y paleta colapsable con tabs de Agentes y Scripts. Drag-and-drop desde la paleta.</p>
-          <div class="novedad-pills">
-            <span class="pill green"><i class="ti ti-drag-drop"></i> Drag &amp; Drop</span>
-            <span class="pill accent"><i class="ti ti-layout-distribute-vertical"></i> Auto-layout</span>
-            <span class="pill blue"><i class="ti ti-circle-dashed"></i> Anti-ciclos</span>
-          </div>
-        </div>
-
-        <div class="novedad-card">
-          <div class="novedad-badge blue"><i class="ti ti-arrows-split-2"></i> Ejecución paralela</div>
-          <h3>Varios agentes a la vez</h3>
-          <p>Los agentes del mismo nivel topológico se ejecutan simultáneamente. La UI muestra cada nivel como grupo paralelo con spinners independientes, y el resultado agrupa las salidas antes de pasarlas al siguiente nivel.</p>
-        </div>
-
-        <div class="novedad-card">
-          <div class="novedad-badge"><i class="ti ti-terminal-2"></i> Scripts personalizados</div>
-          <h3>Scripts externos sin IA</h3>
-          <p>Además de los scripts incluidos, puedes crear tus propios scripts <code>.js</code> en <code>user-scripts/</code>. Se cargan en caliente, aparecen en la paleta y se ejecutan en sandbox Node.js con una API <code>fs</code> segura.</p>
-        </div>
-
-        <div class="novedad-card">
-          <div class="novedad-badge green"><i class="ti ti-player-play"></i> Migración automática</div>
-          <h3>Compatible con orquestaciones existentes</h3>
-          <p>Las orquestaciones lineales antiguas (<code>agents[]</code>) se migran automáticamente al modelo DAG al leerlas. Sin cambios manuales ni pérdida de configuración.</p>
-        </div>
-
-        <div class="novedad-card">
-          <div class="novedad-badge amber"><i class="ti ti-user-check"></i> Gates HITL mejorados</div>
-          <h3>Revisión humana en DAG</h3>
-          <p>Los gates funcionan igual que antes, pero ahora identifican el nodo exacto en el DAG (<code>nodeId</code>) en lugar del índice de paso. Compatibles con nodos paralelos y reanudación desde punto de pausa.</p>
-        </div>
-
-      </div>
-
-      <!-- Divider v2.1 -->
-      <div style="margin-top:56px;padding-top:48px;border-top:1px solid var(--border)">
-        <div class="section-label" style="margin-bottom:12px">También en versiones anteriores</div>
-        <div class="novedades-grid" style="grid-template-columns:repeat(3,1fr)">
-          <div class="novedad-card">
-            <div class="novedad-badge"><i class="ti ti-terminal-2"></i> Scripts determinísticos</div>
-            <h3>Nodos sin IA en el workflow</h3>
-            <p>6 scripts incluidos: <em>prepare-context</em>, <em>generate-file-index</em>, <em>validate-json</em>, <em>quality-score</em>, <em>diff-since-step</em>, <em>validate-output</em>. Sin tokens, instantáneos.</p>
-          </div>
-          <div class="novedad-card">
-            <div class="novedad-badge amber"><i class="ti ti-user-check"></i> Gates HITL</div>
-            <h3>Revisión humana entre pasos</h3>
-            <p>Pausa para revisar el trabajo del agente. Aprueba, pide que lo rehaga con feedback o cancela. El tiempo de espera no descuenta del timeout global.</p>
-          </div>
-          <div class="novedad-card">
-            <div class="novedad-badge accent"><i class="ti ti-git-commit"></i> Git Checkpointer + Ops Ledger</div>
-            <h3>Trazabilidad total</h3>
-            <p>Commits automáticos por paso con rollback exacto por SHA. Registro append-only de cada operación atómica, accesible desde la UI y la API.</p>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </section>
 
   <!-- DASHBOARD PREVIEW -->
   <section class="dash-section" id="dashboard">
@@ -708,8 +623,8 @@
   <!-- ORQUESTACIONES -->
   <section class="how" id="orchestrations" style="background:var(--bg1)">
     <div class="container">
-      <div class="section-label">Nuevo en v2.3.0</div>
-      <h2>Orquestaciones paralelas <span class="gradient-text">DAG</span></h2>
+      <div class="section-label">Orquestaciones</div>
+      <h2>Workflows paralelos con <span class="gradient-text">DAG</span></h2>
       <p class="section-desc">El motor pasa de lineal a DAG: los agentes sin dependencias entre sí se ejecutan en paralelo. Canvas 2D interactivo con aristas Bézier, detección de ciclos, auto-layout y paleta de scripts. La misma trazabilidad paso a paso, ahora más rápida.</p>
 
       <!-- Mock DAG paralelo -->
@@ -784,6 +699,231 @@
         <div class="orch-feat"><i class="ti ti-list-check" style="color:var(--amber)"></i><div><strong>Ops Ledger</strong><p>Registro append-only de cada fichero modificado, por agente y paso. Trazabilidad completa.</p></div></div>
       </div>
     </div>
+  </section>
+
+  <!-- CARRUSEL DE CAPTURAS -->
+  <section id="screenshots" style="padding:80px 0 64px;background:var(--bg0);overflow:hidden">
+    <div class="container" style="text-align:center;margin-bottom:40px">
+      <div class="section-label">Capturas de pantalla</div>
+      <h2 style="font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:12px">
+        Así se ve <span class="gradient-text">Agent Hub</span>
+      </h2>
+    </div>
+
+    <div class="carousel-wrap" style="position:relative">
+      <!-- Track -->
+      <div class="carousel-track" id="carouselTrack" style="
+        display:flex;
+        gap:20px;
+        overflow-x:auto;
+        scroll-snap-type:x mandatory;
+        scroll-behavior:smooth;
+        padding:0 calc((100vw - 480px)/2) 24px;
+        -ms-overflow-style:none;
+        scrollbar-width:none;
+      ">
+        <!-- Slides -->
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/00-wizard.png" alt="Asistente de configuración" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Wizard — configuración inicial del proveedor de IA</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/01-dashboard.png" alt="Dashboard" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Dashboard — estado global del ecosistema</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/02-projects.png" alt="Proyectos" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Proyectos — organización por categorías</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/03-agents.png" alt="Agentes" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Agentes — árbol de navegación y catálogo</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/04-agents-editor.png" alt="Editor de agente" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Editor de agente con generación IA de system prompt</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/05-project-agent-editor.png" alt="Editor agente de proyecto" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Agentes de proyecto — skills asociadas por agente</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/06-orchestrations.png" alt="Orquestaciones" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Orquestaciones — listado de workflows por proyecto</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/07-orchestration-editor.png" alt="Editor DAG" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Editor DAG — canvas 2D interactivo con aristas Bézier</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/08-orchestration-editor-active.png" alt="Editor DAG activo" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Arista seleccionada — configurador de DataFlow y Gate HITL</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/09-execution-panel.png" alt="Panel de ejecución" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Ejecución paralela — dos agentes corriendo simultáneamente</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/10-chat.png" alt="Chat" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Chat — conversación multi-turno con @mention de agentes</p>
+        </div>
+        <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+          <img src="screenshots/11-settings.png" alt="Ajustes" data-lightbox style="width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+          <p style="text-align:center;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:10px">Ajustes — proveedores de IA, categorías y directorio de agentes</p>
+        </div>
+      </div>
+
+      <!-- Flechas -->
+      <button id="carouselPrev" onclick="carouselMove(-1)" style="
+        position:absolute;top:50%;left:max(16px,calc((100vw - 480px)/2 - 52px));transform:translateY(-60%);
+        width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.12);
+        background:rgba(20,20,22,.9);color:#f2f2f3;cursor:pointer;font-size:16px;
+        display:flex;align-items:center;justify-content:center;z-index:2;transition:background .15s;
+      " onmouseenter="this.style.background='rgba(124,106,247,.25)'" onmouseleave="this.style.background='rgba(20,20,22,.9)'">
+        <i class="ti ti-chevron-left"></i>
+      </button>
+      <button id="carouselNext" onclick="carouselMove(1)" style="
+        position:absolute;top:50%;right:max(16px,calc((100vw - 480px)/2 - 52px));transform:translateY(-60%);
+        width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.12);
+        background:rgba(20,20,22,.9);color:#f2f2f3;cursor:pointer;font-size:16px;
+        display:flex;align-items:center;justify-content:center;z-index:2;transition:background .15s;
+      " onmouseenter="this.style.background='rgba(124,106,247,.25)'" onmouseleave="this.style.background='rgba(20,20,22,.9)'">
+        <i class="ti ti-chevron-right"></i>
+      </button>
+    </div>
+
+    <!-- Dots -->
+    <div id="carouselDots" style="display:flex;justify-content:center;gap:7px;margin-top:20px">
+      <!-- generados por JS -->
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" style="
+      display:none;position:fixed;inset:0;z-index:9999;
+      background:rgba(0,0,0,.88);backdrop-filter:blur(6px);
+      align-items:center;justify-content:center;
+    " onclick="closeLightbox()">
+      <button onclick="closeLightbox()" style="
+        position:absolute;top:20px;right:24px;
+        background:none;border:none;color:#f2f2f3;font-size:28px;cursor:pointer;line-height:1;opacity:.7;
+      " onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.7">✕</button>
+      <img id="lightboxImg" src="" alt="" style="
+        max-width:92vw;max-height:88vh;border-radius:10px;
+        border:1px solid rgba(255,255,255,.12);
+        box-shadow:0 24px 80px rgba(0,0,0,.7);
+        object-fit:contain;
+      " onclick="event.stopPropagation()">
+      <p id="lightboxCaption" style="
+        position:absolute;bottom:28px;left:0;right:0;
+        text-align:center;font-size:13px;color:rgba(255,255,255,.55);
+        font-family:'JetBrains Mono',monospace;pointer-events:none;
+      "></p>
+    </div>
+
+    <style>
+      #carouselTrack::-webkit-scrollbar { display:none }
+      .carousel-slide { opacity:0; transition:opacity .35s }
+      .carousel-slide.active { opacity:1 }
+      .carousel-slide img { box-shadow:0 8px 40px rgba(0,0,0,.45) }
+      #lightbox.open { display:flex !important }
+      @media(max-width:960px){
+        .carousel-slide { flex:0 0 min(480px,84vw) !important }
+        #carouselTrack { padding:0 8vw 24px !important }
+        #carouselPrev { left:10px !important }
+        #carouselNext { right:10px !important }
+      }
+    </style>
+
+    <script>
+      (function(){
+        var track   = document.getElementById('carouselTrack');
+        var dotsEl  = document.getElementById('carouselDots');
+        var slides  = track.querySelectorAll('.carousel-slide');
+        var current = 0;
+        var total   = slides.length;
+
+
+        // Crear dots
+        for (var i = 0; i < total; i++) {
+          var d = document.createElement('button');
+          d.dataset.idx = i;
+          d.style.cssText = 'width:7px;height:7px;border-radius:50%;border:none;cursor:pointer;padding:0;transition:background .2s,transform .2s;background:rgba(255,255,255,.18)';
+          d.addEventListener('click', (function(idx){ return function(){ goTo(idx); }; })(i));
+          dotsEl.appendChild(d);
+        }
+
+        function updateDots() {
+          dotsEl.querySelectorAll('button').forEach(function(b, i){
+            b.style.background = i === current ? '#7c6af7' : 'rgba(255,255,255,.18)';
+            b.style.transform  = i === current ? 'scale(1.35)' : 'scale(1)';
+          });
+          slides.forEach(function(s, i){
+            s.classList.toggle('active', i === current);
+          });
+        }
+
+        function slideOffset(idx) {
+          var s = slides[idx];
+          return s.offsetLeft - (track.offsetWidth - s.offsetWidth) / 2;
+        }
+
+        function goTo(idx, animate) {
+          current = (idx + total) % total;
+          track.scrollTo({ left: slideOffset(current), behavior: animate === false ? 'instant' : 'smooth' });
+          updateDots();
+        }
+
+        window.carouselMove = function(dir) { goTo(current + dir, true); };
+
+        // Teclado
+        document.addEventListener('keydown', function(e){
+          if (e.key === 'ArrowLeft')  carouselMove(-1);
+          if (e.key === 'ArrowRight') carouselMove(1);
+        });
+
+        // Detectar scroll manual
+        var scrollTimer;
+        track.addEventListener('scroll', function(){
+          clearTimeout(scrollTimer);
+          scrollTimer = setTimeout(function(){
+            var center = track.scrollLeft + track.offsetWidth / 2;
+            var closest = 0, minDist = Infinity;
+            slides.forEach(function(s, i){
+              var dist = Math.abs(s.offsetLeft + s.offsetWidth/2 - center);
+              if (dist < minDist) { minDist = dist; closest = i; }
+            });
+            current = closest;
+            updateDots();
+          }, 80);
+        });
+
+        updateDots();
+        // Esperar a que el layout esté listo antes del scroll inicial
+        requestAnimationFrame(function(){ goTo(0, false); });
+
+        // Lightbox
+        track.addEventListener('click', function(e){
+          var img = e.target.closest('img[data-lightbox]');
+          if (!img) return;
+          var lb  = document.getElementById('lightbox');
+          var lbImg = document.getElementById('lightboxImg');
+          var lbCap = document.getElementById('lightboxCaption');
+          lbImg.src = img.src;
+          lbImg.alt = img.alt;
+          lbCap.textContent = img.closest('.carousel-slide').querySelector('p').textContent;
+          lb.classList.add('open');
+          document.body.style.overflow = 'hidden';
+        });
+      })();
+
+      function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('open');
+        document.body.style.overflow = '';
+      }
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeLightbox();
+      });
+    </script>
   </section>
 
   <!-- CLOSING -->
