@@ -1,4 +1,4 @@
-# Agent Hub
+# Agent Hub · v2.3.0
 
 Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
@@ -8,7 +8,7 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 - **Skills**: bloques de contexto tecnológico (React, PostgreSQL, Unity…) que se inyectan automáticamente en el system prompt del agente al ejecutar. Generables con IA en ES/EN.
 - **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`CLAUDE.md` / `copilot-instructions.md`), sincronización de agentes, skills asignadas y ejecución directa.
 - **Chat**: conversación multi-turno con agentes activos, soporte `@mention`, historial por proyecto.
-- **Orquestaciones**: cadenas de agentes que se ejecutan en secuencia con protocolo HANDOFF, **scripts determinísticos** (sin IA), **gates HITL** para revisión humana entre pasos, **quality score** automático por paso, **git checkpointing**, **ops ledger** de operaciones y reanudación de ejecuciones interrumpidas.
+- **Orquestaciones DAG**: flujos multiagente en grafo dirigido acíclico. Los nodos sin dependencias entre sí se ejecutan **en paralelo** por niveles topológicos. Incluye canvas 2D interactivo, **scripts determinísticos** (sin IA), **gates HITL**, **quality score** automático, **git checkpointing**, **ops ledger** y reanudación de ejecuciones interrumpidas.
 - **Directorio de agentes**: sincronización automática (agentes + skills) desde un repositorio GitHub externo con resolución de conflictos.
 - **Búsqueda**: búsqueda global de agentes y skills por nombre y descripción con debounce y badges de origen.
 
@@ -42,6 +42,13 @@ Para usar un directorio de datos distinto al raíz en dev:
 $env:CDM_DATA_DIR = "C:\MiCarpetaDatos"
 npm run dev
 ```
+
+## Novedades v2.3.0
+
+- **Modelo DAG**: cada nodo declara sus dependencias con `dependsOn[]`. Nodos sin dependencias se ejecutan en paralelo con `Promise.allSettled` por niveles topológicos.
+- **Canvas 2D interactivo**: lienzo HTML+SVG con aristas Bézier, port-in/out, auto-layout topológico, detección de ciclos y paleta colapsable con tabs Agentes/Scripts.
+- **Scripts externos**: crea tus propios scripts `.js` en `user-scripts/`, se cargan en caliente y aparecen en la paleta. Sandbox Node.js con API `fs` segura.
+- **Migración automática**: las orquestaciones lineales antiguas (`agents[]`) se convierten al modelo DAG de forma transparente al leerlas.
 
 ## Documentación técnica
 
