@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-06-04 · Versión: 2.2.0
+> Última actualización: 2026-06-06 · Versión: 2.3.0-dev
 
 ---
 
@@ -165,7 +165,7 @@ interface DashboardNotification {
   level?: string; categoryId?: string | null;
 }
 
-// ── v2.1.0 — Orquestaciones avanzadas ───────────────────────────────────
+// ── v2.3.0 — Orquestaciones DAG paralelas ───────────────────────────────
 
 interface QualityScore {
   score:         number;          // 0–100
@@ -196,10 +196,37 @@ interface OpsLedger {
   orchestrationId: string;
 }
 
-// StepResult extiende la definición base con los campos de v2.1.0
+interface OrchestrationNode {
+  id:            string;                    // UUID estable, e.g. "node-abc123"
+  agentName:     string;                    // nombre del agente o "__script:name__"
+  dependsOn:     string[];                  // ids de nodos predecesores (vacío = nodo raíz)
+  x?:            number;                    // posición en el canvas (px)
+  y?:            number;
+  dataFlow:      DataFlow;
+  contextExtra:  ContextExtra;
+  gateAfter?:    boolean;
+  scriptParams?: Record<string, unknown>;
+}
+
+interface Orchestration {
+  id:              string;
+  projectId:       string;
+  name:            string;
+  description:     string;
+  nodes:           OrchestrationNode[];     // DAG — único formato desde v2.3
+  executionConfig: ExecutionConfig;
+  executionCount:  number;
+  lastExecutionStatus?: 'success' | 'partial' | 'failed';
+  lastExecutedAt?: string;
+  createdAt:       string;
+  updatedAt:       string;
+}
+
+// StepResult — incluye nodeId para identificar el nodo en el DAG
 interface StepResult {
   stepIndex:     number;
   agentName:     string;
+  nodeId?:       string;                   // v2.3: id del nodo DAG
   input:         { systemPrompt: string; userMessage: string };
   output:        { response: string; handoff?: object };
   filesModified: string[];
@@ -209,8 +236,8 @@ interface StepResult {
   status:        'success' | 'error' | 'warning';
   error?:        { message: string; category: string; recoverable: boolean };
   backupPath:    string | null;
-  gitCommitSha?: string;           // v2.1.0: SHA del commit de checkpoint
-  qualityScore?: QualityScore;     // v2.1.0: puntuación automática
+  gitCommitSha?: string;
+  qualityScore?: QualityScore;
   revisions?:    Array<{ at: string; feedback: string | null; previousFilesModified: string[] }>;
 }
 ```
@@ -468,65 +495,124 @@ Chat multi-turno con @mention de agentes, historial por proyecto e indicador de 
 
 Tres sub-vistas: `list` / `editor` / `execution`. La paleta del editor carga agentes aplicables (`GET /agents/applicable?projectId=`) y agentes del proyecto. La sección CDP se activa si algún agente tiene herramientas `browser_*`.
 
-**Scripts en la paleta:** además de los agentes, la paleta carga `GET /scripts` y muestra los scripts determinísticos en una sección separada. Los scripts se arrastran al lienzo igual que los agentes.
+**Scripts en la paleta:** además de los agentes, la paleta carga `GET /scripts` y muestra los scripts en tabs separados (built-in y personalizados). Los scripts se arrastran al lienzo igual que los agentes y pueden repetirse (a diferencia de los agentes).
 
 ---
 
 ## Componentes de orquestaciones
 
+El sistema de orquestaciones usa un modelo **DAG** (grafo dirigido acíclico) donde cada nodo declara sus dependencias explícitamente mediante `dependsOn: string[]`. Los nodos sin dependencias son raíces y pueden ejecutarse en paralelo.
+
 ### `OrchestrationEditor.tsx`
 
-Layout tres paneles: paleta (agentes arrastrables) | lienzo (`NodeCanvas`) | configurador de conexión (`ConnectionConfigurator`).
+Layout tres paneles: paleta (agentes y scripts arrastrables) | lienzo (`NodeCanvas`) | configurador de conexión (`ConnectionConfigurator`).
 
 **Carga de agentes para la paleta:**
 1. `GET /agents/applicable?projectId=` — global + section aplicables.
 2. `GET /projects/:id/agents` — agentes propios del proyecto.
+3. `GET /scripts` — scripts determinísticos (built-in + externos).
 
 Los agentes del proyecto tienen prioridad (aparecen primero). Los agentes excluidos del proyecto no aparecen.
 
-**Purga del canvas:** al cargar, si un agente del canvas ya no existe en disco, se elimina automáticamente.
+**Paleta con tabs:** dos tabs — *Agentes* y *Scripts*. La tab Scripts divide los scripts en dos grupos: "Scripts" (built-in) y "Scripts personalizados" (externos). Los scripts externos con warnings muestran un icono ámbar junto al nombre.
+
+**Paleta colapsable:** botón `ti-layout-sidebar-left-collapse` en la cabecera colapsa la paleta a una tira vertical con los iconos de tab. Se re-expande desde la tira.
+
+**Drag-and-drop desde paleta:** al arrastrar un agente o script sobre el canvas, se crea un nodo en la posición de suelta. Si se suelta sobre un nodo existente, el nuevo nodo se coloca debajo y se conecta automáticamente con `dependsOn = [targetNode.id]`. Un agente solo puede aparecer una vez en el canvas (los scripts sí pueden repetirse).
+
+**Purga del canvas:** al cargar, si un agente del canvas ya no existe en disco, se elimina automáticamente. Sus conexiones (`dependsOn`) también se limpian.
+
+**Estado:** `dagNodes: OrchestrationNode[]` — único estado del canvas. `selectedEdge: SelectedEdge | null` — arista o nodo raíz seleccionado (controla qué muestra `ConnectionConfigurator`).
+
+**`getScriptParamsForAgent(agentName)`** — extrae el schema de parámetros del script desde `scripts[]` para pasarlo al configurador.
+
+**`scriptsWithRequiredParams: Set<string>`** — conjunto de nombres de scripts con parámetros obligatorios sin configurar; se pasa al canvas para mostrar advertencias visuales.
 
 ### `ConnectionConfigurator.tsx`
+
+Configura una arista del DAG (la conexión entre dos nodos) o el nodo de entrada (Orquestador → nodo raíz).
 
 **DataFlow:** checkboxes `agentOutput` y `filesModified`.
 
 **Gate HITL (`gateAfter`):** toggle al final del configurador para conexiones inter-agente (no disponible en `isInputNode`). Cuando está activo, el orquestador pausa tras ese agente y espera `POST /executions/:execId/gate`. El toggle persiste en `node.gateAfter: boolean`.
 
-**Parámetros de script (`scriptParams`):** cuando el nodo destino de la conexión es un script con parámetros declarados (p.ej. `budget-guard`), el configurador muestra una sección adicional con los campos correspondientes. Los valores se guardan en `node.scriptParams: Record<string, unknown>`. Los campos obligatorios se marcan con `*` y resaltan en ámbar si están vacíos. El schema de params viene de `GET /scripts` (campo `params[]` por script).
+**Parámetros de script (`scriptParams`):** cuando el nodo destino es un script con parámetros declarados (p.ej. `budget-guard`), el configurador muestra una sección adicional con los campos del schema. Los valores se guardan en `node.scriptParams: Record<string, unknown>`. Campos obligatorios marcados con `*` en ámbar si están vacíos. El schema `ScriptParamSchema[]` viene de `GET /scripts`.
 
-**Prop `isInputNode`:** `true` para el nodo de entrada (Orquestador → Agente 1). Deshabilita los checkboxes de agente anterior y el toggle de gate.
+```ts
+export interface ScriptParamSchema {
+  key:          string;
+  label:        string;
+  type:         'number' | 'text' | 'boolean';
+  required:     boolean;
+  placeholder?: string;
+  hint?:        string;
+}
+```
 
-**Auto-save:** el cleanup del `useEffect` de nodo persiste cambios pendientes con refs antes de desmontar.
+**Prop `isInputNode`:** `true` para el nodo de entrada (Orquestador → nodo raíz). Deshabilita checkboxes de agente anterior y el toggle de gate. La sección de "Contexto fijo" se llama "Descripción de la tarea" en este modo.
+
+**Auto-save con refs:** al cambiar de nodo (`useEffect` con `[node.id]`), el cleanup persiste el estado `dirty` vía refs antes de desmontar. Evita pérdida de cambios al clicar otra arista.
 
 ### `NodeCanvas.tsx`
 
-Lienzo vertical del editor. Los nodos de tipo script (`agentName.startsWith('__script:')`) se renderizan con clase `.orch-node-script` y badge `model-script`. Los nodos agente/script se distinguen visualmente pero comparten la misma interfaz de arrastre.
+Lienzo 2D interactivo basado en HTML absoluto + SVG overlay para las aristas.
 
-`fmtAgentName(name)` formatea los nombres `__script:quality-score__` → `quality score` para mostrar en el lienzo.
+**Nodo Orquestador:** nodo estático (no en `dagNodes`) que representa el punto de entrada. Se posiciona centrado sobre los nodos raíz. No es arrastrable ni tiene port-out.
 
-**Advertencia de params faltantes:** si un nodo script tiene parámetros obligatorios y la conexión entrante no los tiene configurados, el nodo muestra un icono `ti-alert-triangle` en ámbar junto al nombre. Prop `scriptsWithRequiredParams: Set<string>` recibido desde `OrchestrationEditor`.
+**Nodos de usuario:** div absolutos draggables. Cada nodo tiene:
+- Handle de arrastre (`ti-grip-vertical`) + índice topológico.
+- Port-out en la parte inferior (click → modo conexión activa, dibuja línea hacia el cursor).
+- Port-in visible solo cuando hay una conexión en progreso desde otro nodo.
+- Botón `×` para eliminar.
+- Badge de modelo (`haiku` / `sonnet` / `opus`) o `script` / `personalizado` para scripts.
+- Icono `ti-alert-triangle` en ámbar si el script tiene parámetros obligatorios sin configurar.
+
+**Aristas SVG:** curvas Bézier cúbicas (`C`) con:
+- Halo de 6px en `rgba(124,106,247,.12)`.
+- Línea de flujo animada con `strokeDasharray`.
+- Flecha en el nodo destino.
+- Punto central clickable para seleccionar la arista. Si tiene contexto configurado muestra `⚙`, si no `↓`.
+- Icono `⏸` ámbar si `node.gateAfter`.
+- Al seleccionar: aparece botón `✕` (coral) para eliminar la conexión.
+
+**Aristas Orquestador→raíz:** misma representación pero no tienen botón de eliminar. Click selecciona la arista con `fromId: null`.
+
+**Auto-layout:** `autoLayoutNodes(nodes)` calcula posiciones topológicas con `topologicalLevels()`. Deja espacio sobre los nodos raíz para el nodo Orquestador (`PAD_Y = 20 + NODE_H + 100`). Centrado horizontal por nivel. Disponible como botón "Reordenar" (`ti-layout-distribute-vertical`) cuando hay más de 1 nodo.
+
+**Detección de ciclos:** `hasCycle(nodes, fromId, toId)` — BFS desde el nodo destino; previene crear aristas que formarían un ciclo.
+
+**Estado visual de ejecución:** prop `executionState?: Map<string, 'pending' | 'running' | 'done' | 'error'>` — añade clases `exec-running` / `exec-done` / `exec-error` / `exec-pending` al nodo correspondiente.
+
+**Funciones exportadas:**
+- `getAgentIcon(name): string` — mapea nombre de agente a icono Tabler.
+- `autoLayoutNodes(nodes): OrchestrationNode[]` — layout topológico.
+- `NODE_W = 244`, `NODE_H = 80` — dimensiones de nodo.
 
 ### `ExecutionPanel.tsx`
 
-Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL** (si activo) → resultado.
+Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL / browser pause** (si activo) → resultado.
+
+**Ejecución paralela:** `computeLevels(nodes)` calcula niveles topológicos. Durante la ejecución, los nodos se agrupan por nivel con `<div class="orch-step-level parallel">` cuando el nivel tiene más de un nodo. `activeNodeIds: Set<string>` rastrea qué nodos están corriendo simultáneamente.
 
 **`canExecute`:**
 | Condición | Descripción |
 |---|---|
 | `!agentsLoading` | Agentes cargados |
 | `missingFields.length === 0` | Campos temporales requeridos completos |
-| `!browserBlocked` | Navegador conectado (si `needsBrowser`) |
+| `!browserBlocked` | Navegador conectado (si `needsBrowser && !isNativeCLI`) |
 | `!browserLoading` | Estado del navegador cargado |
 
-**Gate HITL en la UI:** cuando el SSE emite `gate-open`, el panel muestra un bloque ámbar con el nombre del agente completado y tres botones: *Aprobar y continuar*, *Revisar y rehacer* (muestra textarea para feedback) y *Cancelar orquestación*. La decisión se envía a `POST /executions/:execId/gate`.
+**Contexto temporal agrupado por nodo:** en el formulario previo, los campos temporales se agrupan por `nodeId` y se muestran en el orden topológico de los nodos. La clave en `temporalValues` es `${nodeId}-${tempId}`.
 
-**Quality Score:** cada tarjeta de paso en el resultado muestra el componente `QualityBadge` si `stepResult.qualityScore` existe. Al hacer clic se expanden los checks individuales con su estado.
+**Gate HITL en la UI:** cuando el SSE emite `gate-open` (con `nodeId` y `agentName`), el panel muestra un bloque con tres botones: *Aprobar*, *Revisar* (muestra textarea para feedback) y *Cancelar*. La decisión se envía a `POST /executions/:execId/gate { action, feedbackText?, nodeId }`.
 
-**Ops Ledger:** el resultado final tiene dos tabs: `steps` (comportamiento previo) y `ops` (operaciones del ledger). Cada entrada del ledger muestra id, fichero, agente, paso y estado, con botón de revertir que llama a `POST /ops/:opId/revert`.
+**Browser pause:** cuando el SSE emite `browser-required`, el panel muestra el panel de autenticación con estado del navegador y lista de tabs. "Continuar ejecución" llama a `POST /orchestrations/:id/browser-continue?executionId=`.
 
-**Tabs estado global:** `opsTab: 'steps' | 'ops'` controla la vista activa en el resultado.
+**Quality Score:** componente `QualityBadge` por paso. Click expande los checks individuales.
 
-**Banner de presupuesto agotado:** cuando el SSE emite `cancelled` con `reason: 'budget_exceeded'`, el estado `cancelReason` captura `{ type, spent, limit }`. Al volver al formulario pre-ejecución se muestra el banner `.orch-budget-exceeded-banner` con los valores en coral, antes del formulario. Se resetea con cada nueva ejecución.
+**Ops Ledger:** dos tabs en el resultado — `steps` y `ops`. Ops muestra cada operación con icono según `kind` (`add` / `remove` / `modify`), path, agente, estado y botón revertir.
+
+**Banner de presupuesto agotado:** cuando el SSE emite `cancelled` con `reason: 'budget_exceeded'`, `cancelReason` captura `{ type, spent, limit }`. Se muestra `.orch-budget-exceeded-banner` en coral en la vista de resultado. Se resetea al ejecutar de nuevo.
 
 ---
 

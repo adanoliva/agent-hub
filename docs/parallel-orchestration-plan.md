@@ -165,7 +165,7 @@ Sustituir el bucle `for` lineal de `orchestrator.js` por un scheduler DAG que ej
 
 ## Fase 3 — Canvas UI
 
-**Estado:** ⬜ No iniciada  
+**Estado:** ✅ Completada  
 **Prerrequisito:** Fase 1 completada (Fase 2 recomendada pero no bloqueante)
 
 ### Objetivo
@@ -249,16 +249,19 @@ interface Props {
 
 ### Checklist Fase 3
 
-- [ ] Reescribir `NodeCanvas.tsx` con posicionamiento libre x/y
-- [ ] Implementar aristas SVG con curvas cúbicas
-- [ ] Implementar drag de nodos
-- [ ] Implementar creación de conexiones por click en puerto
-- [ ] Implementar eliminación de conexiones
-- [ ] Implementar auto-layout topológico (botón "Reordenar")
-- [ ] Visualizar estado de ejecución por nodo (colores + spinner)
-- [ ] Drop de agentes desde la paleta en posición x/y
-- [ ] Añadir CSS para todas las clases nuevas en `styles.css`
-- [ ] Validación visual: ciclos detectados y bloqueados
+- [x] Reescribir `NodeCanvas.tsx` con posicionamiento libre x/y
+- [x] Implementar aristas SVG con curvas cúbicas
+- [x] Implementar drag de nodos
+- [x] Implementar creación de conexiones por click en puerto
+- [x] Implementar eliminación de conexiones
+- [x] Implementar auto-layout topológico (botón "Reordenar")
+- [x] Visualizar estado de ejecución por nodo (colores + spinner)
+- [x] Drop de agentes desde la paleta en posición x/y
+- [x] Añadir CSS para todas las clases nuevas en `styles.css`
+- [x] Validación visual: ciclos detectados y bloqueados
+- [x] ConnectionConfigurator actualizado a OrchestrationNode
+- [x] OrchestrationEditor refactorizado a estado DAG (dagNodes)
+- [x] OrchestrationList actualizado a nodes[] (sin agents[])
 
 ---
 

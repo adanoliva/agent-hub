@@ -1,7 +1,30 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { req, API_BASE } from '../../api';
-import type { Agent, BrowserStatus, Orchestration, ExecutionLog, ExecutionResult, StepResult, QualityScore, AtomicOp, OpsLedger } from '../../types';
+import type { Agent, BrowserStatus, Orchestration, OrchestrationNode, ExecutionLog, ExecutionResult, StepResult, QualityScore, AtomicOp, OpsLedger } from '../../types';
 import { useStore } from '../../store';
+
+function computeLevels(nodes: OrchestrationNode[]): OrchestrationNode[][] {
+  const inDeg = new Map(nodes.map(n => [n.id, n.dependsOn.length]));
+  const succ  = new Map<string, string[]>(nodes.map(n => [n.id, []]));
+  for (const n of nodes)
+    for (const dep of n.dependsOn)
+      succ.get(dep)?.push(n.id);
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const levels: OrchestrationNode[][] = [];
+  let frontier = nodes.filter(n => n.dependsOn.length === 0);
+  while (frontier.length > 0) {
+    levels.push(frontier);
+    const next: OrchestrationNode[] = [];
+    for (const node of frontier)
+      for (const s of (succ.get(node.id) ?? [])) {
+        const d = (inDeg.get(s) ?? 0) - 1;
+        inDeg.set(s, d);
+        if (d === 0) next.push(nodeMap.get(s)!);
+      }
+    frontier = next;
+  }
+  return levels;
+}
 
 interface Props {
   orchestration: Orchestration;
@@ -85,7 +108,8 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const [executionId, setExecutionId] = useState<string | null>(null);
   const [stepsDone,        setStepsDone]        = useState<StepResult[]>([]);
   const [stepInputs,       setStepInputs]       = useState<StepInput[]>([]);
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(-1);
+  const [activeNodeIds,    setActiveNodeIds]     = useState<Set<string>>(new Set());
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
   const [rollingBack,    setRollingBack]     = useState<number | null>(null);
   const [cancelling,     setCancelling]      = useState(false);
   const [cancelReason,   setCancelReason]    = useState<{ type: 'budget_exceeded'; spent: number; limit: number } | null>(null);
@@ -250,6 +274,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
     setResult(null);
     setStepsDone([]);
     setStepInputs([]);
+    setActiveNodeIds(new Set());
     setCurrentStepIndex(0);
     setCancelling(false);
     setCancelReason(null);
@@ -276,7 +301,8 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
         try {
           const payload = JSON.parse(e.data);
           const data = payload.data || payload;
-          setCurrentStepIndex(data.stepIndex);
+          if (data.stepIndex != null) setCurrentStepIndex(data.stepIndex);
+          if (data.nodeId) setActiveNodeIds(prev => new Set([...prev, data.nodeId]));
         } catch {}
       });
 
@@ -293,6 +319,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
           const payload = JSON.parse(e.data);
           const step: StepResult = payload.data || payload;
           setStepsDone(prev => { const next = [...prev, step]; stepsDoneRef.current = next; return next; });
+          if (step.nodeId) setActiveNodeIds(prev => { const s = new Set(prev); s.delete(step.nodeId!); return s; });
         } catch {}
       });
 
@@ -722,7 +749,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             <div className="orch-gate-panel">
               <div className="orch-gate-header">
                 <i className="ti ti-user-check" />
-                <span>Revisión requerida — Paso {gateOpen.stepIndex + 1}: <strong>{gateOpen.agentName}</strong></span>
+                <span>Revisión requerida — <strong>{gateOpen.agentName}</strong></span>
               </div>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text1)' }}>El paso anterior ha completado. Revisa el resultado antes de continuar.</p>
               {gateDecision === 'revise' && (
@@ -753,15 +780,24 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             </div>
           )}
 
-          {/* Step-by-step data flow */}
-          <div className="orch-steps-flow">
-            {orchestration.nodes.map((node, i) => {
-              const agentName = node.agentName;
-              const done      = stepsDone.find(s => s.nodeId === node.id || s.stepIndex === i);
-              const input     = stepInputs.find(s => (s as any).nodeId === node.id || s.stepIndex === i);
-              const isActive  = !done && i === currentStepIndex;
+          {/* Step-by-step data flow — grouped by topological level */}
+          {(() => {
+            const levels = computeLevels(orchestration.nodes);
+            // Map nodeId → topological index (for fallback currentStepIndex matching)
+            const topoIdx = new Map<string, number>();
+            let ti = 0;
+            for (const lvl of levels) for (const n of lvl) topoIdx.set(n.id, ti++);
+
+            function renderNode(node: OrchestrationNode) {
+              const i        = topoIdx.get(node.id) ?? 0;
+              const done     = stepsDone.find(s => s.nodeId === node.id || s.stepIndex === i);
+              const input    = stepInputs.find(s => (s as any).nodeId === node.id || s.stepIndex === i);
+              const isActive = !done && (
+                activeNodeIds.has(node.id) ||
+                (activeNodeIds.size === 0 && i === currentStepIndex)
+              );
               return (
-                <div key={i} className={`orch-step-flow-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
+                <div key={node.id} className={`orch-step-flow-row ${done ? `done-${done.status}` : ''} ${isActive ? 'active' : ''}`}>
                   <div className="orch-step-flow-head">
                     <div className="orch-step-indicator">
                       {done ? (
@@ -772,11 +808,10 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                         <span>{i + 1}</span>
                       )}
                     </div>
-                    <span className="orch-step-name">{fmtAgentName(agentName)}</span>
+                    <span className="orch-step-name">{fmtAgentName(node.agentName)}</span>
                     {done && <span className="orch-step-dur">{fmtDuration(done.duration)}</span>}
                   </div>
 
-                  {/* Input the agent received */}
                   {input && (
                     <details className="orch-step-data-section">
                       <summary>
@@ -787,7 +822,6 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                     </details>
                   )}
 
-                  {/* Handoff / output the agent produced */}
                   {done?.output?.handoff && (
                     <div className="orch-step-data-section orch-handoff-box">
                       <div className="orch-handoff-label">
@@ -810,7 +844,6 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                     </div>
                   )}
 
-                  {/* Error */}
                   {done?.status === 'error' && done.error && (
                     <div className="orch-step-data-section orch-step-error-inline">
                       <i className="ti ti-alert-circle" /> {done.error.message}
@@ -818,8 +851,25 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                   )}
                 </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <div className="orch-steps-flow">
+                {levels.map((lvl, li) => (
+                  <React.Fragment key={li}>
+                    {li > 0 && (
+                      <div className="orch-level-connector">
+                        <i className="ti ti-chevron-down" />
+                      </div>
+                    )}
+                    <div className={`orch-step-level${lvl.length > 1 ? ' parallel' : ''}`}>
+                      {lvl.map(renderNode)}
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Live logs (collapsed by default) */}
           <details className="orch-logs-wrap">

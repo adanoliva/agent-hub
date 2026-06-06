@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { req } from '../../api';
-import type { Orchestration, OrchestrateNode, DataFlow, ContextExtra, Agent } from '../../types';
-import { NodeCanvas, getAgentIcon, CANVAS_SLOT_H, CANVAS_AGENTS_OFFSET } from './NodeCanvas';
+import type { Orchestration, OrchestrationNode, DataFlow, ContextExtra, Agent } from '../../types';
+import { NodeCanvas, NODE_W, NODE_H, getAgentIcon, autoLayoutNodes } from './NodeCanvas';
+import type { SelectedEdge } from './NodeCanvas';
 import { ConnectionConfigurator, type ScriptParamSchema } from './ConnectionConfigurator';
 import { useStore } from '../../store';
 
 interface Props {
   orchestration: Orchestration;
-  projectId:     string;   // canonical project ID from the UI selector (may differ from orchestration.projectId if the project was reimported)
+  projectId:     string;
   onSave:        (data: Partial<Orchestration>) => Promise<void>;
   onBack:        () => void;
   onExecute:     () => void;
@@ -24,62 +25,50 @@ const DEFAULT_CONTEXT_EXTRA: ContextExtra = {
   temporal: [],
 };
 
-function makeNode(from: number, to: number): OrchestrateNode {
+function makeNode(agentName: string, x: number, y: number): OrchestrationNode {
   return {
-    id:           `node-${from}-${to}-${Date.now()}`,
-    from,
-    to,
+    id:           `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    agentName,
+    dependsOn:    [],
+    x,
+    y,
     dataFlow:     { ...DEFAULT_DATA_FLOW },
-    contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
+    contextExtra: { ...DEFAULT_CONTEXT_EXTRA, fixed: { freeText: '', files: [] }, temporal: [] },
   };
 }
 
 export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, onExecute }: Props) {
-  const addToast  = useStore(s => s.addToast);
-  const projects  = useStore(s => s.projects);
+  const addToast = useStore(s => s.addToast);
+  const projects = useStore(s => s.projects);
 
-  const [name,        setName]        = useState(orchestration.name);
-  const [description, setDescription] = useState(orchestration.description);
-  const [agents,      setAgents]      = useState<string[]>(orchestration.agents);
-  const [nodes,       setNodes]       = useState<OrchestrateNode[]>(orchestration.nodes);
-  const [inputNode,   setInputNode]   = useState<OrchestrateNode>(() =>
-    orchestration.inputNode ?? {
-      id:           `input-node-${Date.now()}`,
-      from:         -1,
-      to:           0,
-      dataFlow:     { agentOutput: false, filesModified: false, projectContext: true },
-      contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
-    }
-  );
-  const [selectedNode, setSelectedNode] = useState<number | null>(null);  // -1 = inputNode
-  const [isSaving,    setIsSaving]    = useState(false);
-  const [validating,  setValidating]  = useState(false);
+  const [name,         setName]         = useState(orchestration.name);
+  const [description,  setDescription]  = useState(orchestration.description);
+  const [dagNodes,     setDagNodes]     = useState<OrchestrationNode[]>(() => orchestration.nodes ?? []);
+  const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null);
+  const [isSaving,     setIsSaving]     = useState(false);
+  const [validating,   setValidating]   = useState(false);
+  const [errors,       setErrors]       = useState<string[]>([]);
 
-  // DnD state
-  const [isDragging,      setIsDragging]      = useState(false);
-  const [draggingNodeIdx, setDraggingNodeIdx] = useState<number | null>(null);
-  const [dragOverZone,    setDragOverZone]    = useState<number | null>(null);
-  const draggingRef = useRef<{ type: 'palette' | 'node'; payload: string | number } | null>(null);
-  const [errors,      setErrors]      = useState<string[]>([]);
+  const [allAgents,    setAllAgents]    = useState<Agent[]>([]);
+  const [agentSearch,  setAgentSearch]  = useState('');
+  const [scripts,      setScripts]      = useState<Array<{ name: string; label: string; description: string; builtin: boolean; hasWarnings?: boolean; params?: ScriptParamSchema[] }>>([]);
+  const [paletteTab,   setPaletteTab]   = useState<'agents' | 'scripts'>('agents');
+  const [paletteOpen,  setPaletteOpen]  = useState(true);
 
-  const [allAgents,      setAllAgents]      = useState<Agent[]>([]);
-  const [agentSearch,    setAgentSearch]    = useState('');
-  const [scripts,        setScripts]        = useState<Array<{ name: string; label: string; description: string; builtin: boolean; hasWarnings?: boolean; params?: ScriptParamSchema[] }>>([]);
-  const [paletteTab,     setPaletteTab]     = useState<'agents' | 'scripts'>('agents');
-  const [paletteOpen,    setPaletteOpen]    = useState(true);
+  // DnD from palette
+  const [isDragging,   setIsDragging]   = useState(false);
+  const draggingRef  = useRef<{ agentName: string } | null>(null);
+  const dragGhostRef = useRef<HTMLElement | null>(null);
+  const canvasPanelRef = useRef<HTMLDivElement>(null);
 
-
-  // Load available scripts from the registry (hot-reload on each mount)
   useEffect(() => {
-    req<{ scripts: Array<{ name: string; label: string; description: string; builtin: boolean; hasWarnings?: boolean }>; warnings: string[] }>('GET', '/scripts')
+    req<{ scripts: Array<{ name: string; label: string; description: string; builtin: boolean; hasWarnings?: boolean; params?: ScriptParamSchema[] }>; warnings: string[] }>('GET', '/scripts')
       .then(res => setScripts(res.scripts ?? []))
       .catch(() => {});
   }, []);
 
-  // Load all agents for this project: applicable (global/section/tech) + project-level.
-  // After loading, purge from the canvas any agent that no longer exists on disk.
   useEffect(() => {
-    const applyAgents = (fetched: Agent[], currentAgents: string[], currentNodes: OrchestrateNode[], canPurge: boolean) => {
+    const applyAgents = (fetched: Agent[], canPurge: boolean) => {
       const seen = new Set<string>();
       const merged: Agent[] = [];
       for (const a of fetched) {
@@ -87,148 +76,45 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
       }
       setAllAgents(merged);
 
-      // Only purge canvas agents when we have a complete picture (both API calls succeeded).
-      // If either call failed we keep the canvas as-is to avoid losing valid agents.
       if (!canPurge) return;
       const existingNames = new Set(merged.map(a => a.name));
-      const cleaned = currentAgents.filter(name => {
-        if (name.startsWith('__script:')) return true; // Scripts are not part of the agents list
-        return existingNames.has(name);
+      setDagNodes(prev => {
+        const cleaned = prev.filter(n => n.agentName.startsWith('__script:') || existingNames.has(n.agentName));
+        if (cleaned.length === prev.length) return prev;
+        return cleaned.map(n => ({ ...n, dependsOn: n.dependsOn.filter(id => cleaned.some(c => c.id === id)) }));
       });
-      if (cleaned.length !== currentAgents.length) {
-        setAgents(cleaned);
-        setNodes(rebuildNodes(cleaned, currentNodes));
-      }
     };
 
-    // Capture state snapshots at effect run time (mount / project change)
-    const snapshotAgents = agents;
-    const snapshotNodes  = nodes;
-
     if (!projectId) {
-      req<Agent[]>('GET', '/agents/flat')
-        .then(a => applyAgents(a, snapshotAgents, snapshotNodes, true))
-        .catch(() => {});
+      req<Agent[]>('GET', '/agents/flat').then(a => applyAgents(a, true)).catch(() => {});
       return;
     }
-    const project = projects.find(p => p.id === projectId);
+    const project  = projects.find(p => p.id === projectId);
     const excluded = new Set(project?.excludedAgents ?? []);
     Promise.all([
       req<Agent[]>('GET', `/agents/applicable?projectId=${encodeURIComponent(projectId)}`).catch(() => null),
       req<Agent[]>('GET', `/projects/${encodeURIComponent(projectId)}/agents`).catch(() => null),
     ]).then(([applicable, projectAgents]) => {
-      // Both calls must succeed for the canvas purge to be trustworthy.
-      const bothOk = applicable !== null && projectAgents !== null;
-      const resolvedApplicable     = applicable     ?? [];
-      const resolvedProjectAgents  = projectAgents  ?? [];
-      // Project-level agents take precedence; applicable fills in global/section/tech
-      // agents not already covered by the project.
-      const projectNames = new Set(resolvedProjectAgents.map(a => a.name));
-      const filteredApplicable = resolvedApplicable.filter(a => !excluded.has(a.name) && !projectNames.has(a.name));
-      applyAgents([...resolvedProjectAgents, ...filteredApplicable], snapshotAgents, snapshotNodes, bothOk);
+      const bothOk              = applicable !== null && projectAgents !== null;
+      const resolvedApplicable  = applicable    ?? [];
+      const resolvedProject     = projectAgents ?? [];
+      const projectNames        = new Set(resolvedProject.map(a => a.name));
+      const filteredApplicable  = resolvedApplicable.filter(a => !excluded.has(a.name) && !projectNames.has(a.name));
+      applyAgents([...resolvedProject, ...filteredApplicable], bothOk);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // Rebuild nodes preserving config by position
-  const rebuildNodes = (newAgents: string[], currentNodes: OrchestrateNode[]): OrchestrateNode[] => {
-    if (newAgents.length < 2) return [];
-    return Array.from({ length: newAgents.length - 1 }, (_, i) => {
-      const old = currentNodes[i];
-      return old ? { ...old, from: i, to: i + 1 } : makeNode(i, i + 1);
-    });
-  };
-
-  const removeAgent = (index: number) => {
-    const newAgents = agents.filter((_, i) => i !== index);
-    const newNodes  = rebuildNodes(newAgents, nodes);
-    setAgents(newAgents);
-    setNodes(newNodes);
-    if (selectedNode !== null && selectedNode >= newNodes.length) {
-      setSelectedNode(newNodes.length > 0 ? newNodes.length - 1 : null);
-    }
-  };
-
-  // ── DnD handlers ──
-  const dragGhostRef = useRef<HTMLElement | null>(null);
-
-  const clearDragGhost = (e: React.DragEvent) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    canvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;pointer-events:none';
-    document.body.appendChild(canvas);
-    e.dataTransfer.setDragImage(canvas, 0, 0);
-    dragGhostRef.current = canvas;
-  };
-
-  const handlePaletteDragStart = (agentName: string, e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'copy';
-    clearDragGhost(e);
-    draggingRef.current = { type: 'palette', payload: agentName };
-    setIsDragging(true);
-    setDraggingNodeIdx(null);
-  };
-
-  const handleNodeDragStart = (idx: number, e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'move';
-    clearDragGhost(e);
-    draggingRef.current = { type: 'node', payload: idx };
-    setIsDragging(true);
-    setDraggingNodeIdx(idx);
-  };
-
-  const handleDragEnd = () => {
-    setIsDragging(false);
-    setDraggingNodeIdx(null);
-    setDragOverZone(null);
-    draggingRef.current = null;
-    if (dragGhostRef.current) {
-      document.body.removeChild(dragGhostRef.current);
-      dragGhostRef.current = null;
-    }
-  };
-
-  const handleDropAtZone = (zone: number) => {
-    const drag = draggingRef.current;
-    if (!drag) return;
-    let newAgents = [...agents];
-    if (drag.type === 'palette') {
-      const agentName = drag.payload as string;
-      if (!agentName.startsWith('__script:') && agents.includes(agentName)) return;
-      newAgents.splice(zone, 0, agentName);
-    } else {
-      const fromIdx = drag.payload as number;
-      const [moved] = newAgents.splice(fromIdx, 1);
-      const insertAt = zone > fromIdx ? zone - 1 : zone;
-      newAgents.splice(insertAt, 0, moved);
-      setSelectedNode(null);
-    }
-    setAgents(newAgents);
-    setNodes(rebuildNodes(newAgents, nodes));
-    handleDragEnd();
-  };
-
-  const handleUpdateNode = (updated: OrchestrateNode) => {
-    if (updated.from === -1) {
-      setInputNode(updated);
-    } else {
-      setNodes(ns => ns.map(n => n.id === updated.id ? updated : n));
-    }
+  const handleUpdateNode = (updated: OrchestrationNode) => {
+    setDagNodes(ns => ns.map(n => n.id === updated.id ? updated : n));
   };
 
   const handleValidate = async () => {
-    if (agents.length < 2) {
-      setErrors(['Necesitas al menos 2 agentes']);
-      return;
-    }
+    if (dagNodes.length < 2) { setErrors(['Necesitas al menos 2 nodos']); return; }
     setValidating(true);
     try {
-      // Save first so validation uses current state
-      await onSave({ name, description, agents, nodes });
-      const result = await req<{ valid: boolean; errors: string[] }>(
-        'POST', `/orchestrations/${orchestration.id}/validate`
-      );
+      await onSave({ name, description, nodes: dagNodes });
+      const result = await req<{ valid: boolean; errors: string[] }>('POST', `/orchestrations/${orchestration.id}/validate`);
       setErrors(result.errors || []);
       if (result.valid) addToast('Validación correcta', 'ok');
     } catch (e: any) {
@@ -242,16 +128,84 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     if (!name.trim()) { addToast('El nombre es obligatorio', 'warn'); return; }
     setIsSaving(true);
     try {
-      // Include projectId so stale IDs (e.g. from reimported projects) get corrected on save.
-      await onSave({ name, description, agents, nodes, inputNode, projectId });
+      await onSave({ name, description, nodes: dagNodes, projectId });
       setErrors([]);
     } finally {
       setIsSaving(false);
     }
   };
 
+  // ── Palette DnD ──
+
+  const clearDragGhost = (e: React.DragEvent) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1; canvas.height = 1;
+    canvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;pointer-events:none';
+    document.body.appendChild(canvas);
+    e.dataTransfer.setDragImage(canvas, 0, 0);
+    dragGhostRef.current = canvas;
+  };
+
+  const handlePaletteDragStart = (agentName: string, e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'copy';
+    clearDragGhost(e);
+    draggingRef.current = { agentName };
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    draggingRef.current = null;
+    if (dragGhostRef.current) {
+      document.body.removeChild(dragGhostRef.current);
+      dragGhostRef.current = null;
+    }
+  };
+
+  const handleCanvasDragOver = (e: React.DragEvent) => {
+    if (!draggingRef.current) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleCanvasDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggingRef.current) return;
+    const { agentName } = draggingRef.current;
+
+    if (!agentName.startsWith('__script:') && dagNodes.some(n => n.agentName === agentName)) {
+      handleDragEnd();
+      return;
+    }
+
+    const panel = canvasPanelRef.current!;
+    const rect  = panel.getBoundingClientRect();
+    // Position relative to the NodeCanvas (which starts after 24px padding of the panel)
+    const dropX = e.clientX - rect.left + panel.scrollLeft - 24;
+    const dropY = e.clientY - rect.top  + panel.scrollTop  - 24;
+
+    // If dropped onto an existing node, auto-connect below it
+    const targetNode = dagNodes.find(n => {
+      const nx = n.x ?? 0, ny = n.y ?? 0;
+      return dropX >= nx && dropX <= nx + NODE_W && dropY >= ny && dropY <= ny + NODE_H;
+    });
+
+    const newNode = makeNode(
+      agentName,
+      targetNode ? (targetNode.x ?? 0) : Math.max(0, dropX - NODE_W / 2),
+      targetNode ? (targetNode.y ?? 0) + NODE_H + 80 : Math.max(0, dropY - NODE_H / 2),
+    );
+    if (targetNode) newNode.dependsOn = [targetNode.id];
+
+    setDagNodes(ns => [...ns, newNode]);
+    handleDragEnd();
+  };
+
+  // ── Derived data ──
+
+  const agentNamesInCanvas = new Set(dagNodes.filter(n => !n.agentName.startsWith('__script:')).map(n => n.agentName));
   const filteredAgents = allAgents.filter(a =>
-    !agents.includes(a.name) && (
+    !agentNamesInCanvas.has(a.name) && (
       a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
       a.description?.toLowerCase().includes(agentSearch.toLowerCase())
     )
@@ -262,26 +216,22 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
 
   const agentModels: Record<string, string>       = {};
   const agentDescriptions: Record<string, string> = {};
-
   for (const a of allAgents) {
     const m = a.model || '';
-    if (m.includes('haiku'))  agentModels[a.name] = 'haiku';
+    if (m.includes('haiku'))       agentModels[a.name] = 'haiku';
     else if (m.includes('opus'))   agentModels[a.name] = 'opus';
     else if (m.includes('sonnet')) agentModels[a.name] = 'sonnet';
     agentDescriptions[a.name] = a.description || '';
   }
-
-  for (const s of scripts) {
+  for (const s of scripts)
     agentDescriptions[`__script:${s.name}__`] = s.description || '';
-  }
 
   function getScriptParamsForAgent(agentName: string): ScriptParamSchema[] {
     if (!agentName?.startsWith('__script:')) return [];
-    const name = agentName.replace(/^__script:/, '').replace(/__$/, '');
-    return scripts.find(s => s.name === name)?.params ?? [];
+    const n = agentName.replace(/^__script:/, '').replace(/__$/, '');
+    return scripts.find(s => s.name === n)?.params ?? [];
   }
 
-  // Scripts que tienen al menos un param requerido
   const scriptsWithRequiredParams = new Set(
     scripts.filter(s => s.params?.some(p => p.required)).map(s => s.name)
   );
@@ -294,65 +244,15 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     return '';
   }
 
-  // Canvas needs a stable drag end when pointer leaves window
-  const canvasPanelRef  = useRef<HTMLDivElement>(null);
+  // Connection configurator node
+  const configuratorNode   = selectedEdge ? dagNodes.find(n => n.id === selectedEdge.toId) ?? null : null;
+  const isInputNode        = selectedEdge?.fromId === null;
+  const fromAgentName      = selectedEdge?.fromId
+    ? dagNodes.find(n => n.id === selectedEdge.fromId)?.agentName ?? ''
+    : 'Orquestador';
+  const toAgentName        = configuratorNode?.agentName ?? '';
+  const scriptParams       = getScriptParamsForAgent(toAgentName);
 
-  // Pan-on-background-drag
-  const isPanning       = useRef(false);
-  const panStartY       = useRef(0);
-  const panStartScroll  = useRef(0);
-  const [panning, setPanning] = useState(false);
-
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isDragging) return;
-    const t = e.target as HTMLElement;
-    const onBackground =
-      t === canvasPanelRef.current ||
-      t.classList.contains('orch-node-canvas') ||
-      t.classList.contains('orch-canvas-empty');
-    if (!onBackground) return;
-    isPanning.current    = true;
-    panStartY.current    = e.clientY;
-    panStartScroll.current = canvasPanelRef.current?.scrollTop ?? 0;
-    setPanning(true);
-    e.preventDefault();
-  };
-
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPanning.current || !canvasPanelRef.current) return;
-    canvasPanelRef.current.scrollTop = panStartScroll.current - (e.clientY - panStartY.current);
-  };
-
-  const stopPanning = () => {
-    if (!isPanning.current) return;
-    isPanning.current = false;
-    setPanning(false);
-  };
-
-  // Panel-level drag handlers — work regardless of precise cursor position over zones
-  const handleCanvasDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = draggingRef.current.type === 'palette' ? 'copy' : 'move';
-    // Calculate zone from cursor Y relative to canvas content
-    const panel = canvasPanelRef.current;
-    if (!panel) return;
-    const panelRect = panel.getBoundingClientRect();
-    // panel has padding:20px, canvas is centered horizontally but top-aligned
-    const yRelCanvas = e.clientY - panelRect.top - 20 + panel.scrollTop;
-    const zone = Math.max(0, Math.min(agents.length, Math.round((yRelCanvas - CANVAS_AGENTS_OFFSET - CANVAS_SLOT_H / 4) / CANVAS_SLOT_H)));
-    setDragOverZone(zone);
-  };
-
-  const handleCanvasDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const panel = canvasPanelRef.current;
-    if (!panel) return;
-    const panelRect = panel.getBoundingClientRect();
-    const yRelCanvas = e.clientY - panelRect.top - 20 + panel.scrollTop;
-    const zone = Math.max(0, Math.min(agents.length, Math.round((yRelCanvas - CANVAS_AGENTS_OFFSET - CANVAS_SLOT_H / 4) / CANVAS_SLOT_H)));
-    handleDropAtZone(zone);
-  };
   return (
     <div className="orch-editor">
       {/* Header */}
@@ -385,7 +285,6 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
         </div>
       </div>
 
-      {/* Validation errors */}
       {errors.length > 0 && (
         <div className="orch-error-banner">
           {errors.map((e, i) => (
@@ -394,13 +293,11 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
         </div>
       )}
 
-      {/* Body */}
       <div className="orch-editor-body" onDragEnd={handleDragEnd}>
-        {/* Left: palette — collapsible, tabbed agents/scripts */}
+        {/* Left: palette */}
         <div className={`orch-palette-panel${paletteOpen ? '' : ' collapsed'}`}>
           {paletteOpen ? (
             <>
-              {/* Tab header */}
               <div className="orch-palette-header">
                 <div className="orch-palette-tabs">
                   <button
@@ -424,16 +321,11 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                     )}
                   </button>
                 </div>
-                <button
-                  className="orch-palette-collapse-btn"
-                  onClick={() => setPaletteOpen(false)}
-                  title="Colapsar paleta"
-                >
+                <button className="orch-palette-collapse-btn" onClick={() => setPaletteOpen(false)} title="Colapsar paleta">
                   <i className="ti ti-layout-sidebar-left-collapse" />
                 </button>
               </div>
 
-              {/* Search — solo en tab agentes */}
               {paletteTab === 'agents' && (
                 <div className="orch-picker-search">
                   <i className="ti ti-search" />
@@ -451,19 +343,11 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                 </div>
               )}
 
-              {/* List */}
               <div className="orch-palette-list">
                 {paletteTab === 'agents' ? (
                   filteredAgents.length === 0 ? (
                     <div className="orch-picker-empty">
-                      {agentSearch
-                        ? 'Sin resultados'
-                        : agents.filter(a => !a.startsWith('__script:')).length > 0
-                            && allAgents.length > 0
-                            && allAgents.every(a => agents.includes(a.name))
-                          ? <><i className="ti ti-checks" style={{ fontSize: 22, marginBottom: 6, display: 'block' }} />Todos los agentes están en el flujo</>
-                          : 'Sin agentes disponibles'
-                      }
+                      {agentSearch ? 'Sin resultados' : 'Sin agentes disponibles'}
                     </div>
                   ) : (
                     filteredAgents.map(a => (
@@ -493,7 +377,6 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                     <div className="orch-picker-empty">Sin scripts disponibles</div>
                   ) : (
                     <>
-                      {/* Built-in scripts */}
                       {builtinScripts.length > 0 && (
                         <>
                           <div className="orch-palette-section-label">Scripts</div>
@@ -518,7 +401,6 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                           ))}
                         </>
                       )}
-                      {/* External scripts */}
                       {externalScripts.length > 0 && (
                         <>
                           <div className="orch-palette-section-label">Scripts personalizados</div>
@@ -551,22 +433,16 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
                 )}
               </div>
 
-              {/* Footer: en uso */}
-              {agents.length > 0 && (
+              {dagNodes.length > 0 && (
                 <div className="orch-palette-inuse">
                   <i className="ti ti-layout-list" />
-                  {agents.length} en el flujo
+                  {dagNodes.length} en el flujo
                 </div>
               )}
             </>
           ) : (
-            /* Collapsed strip */
             <div className="orch-palette-strip">
-              <button
-                className="orch-palette-strip-btn"
-                onClick={() => setPaletteOpen(true)}
-                title="Expandir paleta"
-              >
+              <button className="orch-palette-strip-btn" onClick={() => setPaletteOpen(true)} title="Expandir paleta">
                 <i className="ti ti-layout-sidebar-left-expand" />
               </button>
               <div className="orch-palette-strip-divider" />
@@ -590,59 +466,39 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
 
         {/* Center: Canvas */}
         <div
-          className={`orch-canvas-panel${panning || isDragging ? ' panning' : ''}`}
+          className={`orch-canvas-panel${isDragging ? ' panning' : ''}`}
           ref={canvasPanelRef}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
-          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverZone(null); }}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleCanvasMouseMove}
-          onMouseUp={stopPanning}
-          onMouseLeave={stopPanning}
         >
           <NodeCanvas
-            agents={agents}
-            nodes={nodes}
-            inputNode={inputNode}
-            selectedNode={selectedNode}
-            onSelectNode={idx => setSelectedNode(selectedNode === idx ? null : idx)}
-            onNodeDragStart={handleNodeDragStart}
-            onDropAtZone={handleDropAtZone}
-            dragOverZone={dragOverZone}
-            onDragOverZone={setDragOverZone}
-            isDragging={isDragging}
-            draggingNodeIdx={draggingNodeIdx}
-            onRemoveAgent={removeAgent}
+            nodes={dagNodes}
+            onNodesChange={setDagNodes}
+            selectedEdge={selectedEdge}
+            onSelectEdge={setSelectedEdge}
             agentModels={agentModels}
             agentDescriptions={agentDescriptions}
             externalScriptNames={new Set(externalScripts.map(s => s.name))}
             scriptsWithRequiredParams={scriptsWithRequiredParams}
+            isDraggingFromPalette={isDragging}
           />
         </div>
 
         {/* Right: Connection configurator */}
         <div className="orch-config-panel">
-          {selectedNode === -1 ? (
+          {configuratorNode ? (
             <ConnectionConfigurator
-              node={inputNode}
-              fromAgent="Orquestador"
-              toAgent={agents[0] ?? ''}
-              isInputNode
+              node={configuratorNode}
+              fromAgent={fromAgentName}
+              toAgent={toAgentName}
+              isInputNode={isInputNode}
               onUpdate={handleUpdateNode}
-              scriptParams={getScriptParamsForAgent(agents[0] ?? '')}
-            />
-          ) : selectedNode !== null && nodes[selectedNode] ? (
-            <ConnectionConfigurator
-              node={nodes[selectedNode]}
-              fromAgent={agents[nodes[selectedNode].from]}
-              toAgent={agents[nodes[selectedNode].to]}
-              onUpdate={handleUpdateNode}
-              scriptParams={getScriptParamsForAgent(agents[nodes[selectedNode].to])}
+              scriptParams={scriptParams}
             />
           ) : (
             <div className="orch-config-placeholder">
               <i className="ti ti-arrows-exchange" />
-              <p>Selecciona una conexión<br />para configurarla</p>
+              <p>Selecciona una arista o un nodo raíz para configurarlo</p>
             </div>
           )}
         </div>
@@ -656,7 +512,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
         <button
           className="btn primary"
           onClick={onExecute}
-          disabled={agents.length < 2 || errors.length > 0}
+          disabled={dagNodes.length < 2 || errors.length > 0}
         >
           <i className="ti ti-player-play" /> Ejecutar
         </button>
