@@ -2167,6 +2167,11 @@ app.get('/api/mcp/status', (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/mcp/catalog
+app.get('/api/mcp/catalog', (req, res) => {
+  res.json(mcp.MCP_CATALOG);
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 function startServer(port = PORT, host = '127.0.0.1') {

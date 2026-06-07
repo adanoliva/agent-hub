@@ -534,6 +534,130 @@ async function testServer(name, serverConfig) {
   return { tools };
 }
 
+// ── Catalog of well-known MCP servers ────────────────────────────────────────
+
+const MCP_CATALOG = [
+  // ── Sin credenciales (activados por defecto) ──────────────────────────────
+  {
+    id:          'fetch',
+    label:       'Fetch',
+    description: 'Realiza peticiones HTTP GET/POST desde el agente',
+    icon:        'ti-world',
+    requiresCredentials: false,
+    defaultConfig: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'] },
+  },
+  {
+    id:          'memory',
+    label:       'Memory',
+    description: 'Grafo de conocimiento persistente entre sesiones',
+    icon:        'ti-brain',
+    requiresCredentials: false,
+    defaultConfig: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'] },
+  },
+  {
+    id:          'sequential-thinking',
+    label:       'Sequential Thinking',
+    description: 'Razonamiento estructurado paso a paso',
+    icon:        'ti-list-numbers',
+    requiresCredentials: false,
+    defaultConfig: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequentialthinking'] },
+  },
+  // ── Requieren credenciales ────────────────────────────────────────────────
+  {
+    id:          'github',
+    label:       'GitHub',
+    description: 'Lee y escribe issues, PRs, repos y code search',
+    icon:        'ti-brand-github',
+    requiresCredentials: true,
+    envVars: [{ key: 'GITHUB_TOKEN', label: 'GitHub Token', placeholder: 'ghp_...' }],
+    defaultConfig: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-github'],
+      env:       { GITHUB_TOKEN: '$env:GITHUB_TOKEN' },
+    },
+  },
+  {
+    id:          'jira',
+    label:       'Jira + Confluence',
+    description: 'Gestiona issues, sprints, boards y páginas de Confluence',
+    icon:        'ti-brand-atlassian',
+    requiresCredentials: true,
+    envVars: [
+      { key: 'ATLASSIAN_URL',           label: 'URL de tu instancia',   placeholder: 'https://tu-empresa.atlassian.net' },
+      { key: 'ATLASSIAN_EMAIL',         label: 'Email de Atlassian',    placeholder: 'tu@empresa.com' },
+      { key: 'ATLASSIAN_API_TOKEN',     label: 'API Token',             placeholder: 'Generado en id.atlassian.com' },
+    ],
+    defaultConfig: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', 'atlassian-mcp'],
+      env:       {
+        ATLASSIAN_URL:       '$env:ATLASSIAN_URL',
+        ATLASSIAN_EMAIL:     '$env:ATLASSIAN_EMAIL',
+        ATLASSIAN_API_TOKEN: '$env:ATLASSIAN_API_TOKEN',
+      },
+    },
+  },
+  {
+    id:          'postgres',
+    label:       'PostgreSQL',
+    description: 'Ejecuta queries y explora el esquema de una base de datos',
+    icon:        'ti-database',
+    requiresCredentials: true,
+    envVars: [{ key: 'POSTGRES_URL', label: 'Connection string', placeholder: 'postgresql://user:pass@host/db' }],
+    defaultConfig: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-postgres', '$env:POSTGRES_URL'],
+    },
+  },
+  {
+    id:          'sqlite',
+    label:       'SQLite',
+    description: 'Consulta y modifica una base de datos SQLite local',
+    icon:        'ti-database',
+    requiresCredentials: true,
+    envVars: [{ key: 'SQLITE_DB_PATH', label: 'Ruta al archivo .db', placeholder: 'C:/ruta/base.db' }],
+    defaultConfig: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-sqlite', '$env:SQLITE_DB_PATH'],
+    },
+  },
+  {
+    id:          'brave-search',
+    label:       'Brave Search',
+    description: 'Búsqueda web en tiempo real con privacidad',
+    icon:        'ti-search',
+    requiresCredentials: true,
+    envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API Key', placeholder: 'BSA...' }],
+    defaultConfig: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-brave-search'],
+      env:       { BRAVE_API_KEY: '$env:BRAVE_API_KEY' },
+    },
+  },
+  {
+    id:          'slack',
+    label:       'Slack',
+    description: 'Lee y envía mensajes en canales y DMs',
+    icon:        'ti-brand-slack',
+    requiresCredentials: true,
+    envVars: [
+      { key: 'SLACK_BOT_TOKEN',  label: 'Bot Token',  placeholder: 'xoxb-...' },
+      { key: 'SLACK_TEAM_ID',    label: 'Team ID',    placeholder: 'T0...' },
+    ],
+    defaultConfig: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-slack'],
+      env:       { SLACK_BOT_TOKEN: '$env:SLACK_BOT_TOKEN', SLACK_TEAM_ID: '$env:SLACK_TEAM_ID' },
+    },
+  },
+];
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -555,4 +679,5 @@ module.exports = {
   updateServer,
   removeServer,
   testServer,
+  MCP_CATALOG,
 };

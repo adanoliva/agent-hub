@@ -111,6 +111,24 @@ const DEFAULT_CONFIG = {
   agentsDirectoryEnabled: true,
   dismissedDashboardNotifications: [],
   snoozedDashboardNotifications: {},
+  // MCP servers available globally (no credentials required — activate out of the box)
+  globalMcpServers: {
+    fetch: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-fetch'],
+    },
+    memory: {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-memory'],
+    },
+    'sequential-thinking': {
+      transport: 'stdio',
+      command:   'npx',
+      args:      ['-y', '@modelcontextprotocol/server-sequentialthinking'],
+    },
+  },
   categories: [
     { id: 'frontend', name: 'Frontend',   icon: 'ti-layout',            color: '#60a5fa', technologies: [] },
     { id: 'backend',  name: 'Backend',    icon: 'ti-server',            color: '#34d399', technologies: [] },

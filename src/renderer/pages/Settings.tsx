@@ -61,6 +61,8 @@ export function Settings() {
   const [mcpTesting,        setMcpTesting]        = useState(false);
   const [mcpTestResult,     setMcpTestResult]     = useState<{ tools: { name: string; description?: string }[] } | null>(null);
   const [mcpProjectId,      setMcpProjectId]      = useState<string>('');
+  const [mcpCatalog,        setMcpCatalog]        = useState<any[]>([]);
+  const [mcpCatalogSection, setMcpCatalogSection] = useState<'available' | 'credentials'>('available');
 
   // External scripts validation
   const [scriptValidating,  setScriptValidating]  = useState(false);
@@ -155,10 +157,13 @@ export function Settings() {
     if (tab !== 'mcp') return;
     setMcpLoading(true);
     const url = mcpProjectId ? `/mcp/servers?projectId=${mcpProjectId}` : '/mcp/servers';
-    req<McpServerEntry[]>('GET', url)
-      .then(setMcpServers)
-      .catch(() => setMcpServers([]))
-      .finally(() => setMcpLoading(false));
+    Promise.all([
+      req<McpServerEntry[]>('GET', url),
+      mcpCatalog.length === 0 ? req<any[]>('GET', '/mcp/catalog') : Promise.resolve(null),
+    ]).then(([servers, catalog]) => {
+      setMcpServers(servers);
+      if (catalog) setMcpCatalog(catalog);
+    }).catch(() => {}).finally(() => setMcpLoading(false));
   }, [tab, mcpProjectId]);
 
   // Sync local token/key/model when config changes (e.g. on mount)
@@ -1279,6 +1284,65 @@ export function Settings() {
           ))}
         </div>
         </>
+      )}
+
+      {/* ── Catálogo de servidores MCP ── */}
+      {tab === 'mcp' && mcpCatalog.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <i className="ti ti-package" style={{ color: 'var(--accent)', fontSize: 16 }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text0)' }}>Catálogo</span>
+            <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+              {(['available', 'credentials'] as const).map(s => (
+                <button
+                  key={s}
+                  className={`btn sm ${mcpCatalogSection === s ? 'primary' : 'ghost'}`}
+                  onClick={() => setMcpCatalogSection(s)}
+                >
+                  {s === 'available' ? 'Sin credenciales' : 'Con credenciales'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+            {mcpCatalog.filter(c => mcpCatalogSection === 'available' ? !c.requiresCredentials : c.requiresCredentials).map((entry: any) => {
+              const alreadyAdded = mcpServers.some(s => s.name === entry.id && s.scope === 'global');
+              return (
+                <div key={entry.id} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <i className={`ti ${entry.icon}`} style={{ color: 'var(--accent)', fontSize: 16 }} />
+                    <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text0)' }}>{entry.label}</span>
+                    {alreadyAdded && <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--green)', fontFamily: 'var(--mono)' }}>activo</span>}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{entry.description}</p>
+                  {!alreadyAdded && (
+                    <button
+                      className="btn sm ghost"
+                      style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                      onClick={() => {
+                        const cfg = entry.defaultConfig;
+                        const argsRaw     = (cfg.args || []).join('\n');
+                        const envRaw      = Object.entries(cfg.env || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                        const headersRaw  = Object.entries(cfg.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                        setMcpForm({
+                          name: entry.id,
+                          scope: 'global',
+                          config: { type: cfg.transport === 'http' ? 'url' : 'stdio', command: cfg.command, args: cfg.args, env: cfg.env, url: cfg.url } as any,
+                          argsRaw,
+                          envRaw,
+                          headersRaw,
+                        } as any);
+                        setMcpTestResult(null);
+                      }}
+                    >
+                      <i className="ti ti-plus" /> Añadir
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* ── Modal: MCP Server Form ── */}
