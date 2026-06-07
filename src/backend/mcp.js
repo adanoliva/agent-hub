@@ -15,9 +15,12 @@ const fs          = require('fs');
 const { readConfig, writeConfig, APP_DIR } = require('./config');
 
 // ── Running process pool ──────────────────────────────────────────────────────
-// key: serverName, value: { process, buffer, pending: Map<id, {resolve,reject}> }
-const _pool = new Map();
-let _rpcId  = 1;
+// key: serverName, value: { process, buffer, pending: Map<id, {resolve,reject}>, refCount, idleTimer }
+// refCount: number of active consumers (orchestration steps) keeping the process alive.
+// idleTimer: setTimeout handle to stop the process after IDLE_TTL_MS when refCount reaches 0.
+const _pool     = new Map();
+let   _rpcId    = 1;
+const IDLE_TTL_MS = 30_000; // keep processes alive 30s after last consumer releases them
 
 // ── Env var resolution ────────────────────────────────────────────────────────
 
@@ -72,7 +75,7 @@ function _startProcess(name, cfg_) {
     shell: process.platform === 'win32',
   });
 
-  const entry = { process: child, buffer: '', pending: new Map() };
+  const entry = { process: child, buffer: '', pending: new Map(), refCount: 0, idleTimer: null };
   _pool.set(name, entry);
 
   child.stdout.on('data', (data) => {
@@ -172,6 +175,8 @@ async function _initialize(name, serverCfg) {
 
 /**
  * Ensures stdio servers are running. No-op for url servers.
+ * Does NOT increment refCount — use acquireServers/releaseServers for
+ * lifecycle management across multiple consumers (orchestration steps).
  * @param {string[]} names - server names
  * @param {string|null} projectId
  */
@@ -187,12 +192,63 @@ async function spawnServers(names, projectId) {
 }
 
 /**
- * Stops named stdio servers (kills processes).
+ * Acquires servers for a consumer: starts them if needed and increments refCount.
+ * Cancels any pending idle shutdown timer.
+ * Returns the list of names that were actually started.
+ */
+async function acquireServers(names, projectId) {
+  const all = getMergedServers(projectId);
+  for (const name of names) {
+    const cfg_ = all[name];
+    if (!cfg_ || cfg_.type === 'url') continue;
+
+    let entry = _pool.get(name);
+    if (!entry) {
+      _startProcess(name, cfg_);
+      await _initialize(name, cfg_);
+      entry = _pool.get(name);
+    }
+
+    if (entry) {
+      // Cancel idle shutdown if it was pending
+      if (entry.idleTimer) {
+        clearTimeout(entry.idleTimer);
+        entry.idleTimer = null;
+      }
+      entry.refCount++;
+    }
+  }
+}
+
+/**
+ * Releases servers for a consumer: decrements refCount and schedules idle
+ * shutdown after IDLE_TTL_MS if no other consumers are left.
+ */
+function releaseServers(names) {
+  for (const name of names) {
+    const entry = _pool.get(name);
+    if (!entry) continue;
+    entry.refCount = Math.max(0, entry.refCount - 1);
+    if (entry.refCount === 0 && !entry.idleTimer) {
+      entry.idleTimer = setTimeout(() => {
+        const e = _pool.get(name);
+        if (e && e.refCount === 0) {
+          e.process.kill();
+          _pool.delete(name);
+        }
+      }, IDLE_TTL_MS);
+    }
+  }
+}
+
+/**
+ * Stops named stdio servers immediately, regardless of refCount.
  */
 function stopServers(names) {
   for (const name of names) {
     const entry = _pool.get(name);
     if (entry) {
+      if (entry.idleTimer) clearTimeout(entry.idleTimer);
       entry.process.kill();
       _pool.delete(name);
     }
@@ -253,6 +309,72 @@ function getStatus() {
 }
 
 // ── CLI settings sync ─────────────────────────────────────────────────────────
+
+/**
+ * Returns extra CLI arguments to inject MCP servers for CLIs that support
+ * per-invocation MCP flags (e.g. aider --mcp-server).
+ * Returns an empty array for CLIs without this support.
+ *
+ * @param {string} provider - CLI provider id ('aider-cli', 'gemini-cli', etc.)
+ * @param {Record<string, object>} servers
+ * @returns {string[]} extra args to pass to the CLI spawn
+ */
+function getMcpExtraArgs(provider, servers) {
+  const entries = Object.entries(servers);
+  if (entries.length === 0) return [];
+
+  switch (provider) {
+    case 'aider-cli': {
+      // aider supports: --mcp-server '{"name":"github","command":"npx",...}'
+      return entries.flatMap(([name, cfg_]) => {
+        if (cfg_.type === 'url') {
+          return ['--mcp-server', JSON.stringify({ name, type: 'url', url: resolveEnv(cfg_.url) })];
+        }
+        return ['--mcp-server', JSON.stringify({
+          name,
+          command: resolveEnv(cfg_.command),
+          args:    (cfg_.args || []).map(resolveEnv),
+          env:     resolveEnvMap(cfg_.env),
+        })];
+      });
+    }
+    // cline-cli has its own MCP config at ~/.cline/config.json — managed separately
+    // goose-cli, codex-cli, copilot-cli: no MCP flags; will use prompt injection via subsystem
+    default:
+      return [];
+  }
+}
+
+/**
+ * Syncs MCP servers for Gemini CLI by writing ~/.gemini/settings.json.
+ * Gemini CLI reads mcpServers from its own settings file, same shape as Claude CLI.
+ */
+function syncGeminiCliSettings(servers) {
+  const os = require('os');
+  const geminiDir  = path.join(os.homedir(), '.gemini');
+  const settingsPath = path.join(geminiDir, 'settings.json');
+
+  let existing = {};
+  try {
+    if (fs.existsSync(settingsPath)) existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch { /* start fresh */ }
+
+  const mcpServers = {};
+  for (const [name, cfg_] of Object.entries(servers)) {
+    if (cfg_.type === 'url') {
+      mcpServers[name] = { type: 'url', url: resolveEnv(cfg_.url), headers: resolveEnvMap(cfg_.headers) };
+    } else {
+      mcpServers[name] = { command: resolveEnv(cfg_.command), args: (cfg_.args || []).map(resolveEnv), env: resolveEnvMap(cfg_.env) };
+    }
+  }
+
+  try {
+    if (!fs.existsSync(geminiDir)) fs.mkdirSync(geminiDir, { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify({ ...existing, mcpServers }, null, 2), 'utf8');
+  } catch (e) {
+    console.warn(`[mcp] Could not write Gemini CLI settings: ${e.message}`);
+  }
+}
 
 /**
  * Writes (or updates) the mcpServers section in {projectPath}/.claude/settings.json
@@ -418,11 +540,15 @@ module.exports = {
   getMergedServers,
   getServersForAgent,
   spawnServers,
+  acquireServers,
+  releaseServers,
   stopServers,
   listTools,
   callTool,
   getStatus,
   syncCliSettings,
+  syncGeminiCliSettings,
+  getMcpExtraArgs,
   buildMcpToolsBlock,
   listServers,
   addServer,

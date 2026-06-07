@@ -765,12 +765,13 @@ class OrchestrationExecutor extends EventEmitter {
 
       let response = '', inputTokens = 0, outputTokens = 0, stepCostUSD = 0;
 
-      // Resolve MCP servers for this agent
+      // Resolve MCP servers for this agent and acquire (start + refcount)
       const agentMcpServers = mcp.getServersForAgent(agent, this.project.id);
-      const hasMcp = Object.keys(agentMcpServers).length > 0;
+      const mcpNames = Object.keys(agentMcpServers);
+      const hasMcp = mcpNames.length > 0;
       if (hasMcp) {
-        try { await mcp.spawnServers(Object.keys(agentMcpServers), this.project.id); }
-        catch (e) { this._log('warn', `MCP spawn error: ${e.message}`); }
+        try { await mcp.acquireServers(mcpNames, this.project.id); }
+        catch (e) { this._log('warn', `MCP acquire error: ${e.message}`); }
       }
 
       if (useNativeCLI) {
@@ -907,9 +908,11 @@ class OrchestrationExecutor extends EventEmitter {
         } catch (e) { this._log('warn', `Git checkpoint falló: ${e.message}`); }
       }
 
+      if (hasMcp) mcp.releaseServers(mcpNames);
       return { stepResult, agentOutput };
 
     } catch (err) {
+      if (hasMcp) mcp.releaseServers(mcpNames);
       this._log('error', `Error en "${agentName}": ${err.message}`);
       const stepResult = {
         stepIndex, nodeId: node.id, agentName,

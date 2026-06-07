@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-06-06 · Versión: 2.3.0-dev
+> Última actualización: 2026-06-07 · Versión: 2.3.0-dev
 
 ---
 
@@ -389,6 +389,8 @@ El `node` pasado a `AgentCard` se sustituye por uno construido con el nivel real
 
 Borde izquierdo según `LEVEL_COLOR[level]`. Tool pills (máx 3 + "+N más"). Cuando `node.level === 'project'` y el agente no es sugerido, muestra `.agent-card-actions` con botones **Chat** y **Ejecutar**.
 
+**Badge MCP:** si `agent.mcp_servers?.length > 0`, se muestra un pill con icono `ti-plug-connected` y el conteo de servidores en verde, con tooltip que lista sus nombres.
+
 ### `AgentEditor.tsx`
 
 Editor en overlay modal. Campos: nombre, descripción, modelo, herramientas, system prompt.
@@ -396,6 +398,7 @@ Editor en overlay modal. Campos: nombre, descripción, modelo, herramientas, sys
 - **Generar con IA:** toggle ES/EN + input de descripción + botón → `POST /ai/generate-prompt`.
 - **Optimizar:** botón visible solo si `!agent.optimized && agent.system` → `POST /ai/optimize-agent`.
 - **Skills (solo nivel proyecto):** selector multi-chip para `agent.skills[]`. Se carga con `GET /skills/flat` únicamente cuando `node.level === 'project'`.
+- **Servidores MCP (solo nivel proyecto):** selector multi-chip para `agent.mcp_servers[]`. Se carga con `GET /mcp/servers?projectId=` cuando `node.level === 'project'`. Permite asociar servidores MCP al agente para que se activen automáticamente al ejecutarlo.
 - **Tip de orquestación:** recuadro acento al pie del system prompt cuando el agente se va a usar en orquestaciones.
 
 ### `SkillsCenter.tsx`
@@ -479,13 +482,19 @@ Página de tres paneles (árbol / centro / editor). Gestiona dos modos: `agents`
 
 ### `Settings.tsx`
 
-Tres tabs: **General**, **Categorías**, **Directorio de Agentes**.
+Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 
 **Tab Categorías:** lista simple de categorías con nombre, icono y color. Sin gestión de tecnologías (eliminada). Solo permite crear y eliminar categorías.
 
 **Import de agentes desde URL:** el selector de destino muestra Global y las secciones de cada categoría. No hay opciones `tech:` (eliminadas).
 
 **Tab Directorio:** toggle habilitado, URL del repo, estado de última sync, botón "Sincronizar ahora", resolución de conflictos inline, import desde URL individual.
+
+**Tab MCP:** gestión de servidores MCP en dos secciones:
+- **Servidores globales:** disponibles en todos los proyectos y agentes. CRUD completo con modal de add/edit.
+- **Servidores de proyecto:** selector de proyecto + lista de servidores específicos del proyecto. También con CRUD.
+- El modal de add/edit incluye un botón "Probar conexión" que llama a `POST /api/mcp/servers/:name/test` y muestra las herramientas descubiertas si la conexión es exitosa.
+- Estado `mcpProjectId` controla qué proyecto está activo en la sección de servidores de proyecto.
 
 ### `Chat.tsx`
 

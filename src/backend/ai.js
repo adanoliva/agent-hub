@@ -610,6 +610,14 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
 function callGeminiCLI(prompt, opts = {}) {
   const cfg   = readConfig();
   const model = cfg.geminiCliModel ?? 'gemini-2.5-pro';
+
+  if (opts.cwd && opts.mcpServers && Object.keys(opts.mcpServers).length > 0) {
+    try {
+      const mcp = require('./mcp');
+      mcp.syncGeminiCliSettings(opts.mcpServers);
+    } catch (e) { console.warn('[ai] Gemini MCP sync failed:', e.message); }
+  }
+
   return callGenericCLI('gemini', ['--model', model, '--yolo'], prompt, {
     ...opts,
     extraEnv: { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
@@ -1246,17 +1254,28 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
 }
 
 function _callCLITextOnly(provider, prompt, cfg, opts = {}) {
+  // Resolve MCP extra args for providers that support per-invocation MCP flags
+  const mcpExtraArgs = (() => {
+    if (!opts.mcpServers || Object.keys(opts.mcpServers).length === 0) return [];
+    try { return require('./mcp').getMcpExtraArgs(provider, opts.mcpServers); }
+    catch { return []; }
+  })();
+
+  const optsWithMcp = mcpExtraArgs.length > 0
+    ? { ...opts, extraArgs: [...(opts.extraArgs || []), ...mcpExtraArgs] }
+    : opts;
+
   switch (provider) {
     case 'gemini-cli': {
       const model = cfg.geminiCliModel ?? 'gemini-2.5-flash';
-      return callGenericCLI('gemini', ['--model', model], prompt, opts);
+      return callGenericCLI('gemini', ['--model', model], prompt, optsWithMcp);
     }
-    case 'codex-cli':   return callCodexCLI(prompt, opts);
-    case 'copilot-cli': return callCopilotCLI(prompt, opts);
-    case 'aider-cli':   return callGenericCLI('aider', [], prompt, opts);
-    case 'cline-cli':   return callGenericCLI('cline', [], prompt, opts);
-    case 'goose-cli':   return callGenericCLI('goose', [], prompt, opts);
-    default:            return callCLI(prompt, opts);
+    case 'codex-cli':   return callCodexCLI(prompt, optsWithMcp);
+    case 'copilot-cli': return callCopilotCLI(prompt, optsWithMcp);
+    case 'aider-cli':   return callGenericCLI('aider', [], prompt, optsWithMcp);
+    case 'cline-cli':   return callGenericCLI('cline', [], prompt, optsWithMcp);
+    case 'goose-cli':   return callGenericCLI('goose', [], prompt, optsWithMcp);
+    default:            return callCLI(prompt, optsWithMcp);
   }
 }
 

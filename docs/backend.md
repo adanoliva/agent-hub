@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-06 · Versión: 2.3.0-dev
+> Última actualización: 2026-06-07 · Versión: 2.3.0-dev
 
 ---
 
@@ -24,6 +24,7 @@
 12b. [Scripts determinísticos (`scripts-registry.js`)](#12b-scripts-determinísticos-scripts-registryjs)
 12c. [Git Checkpointer (`git-checkpointer.js`)](#12c-git-checkpointer-git-checkpointerjs)
 12d. [Ops Ledger (`ops-ledger.js`)](#12d-ops-ledger-ops-ledgerjs)
+12e. [MCP — Model Context Protocol (`mcp.js`)](#12e-mcp--model-context-protocol-mcpjs)
 13. [Bandeja del sistema (`tray.js`)](#13-bandeja-del-sistema-trayjs)
 13b. [Automatización de navegador vía CDP (`browser.js`)](#13b-automatización-de-navegador-vía-cdp-browserjs)
 14. [Bridge IPC (`preload.js`)](#14-bridge-ipc-preloadjs)
@@ -60,6 +61,7 @@ Electron main process (Node.js)
   ├── scripts-registry.js ← scripts determinísticos para orquestaciones (sin IA)
   ├── git-checkpointer.js ← commits automáticos tras cada paso (gitEnabled)
   ├── ops-ledger.js    ← registro append-only de operaciones atómicas por orquestación
+  ├── mcp.js           ← cliente MCP universal: pool de procesos, CRUD, sync a CLIs
   ├── tray.js          ← icono en la bandeja del sistema
   ├── preload.js       ← contextBridge: window.api expuesto al renderer
   ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
@@ -996,6 +998,107 @@ Registro append-only de operaciones atómicas (modificaciones de fichero) por or
 | `readLedger(projectPath, orchId)` | Lee el ledger completo; devuelve `{ ops: [] }` si no existe |
 | `appendOps(projectPath, orchId, newOps[])` | Añade operaciones al ledger de forma atómica (tmp → rename) |
 | `markOpReverted(projectPath, orchId, opId)` | Cambia el `status` de una op a `reverted` y registra `revertedAt` |
+
+---
+
+## 12e. MCP — Model Context Protocol (`mcp.js`)
+
+Módulo central de integración MCP. Gestiona conexiones JSON-RPC 2.0 (stdio o HTTP/SSE) con servidores MCP externos y los expone a los tres proveedores de Agent Hub de forma transparente.
+
+### Estrategia por proveedor
+
+| Proveedor | Mecanismo |
+|---|---|
+| `cli` (Claude Code) | `syncCliSettings(cwd, servers)` escribe `{projectPath}/.claude/settings.json` con `mcpServers` antes del spawn |
+| `gemini-cli` | `syncGeminiCliSettings(servers)` escribe `~/.gemini/settings.json` con `mcpServers` |
+| `aider-cli` | `getMcpExtraArgs(provider, servers)` devuelve `['--mcp-server', JSON.stringify({...})]` para inyectar como flags |
+| `api` / `github` / custom API | Subsistema CLI: herramientas MCP inyectadas en el system prompt; loop multi-turno ejecuta `TOOL: mcp` |
+| Otros CLIs sin soporte nativo | Subsistema CLI con prompt injection |
+
+### Pool de procesos con refcounting
+
+Los procesos MCP se reutilizan entre pasos de orquestación para evitar el cold start. Cada entrada del pool tiene:
+- `proc` — proceso spawneado (stdio) o cliente HTTP
+- `refCount` — número de consumidores activos
+- `idleTimer` — temporizador de 30 s que apaga el proceso cuando `refCount === 0`
+
+```
+acquireServers(names, projectId)
+  → si el proceso no existe → spawnea + registra
+  → refCount++ + cancela idleTimer
+
+releaseServers(names)
+  → refCount--
+  → si refCount === 0 → programa shutdown en 30 s (IDLE_TTL_MS)
+```
+
+### Formato de `mcp_servers` en el agente
+
+En el frontmatter `.md` del agente, el campo es CSV de nombres de servidores:
+
+```yaml
+mcp_servers: github, linear, postgres
+```
+
+`getServersForAgent(agent, projectId)` resuelve los nombres contra la config global y del proyecto, expandiendo variables `$env:VAR`.
+
+### Estructura de un servidor en `config.json`
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "$env:GITHUB_TOKEN" }
+    },
+    "postgres": {
+      "transport": "http",
+      "url": "http://localhost:5432/mcp"
+    }
+  }
+}
+```
+
+`transport` puede ser `stdio` (default) o `http`.
+
+### Funciones exportadas
+
+| Función | Descripción |
+|---|---|
+| `listServers(projectId?)` | Lista todos los servidores configurados |
+| `addServer(name, config, projectId?)` | Añade un servidor a la config |
+| `updateServer(name, config, projectId?)` | Actualiza config de un servidor |
+| `removeServer(name, projectId?)` | Elimina un servidor |
+| `testServer(name, projectId?)` | Conecta y lista herramientas; devuelve `{ ok, tools[], error? }` |
+| `getMergedServers(projectId?)` | Combina servidores globales + de proyecto |
+| `getServersForAgent(agent, projectId)` | Filtra servidores por `agent.mcp_servers[]` |
+| `acquireServers(names, projectId)` | Inicia procesos (si no están) + incrementa refCount |
+| `releaseServers(names)` | Decrementa refCount; cierra tras 30 s de inactividad |
+| `spawnServers(names, projectId)` | Inicia procesos sin refcounting (uso interno) |
+| `stopServers(names)` | Para procesos inmediatamente |
+| `listTools(names, projectId)` | Descubre herramientas disponibles en los servidores |
+| `callTool(server, fn, input, projectId)` | Llama a una herramienta MCP |
+| `getStatus()` | Estado de todos los procesos en el pool |
+| `syncCliSettings(cwd, servers)` | Escribe `.claude/settings.json` con `mcpServers` |
+| `syncGeminiCliSettings(servers)` | Escribe `~/.gemini/settings.json` con `mcpServers` |
+| `getMcpExtraArgs(provider, servers)` | Devuelve flags CLI para proveedores con soporte per-invocation |
+| `buildMcpToolsBlock(tools)` | Genera el bloque de instrucciones MCP para system prompts |
+
+### Endpoints REST
+
+Todos bajo `/api/mcp/`:
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/mcp/servers?projectId=` | Lista servidores |
+| POST | `/api/mcp/servers` | Añade servidor `{ name, config, projectId? }` |
+| PUT | `/api/mcp/servers/:name` | Actualiza servidor |
+| DELETE | `/api/mcp/servers/:name?projectId=` | Elimina servidor |
+| POST | `/api/mcp/servers/:name/test` | Prueba conexión; devuelve herramientas descubiertas |
+| GET | `/api/mcp/tools?projectId=` | Lista todas las herramientas de servidores activos |
+| GET | `/api/mcp/status` | Estado del pool de procesos |
 
 ---
 

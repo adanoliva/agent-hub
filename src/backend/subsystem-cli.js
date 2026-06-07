@@ -599,7 +599,7 @@ async function execute(prompt, agentSystemPrompt, config) {
   if (mcpServerNames.length > 0) {
     try {
       const mcp = require('./mcp');
-      await mcp.spawnServers(mcpServerNames, projectId);
+      await mcp.acquireServers(mcpServerNames, projectId);
       mcpTools = await mcp.listTools(mcpServerNames, projectId);
     } catch (e) {
       console.warn('[subsystem-cli] MCP init error:', e.message);
@@ -694,6 +694,10 @@ async function execute(prompt, agentSystemPrompt, config) {
   // Only mark as exceeded-limit if the loop didn't finish normally
   const exceededTurns   = !completedNormally && turn >= maxTurns;
   const exceededTimeout = !completedNormally && (Date.now() - startTime) >= timeout;
+
+  if (mcpServerNames.length > 0) {
+    try { require('./mcp').releaseServers(mcpServerNames); } catch {}
+  }
 
   return {
     success:       completedNormally,
