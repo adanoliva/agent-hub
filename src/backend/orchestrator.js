@@ -13,6 +13,7 @@ const { EventEmitter } = require('events');
 
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
+const mcp = require('./mcp');
 const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS, CLI_PROVIDERS } = require('./ai');
 const prompts           = require('./prompts');
 const scriptsRegistry   = require('./scripts-registry');
@@ -764,6 +765,14 @@ class OrchestrationExecutor extends EventEmitter {
 
       let response = '', inputTokens = 0, outputTokens = 0, stepCostUSD = 0;
 
+      // Resolve MCP servers for this agent
+      const agentMcpServers = mcp.getServersForAgent(agent, this.project.id);
+      const hasMcp = Object.keys(agentMcpServers).length > 0;
+      if (hasMcp) {
+        try { await mcp.spawnServers(Object.keys(agentMcpServers), this.project.id); }
+        catch (e) { this._log('warn', `MCP spawn error: ${e.message}`); }
+      }
+
       if (useNativeCLI) {
         let browserContext = '';
         if (agentUsesBrowser) {
@@ -789,7 +798,7 @@ class OrchestrationExecutor extends EventEmitter {
         const extraArgs  = provider === 'cli'
           ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
           : [];
-        const rich = await callAIRich(fullPrompt, { timeout: stepRemaining, extraArgs, cwd: this.project.path });
+        const rich = await callAIRich(fullPrompt, { timeout: stepRemaining, extraArgs, cwd: this.project.path, mcpServers: agentMcpServers });
         response = rich.text; inputTokens = rich.inputTokens; outputTokens = rich.outputTokens; stepCostUSD = rich.costUSD;
 
       } else {

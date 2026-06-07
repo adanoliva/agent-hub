@@ -1,0 +1,432 @@
+/**
+ * mcp.js — Model Context Protocol client
+ *
+ * Manages MCP server configuration and lifecycle for all AI providers.
+ * Implements the JSON-RPC 2.0 protocol directly (no SDK dependency).
+ *
+ * Supports:
+ *   - stdio servers (local processes)
+ *   - url servers (HTTP/SSE remotes)
+ */
+
+const { spawn }   = require('child_process');
+const path        = require('path');
+const fs          = require('fs');
+const { readConfig, writeConfig, APP_DIR } = require('./config');
+
+// ── Running process pool ──────────────────────────────────────────────────────
+// key: serverName, value: { process, buffer, pending: Map<id, {resolve,reject}> }
+const _pool = new Map();
+let _rpcId  = 1;
+
+// ── Env var resolution ────────────────────────────────────────────────────────
+
+function resolveEnv(val) {
+  if (typeof val !== 'string') return val;
+  return val.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/g, (_, name) => process.env[name] ?? '');
+}
+
+function resolveEnvMap(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [k, resolveEnv(v)])
+  );
+}
+
+// ── Config helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Returns merged global + project servers, project taking precedence.
+ * @param {string|null} projectId
+ * @returns {Record<string, object>}
+ */
+function getMergedServers(projectId) {
+  const cfg     = readConfig();
+  const global_ = cfg.globalMcpServers || {};
+  if (!projectId) return global_;
+
+  const project = (cfg.projects || []).find(p => p.id === projectId);
+  const local   = (project && project.mcpServers) || {};
+  return { ...global_, ...local };
+}
+
+/**
+ * Returns only the servers declared in agent.mcp_servers[].
+ */
+function getServersForAgent(agent, projectId) {
+  const names = agent?.mcp_servers;
+  if (!Array.isArray(names) || names.length === 0) return {};
+  const all = getMergedServers(projectId);
+  return Object.fromEntries(names.filter(n => all[n]).map(n => [n, all[n]]));
+}
+
+// ── Process lifecycle ─────────────────────────────────────────────────────────
+
+function _startProcess(name, cfg_) {
+  const env = { ...process.env, ...resolveEnvMap(cfg_.env) };
+  const args = (cfg_.args || []).map(resolveEnv);
+
+  const child = spawn(resolveEnv(cfg_.command), args, {
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
+  });
+
+  const entry = { process: child, buffer: '', pending: new Map() };
+  _pool.set(name, entry);
+
+  child.stdout.on('data', (data) => {
+    entry.buffer += data.toString();
+    const lines = entry.buffer.split('\n');
+    entry.buffer = lines.pop(); // keep incomplete line
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const msg = JSON.parse(trimmed);
+        if (msg.id != null && entry.pending.has(msg.id)) {
+          const { resolve, reject } = entry.pending.get(msg.id);
+          entry.pending.delete(msg.id);
+          if (msg.error) reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+          else resolve(msg.result);
+        }
+      } catch { /* ignore non-JSON lines */ }
+    }
+  });
+
+  child.on('exit', () => {
+    _pool.delete(name);
+    // reject all pending calls
+    for (const { reject } of entry.pending.values()) {
+      reject(new Error(`MCP server "${name}" exited unexpectedly`));
+    }
+    entry.pending.clear();
+  });
+
+  child.stderr.on('data', (d) => {
+    // swallow stderr; server logs go here legitimately during init
+    if (process.env.MCP_DEBUG) console.error(`[mcp:${name}]`, d.toString().trimEnd());
+  });
+
+  return entry;
+}
+
+/**
+ * Sends a JSON-RPC 2.0 request over stdio.
+ */
+function _rpcStdio(name, method, params) {
+  return new Promise((resolve, reject) => {
+    const entry = _pool.get(name);
+    if (!entry) return reject(new Error(`MCP server "${name}" not running`));
+
+    const id  = _rpcId++;
+    const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params: params || {} }) + '\n';
+    entry.pending.set(id, { resolve, reject });
+    entry.process.stdin.write(msg, 'utf8');
+
+    // Per-call timeout: 30s
+    setTimeout(() => {
+      if (entry.pending.has(id)) {
+        entry.pending.delete(id);
+        reject(new Error(`MCP call "${method}" on server "${name}" timed out`));
+      }
+    }, 30_000);
+  });
+}
+
+/**
+ * Sends a JSON-RPC 2.0 request over HTTP (url-type servers).
+ */
+async function _rpcHttp(serverCfg, method, params) {
+  const url     = resolveEnv(serverCfg.url);
+  const headers = { 'Content-Type': 'application/json', ...resolveEnvMap(serverCfg.headers) };
+  const body    = JSON.stringify({ jsonrpc: '2.0', id: _rpcId++, method, params: params || {} });
+
+  const res  = await fetch(url, { method: 'POST', headers, body });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  return json.result;
+}
+
+function _rpc(name, serverCfg, method, params) {
+  if (serverCfg.type === 'url') return _rpcHttp(serverCfg, method, params);
+  return _rpcStdio(name, method, params);
+}
+
+// ── MCP initialization handshake ──────────────────────────────────────────────
+
+async function _initialize(name, serverCfg) {
+  try {
+    await _rpc(name, serverCfg, 'initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'agent-hub', version: '1.0' },
+    });
+    await _rpc(name, serverCfg, 'notifications/initialized', {});
+  } catch {
+    // Some servers don't require/respond to initialize — ignore errors here
+  }
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Ensures stdio servers are running. No-op for url servers.
+ * @param {string[]} names - server names
+ * @param {string|null} projectId
+ */
+async function spawnServers(names, projectId) {
+  const all = getMergedServers(projectId);
+  for (const name of names) {
+    const cfg_ = all[name];
+    if (!cfg_ || cfg_.type === 'url') continue;
+    if (_pool.has(name)) continue; // already running
+    _startProcess(name, cfg_);
+    await _initialize(name, cfg_);
+  }
+}
+
+/**
+ * Stops named stdio servers (kills processes).
+ */
+function stopServers(names) {
+  for (const name of names) {
+    const entry = _pool.get(name);
+    if (entry) {
+      entry.process.kill();
+      _pool.delete(name);
+    }
+  }
+}
+
+/**
+ * Lists all tools from the given servers.
+ * Returns flat array: [{ serverName, name, description, inputSchema }]
+ */
+async function listTools(names, projectId) {
+  const all   = getMergedServers(projectId);
+  const tools = [];
+
+  for (const name of names) {
+    const cfg_ = all[name];
+    if (!cfg_) continue;
+    try {
+      const result = await _rpc(name, cfg_, 'tools/list', {});
+      for (const t of (result?.tools || [])) {
+        tools.push({ serverName: name, name: t.name, description: t.description, inputSchema: t.inputSchema });
+      }
+    } catch (e) {
+      console.warn(`[mcp] Could not list tools for "${name}": ${e.message}`);
+    }
+  }
+
+  return tools;
+}
+
+/**
+ * Calls a tool on a server.
+ * @returns {string} text output of the tool call
+ */
+async function callTool(serverName, toolName, input, projectId) {
+  const all  = getMergedServers(projectId);
+  const cfg_ = all[serverName];
+  if (!cfg_) throw new Error(`MCP server "${serverName}" not configured`);
+
+  const result = await _rpc(serverName, cfg_, 'tools/call', { name: toolName, arguments: input || {} });
+  const content = result?.content || [];
+
+  return content
+    .filter(c => c.type === 'text')
+    .map(c => c.text)
+    .join('\n') || JSON.stringify(result);
+}
+
+/**
+ * Returns status snapshot of running processes.
+ */
+function getStatus() {
+  const running = [];
+  for (const [name, entry] of _pool.entries()) {
+    running.push({ name, pid: entry.process.pid, pendingCalls: entry.pending.size });
+  }
+  return { running };
+}
+
+// ── CLI settings sync ─────────────────────────────────────────────────────────
+
+/**
+ * Writes (or updates) the mcpServers section in {projectPath}/.claude/settings.json
+ * so the Claude CLI picks up the configured servers automatically.
+ *
+ * @param {string} projectPath
+ * @param {Record<string, object>} servers - merged servers for this execution
+ */
+function syncCliSettings(projectPath, servers) {
+  if (!projectPath || typeof projectPath !== 'string') return;
+
+  const claudeDir = path.join(projectPath, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  let existing = {};
+  try {
+    if (fs.existsSync(settingsPath)) {
+      existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    }
+  } catch { /* start fresh if corrupt */ }
+
+  // Build mcpServers block with env vars resolved inline for the CLI
+  const mcpServers = {};
+  for (const [name, cfg_] of Object.entries(servers)) {
+    if (cfg_.type === 'url') {
+      mcpServers[name] = {
+        type:    'url',
+        url:     resolveEnv(cfg_.url),
+        headers: resolveEnvMap(cfg_.headers),
+      };
+    } else {
+      mcpServers[name] = {
+        command: resolveEnv(cfg_.command),
+        args:    (cfg_.args || []).map(resolveEnv),
+        env:     resolveEnvMap(cfg_.env),
+      };
+    }
+  }
+
+  const updated = { ...existing, mcpServers };
+
+  try {
+    if (!fs.existsSync(claudeDir)) fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify(updated, null, 2), 'utf8');
+  } catch (e) {
+    console.warn(`[mcp] Could not write ${settingsPath}: ${e.message}`);
+  }
+}
+
+/**
+ * Builds the MCP tools instruction block to inject into a system prompt
+ * (used by the subsystem CLI loop for non-native providers).
+ *
+ * @param {Array} tools - output of listTools()
+ * @returns {string}
+ */
+function buildMcpToolsBlock(tools) {
+  if (!tools || tools.length === 0) return '';
+
+  const descriptions = tools.map(t =>
+    `  - ${t.serverName}__${t.name}: ${t.description || '(no description)'}`
+  ).join('\n');
+
+  return `
+## MCP Tools available
+
+You have access to the following MCP tools. To call one, use this exact format:
+
+TOOL: mcp
+SERVER: <serverName>
+FUNCTION: <toolName>
+INPUT:
+<JSON object with the tool arguments>
+---
+
+Available tools:
+${descriptions}
+
+After receiving the tool result it will appear as a TOOL_RESULT block in the next message.
+`;
+}
+
+// ── Config CRUD (used by API endpoints) ──────────────────────────────────────
+
+function listServers(projectId) {
+  const cfg    = readConfig();
+  const global_ = Object.entries(cfg.globalMcpServers || {}).map(([name, config]) => ({
+    name, scope: 'global', config,
+  }));
+
+  if (!projectId) return global_;
+
+  const project = (cfg.projects || []).find(p => p.id === projectId);
+  const local   = Object.entries((project?.mcpServers) || {}).map(([name, config]) => ({
+    name, scope: 'project', projectId, config,
+  }));
+
+  return [...global_, ...local];
+}
+
+function addServer({ scope, projectId, name, config: serverConfig }) {
+  const cfg = readConfig();
+
+  if (scope === 'global') {
+    cfg.globalMcpServers = cfg.globalMcpServers || {};
+    cfg.globalMcpServers[name] = serverConfig;
+  } else {
+    const project = (cfg.projects || []).find(p => p.id === projectId);
+    if (!project) throw new Error(`Project ${projectId} not found`);
+    project.mcpServers = project.mcpServers || {};
+    project.mcpServers[name] = serverConfig;
+  }
+
+  writeConfig(cfg);
+}
+
+function updateServer({ scope, projectId, name, config: serverConfig }) {
+  addServer({ scope, projectId, name, config: serverConfig }); // same logic
+}
+
+function removeServer({ scope, projectId, name }) {
+  const cfg = readConfig();
+
+  if (scope === 'global') {
+    if (cfg.globalMcpServers) delete cfg.globalMcpServers[name];
+  } else {
+    const project = (cfg.projects || []).find(p => p.id === projectId);
+    if (project?.mcpServers) delete project.mcpServers[name];
+  }
+
+  // Stop process if running
+  stopServers([name]);
+  writeConfig(cfg);
+}
+
+/**
+ * Tests a server by starting it (if stdio), listing its tools, and stopping it.
+ * For url servers, just fetches the tool list.
+ * @returns {{ tools: Array }}
+ */
+async function testServer(name, serverConfig) {
+  const tempName = `__test_${name}_${Date.now()}`;
+
+  if (serverConfig.type !== 'url') {
+    _startProcess(tempName, serverConfig);
+    await _initialize(tempName, serverConfig);
+  }
+
+  let tools = [];
+  try {
+    const result = await _rpc(tempName, serverConfig, 'tools/list', {});
+    tools = result?.tools || [];
+  } finally {
+    if (serverConfig.type !== 'url') stopServers([tempName]);
+  }
+
+  return { tools };
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+
+module.exports = {
+  getMergedServers,
+  getServersForAgent,
+  spawnServers,
+  stopServers,
+  listTools,
+  callTool,
+  getStatus,
+  syncCliSettings,
+  buildMcpToolsBlock,
+  listServers,
+  addServer,
+  updateServer,
+  removeServer,
+  testServer,
+};

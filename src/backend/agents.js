@@ -101,6 +101,9 @@ function parseAgentFile(filePath) {
     ? skillsRaw.split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
+  const mcpRaw    = get('mcp_servers');
+  const mcpParsed = mcpRaw ? mcpRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
   return {
     name:        get('name') || path.basename(filePath, '.md'),
     description: get('description'),
@@ -108,6 +111,7 @@ function parseAgentFile(filePath) {
     model:       shortModel(rawModel) || 'sonnet',
     optimized:   get('optimized') === 'true',
     skills:      skillsParsed.length > 0 ? skillsParsed : undefined,
+    mcp_servers: mcpParsed.length > 0 ? mcpParsed : undefined,
     system:      m[2].trim(),
     filePath,
   };
@@ -160,6 +164,9 @@ function serializeAgent(agent) {
   if (agent.optimized) lines.push('optimized: true');
   if (Array.isArray(agent.skills) && agent.skills.length > 0) {
     lines.push(`skills: ${agent.skills.join(', ')}`);
+  }
+  if (Array.isArray(agent.mcp_servers) && agent.mcp_servers.length > 0) {
+    lines.push(`mcp_servers: ${agent.mcp_servers.join(', ')}`);
   }
   lines.push('---', '', agent.system || '', '');
 

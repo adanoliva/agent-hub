@@ -8,7 +8,17 @@ import { useStore } from '../store';
 import { ALL_TOOLS } from '../constants/tools';
 import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomAIProvider } from '../types';
 
-type Tab = 'general' | 'cats' | 'ext-agents';
+type Tab = 'general' | 'cats' | 'ext-agents' | 'mcp';
+
+interface McpServerConfig {
+  type:     'stdio' | 'url';
+  command?: string;
+  args?:    string[];
+  env?:     Record<string, string>;
+  url?:     string;
+  headers?: Record<string, string>;
+}
+interface McpServerEntry { name: string; scope: 'global' | 'project'; projectId?: string; config: McpServerConfig; }
 
 interface ScriptValidationIssue { severity: 'error' | 'warn'; code: string; message: string; }
 interface ScriptValidationResult { file: string; name: string; status: 'ok' | 'warn' | 'error'; issues: ScriptValidationIssue[]; }
@@ -43,6 +53,13 @@ export function Settings() {
   const [updateMsg,   setUpdateMsg]   = useState('');
   const [importUrl,   setImportUrl]   = useState('');
   const [importBusy,  setImportBusy]  = useState(false);
+
+  // MCP
+  const [mcpServers,        setMcpServers]        = useState<McpServerEntry[]>([]);
+  const [mcpLoading,        setMcpLoading]        = useState(false);
+  const [mcpForm,           setMcpForm]           = useState<Partial<McpServerEntry & { argsRaw: string; envRaw: string; headersRaw: string }> | null>(null);
+  const [mcpTesting,        setMcpTesting]        = useState(false);
+  const [mcpTestResult,     setMcpTestResult]     = useState<{ tools: { name: string; description?: string }[] } | null>(null);
 
   // External scripts validation
   const [scriptValidating,  setScriptValidating]  = useState(false);
@@ -132,6 +149,15 @@ export function Settings() {
 
   // Fetch AI status once when tab is general
   React.useEffect(() => { if (tab === 'general') fetchAiStatus(); }, [tab]);
+
+  React.useEffect(() => {
+    if (tab !== 'mcp') return;
+    setMcpLoading(true);
+    req<McpServerEntry[]>('GET', '/mcp/servers')
+      .then(setMcpServers)
+      .catch(() => setMcpServers([]))
+      .finally(() => setMcpLoading(false));
+  }, [tab]);
 
   // Sync local token/key/model when config changes (e.g. on mount)
   React.useEffect(() => {
@@ -449,9 +475,9 @@ export function Settings() {
       <div className="settings-view">
         {/* Tabs */}
         <div className="drawer-tabs" style={{ margin: '-32px -32px 24px', paddingLeft: 32 }}>
-          {(['general', 'cats', 'ext-agents'] as Tab[]).map((t) => (
+          {(['general', 'cats', 'ext-agents', 'mcp'] as Tab[]).map((t) => (
             <div key={t} className={`drawer-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : 'Directorio de Agentes'}
+              {t === 'general' ? 'General' : t === 'cats' ? 'Categorías' : t === 'ext-agents' ? 'Directorio de Agentes' : 'MCP'}
             </div>
           ))}
         </div>
@@ -1121,6 +1147,186 @@ export function Settings() {
                 {destOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Tab: MCP ── */}
+      {tab === 'mcp' && (
+        <div className="settings-section">
+          <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Servidores MCP globales</span>
+            <button
+              className="btn sm primary"
+              onClick={() => { setMcpForm({ scope: 'global', config: { type: 'stdio' }, argsRaw: '', envRaw: '', headersRaw: '' }); setMcpTestResult(null); }}
+            >
+              <i className="ti ti-plus" /> Añadir servidor
+            </button>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 16, marginTop: 0 }}>
+            Servidores MCP disponibles para todos los proyectos. Los agentes los declaran con <code style={{ background: 'var(--bg3)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>mcp_servers:</code> en su frontmatter.
+          </p>
+
+          {mcpLoading && <div style={{ color: 'var(--text2)', fontSize: 12 }}>Cargando…</div>}
+
+          {!mcpLoading && mcpServers.filter(s => s.scope === 'global').length === 0 && (
+            <div style={{ color: 'var(--text3)', fontSize: 12, padding: '24px 0', textAlign: 'center' }}>
+              <i className="ti ti-plug-connected-x" style={{ fontSize: 24, display: 'block', marginBottom: 8 }} />
+              No hay servidores MCP configurados
+            </div>
+          )}
+
+          {!mcpLoading && mcpServers.filter(s => s.scope === 'global').map(srv => (
+            <div key={srv.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 8, border: '1px solid var(--border)' }}>
+              <i className="ti ti-plug-connected" style={{ color: 'var(--green)', fontSize: 16, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text0)' }}>{srv.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text2)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {srv.config.type === 'url' ? srv.config.url : `${srv.config.command} ${(srv.config.args || []).join(' ')}`}
+                </div>
+              </div>
+              <span style={{ fontSize: 10, background: 'var(--bg3)', color: 'var(--text2)', padding: '2px 7px', borderRadius: 4, border: '1px solid var(--border2)', fontFamily: 'var(--mono)' }}>
+                {srv.config.type}
+              </span>
+              <button className="btn sm ghost" onClick={() => {
+                const argsRaw     = (srv.config.args || []).join('\n');
+                const envRaw      = Object.entries(srv.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                const headersRaw  = Object.entries(srv.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                setMcpForm({ ...srv, argsRaw, envRaw, headersRaw });
+                setMcpTestResult(null);
+              }}>
+                <i className="ti ti-edit" />
+              </button>
+              <button className="btn sm ghost" style={{ color: 'var(--coral)' }} onClick={async () => {
+                await req('DELETE', `/mcp/servers/${srv.name}?scope=global`);
+                setMcpServers(prev => prev.filter(s => !(s.name === srv.name && s.scope === 'global')));
+              }}>
+                <i className="ti ti-trash" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Modal: MCP Server Form ── */}
+      {mcpForm && (
+        <Modal
+          title={mcpForm.name ? `Editar servidor MCP — ${mcpForm.name}` : 'Añadir servidor MCP'}
+          confirmLabel="Guardar"
+          onConfirm={async () => {
+            const { scope, name, config: cfg_, argsRaw, envRaw, headersRaw } = mcpForm as any;
+            if (!name?.trim()) throw new Error('El nombre es requerido');
+            if (cfg_.type === 'stdio' && !cfg_.command?.trim()) throw new Error('El comando es requerido');
+            if (cfg_.type === 'url' && !cfg_.url?.trim()) throw new Error('La URL es requerida');
+
+            const args    = (argsRaw || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
+            const env     = Object.fromEntries((envRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
+            const headers = Object.fromEntries((headersRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
+
+            const finalConfig: McpServerConfig = cfg_.type === 'url'
+              ? { type: 'url', url: cfg_.url, headers }
+              : { type: 'stdio', command: cfg_.command, args, env };
+
+            const isEdit = mcpServers.some(s => s.name === name && s.scope === scope);
+            if (isEdit) await req('PUT', `/mcp/servers/${name}`, { scope, config: finalConfig });
+            else        await req('POST', '/mcp/servers', { scope, name, config: finalConfig });
+
+            const updated = await req<McpServerEntry[]>('GET', '/mcp/servers');
+            setMcpServers(updated);
+            setMcpForm(null);
+          }}
+          onClose={() => setMcpForm(null)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                <label>Nombre</label>
+                <input
+                  value={(mcpForm as any).name || ''}
+                  placeholder="ej: github, linear, postgres"
+                  onChange={e => setMcpForm({ ...mcpForm, name: e.target.value } as any)}
+                  disabled={mcpServers.some(s => s.name === (mcpForm as any).name && s.scope === mcpForm.scope)}
+                />
+              </div>
+              <div className="field" style={{ width: 100, marginBottom: 0 }}>
+                <label>Tipo</label>
+                <select value={(mcpForm.config as any)?.type || 'stdio'} onChange={e => setMcpForm({ ...mcpForm, config: { ...mcpForm.config, type: e.target.value as any } } as any)}>
+                  <option value="stdio">stdio</option>
+                  <option value="url">url</option>
+                </select>
+              </div>
+            </div>
+
+            {(mcpForm.config as any)?.type === 'stdio' ? (
+              <>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Comando</label>
+                  <input value={(mcpForm.config as any)?.command || ''} placeholder="ej: npx" onChange={e => setMcpForm({ ...mcpForm, config: { ...mcpForm.config, command: e.target.value } } as any)} />
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Args <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(uno por línea)</span></label>
+                  <textarea rows={3} value={(mcpForm as any).argsRaw || ''} placeholder={"-y\n@modelcontextprotocol/server-github"} onChange={e => setMcpForm({ ...mcpForm, argsRaw: e.target.value } as any)} style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Variables de entorno <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(CLAVE=$env:VAR, una por línea)</span></label>
+                  <textarea rows={2} value={(mcpForm as any).envRaw || ''} placeholder={"GITHUB_TOKEN=$env:GITHUB_TOKEN"} onChange={e => setMcpForm({ ...mcpForm, envRaw: e.target.value } as any)} style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>URL</label>
+                  <input value={(mcpForm.config as any)?.url || ''} placeholder="https://mcp.ejemplo.com/sse" onChange={e => setMcpForm({ ...mcpForm, config: { ...mcpForm.config, url: e.target.value } } as any)} />
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Headers <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(CLAVE=$env:VAR, una por línea)</span></label>
+                  <textarea rows={2} value={(mcpForm as any).headersRaw || ''} placeholder={"Authorization=Bearer $env:LINEAR_API_KEY"} onChange={e => setMcpForm({ ...mcpForm, headersRaw: e.target.value } as any)} style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <button
+                className="btn sm ghost"
+                disabled={mcpTesting}
+                onClick={async () => {
+                  setMcpTesting(true);
+                  setMcpTestResult(null);
+                  try {
+                    const { argsRaw, envRaw, headersRaw, config: cfg_ } = mcpForm as any;
+                    const args    = (argsRaw || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
+                    const env     = Object.fromEntries((envRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
+                    const headers = Object.fromEntries((headersRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
+                    const finalConfig = cfg_.type === 'url'
+                      ? { type: 'url', url: cfg_.url, headers }
+                      : { type: 'stdio', command: cfg_.command, args, env };
+                    const result = await req<{ tools: { name: string; description?: string }[] }>('POST', `/mcp/servers/${(mcpForm as any).name || '__test__'}/test`, { config: finalConfig });
+                    setMcpTestResult(result);
+                  } catch (e: any) {
+                    toast(e.message || 'Error al probar el servidor', 'err');
+                  } finally {
+                    setMcpTesting(false);
+                  }
+                }}
+              >
+                {mcpTesting ? <><i className="ti ti-loader-2 spin" /> Probando…</> : <><i className="ti ti-plug" /> Probar conexión</>}
+              </button>
+            </div>
+
+            {mcpTestResult && (
+              <div style={{ background: 'var(--green-dim)', border: '1px solid var(--green)', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ color: 'var(--green)', fontWeight: 600, fontSize: 12, marginBottom: 6 }}>
+                  <i className="ti ti-check" /> {mcpTestResult.tools.length} herramienta{mcpTestResult.tools.length !== 1 ? 's' : ''} disponible{mcpTestResult.tools.length !== 1 ? 's' : ''}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {mcpTestResult.tools.map(t => (
+                    <span key={t.name} style={{ fontSize: 10, fontFamily: 'var(--mono)', background: 'var(--bg3)', padding: '2px 6px', borderRadius: 4, color: 'var(--text1)' }}>
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}

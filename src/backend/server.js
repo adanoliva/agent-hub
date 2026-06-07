@@ -2086,6 +2086,70 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(RENDERER_DIR, 'index.html'));
 });
 
+// ── MCP endpoints ─────────────────────────────────────────────────────────────
+
+const mcp = require('./mcp');
+
+// GET /api/mcp/servers?projectId=
+app.get('/api/mcp/servers', (req, res) => {
+  try { res.json(mcp.listServers(req.query.projectId || null)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/mcp/servers  { scope, projectId?, name, config }
+app.post('/api/mcp/servers', (req, res) => {
+  try {
+    const { scope, projectId, name, config: serverConfig } = req.body;
+    if (!scope || !name || !serverConfig) return res.status(400).json({ error: 'scope, name y config son requeridos' });
+    mcp.addServer({ scope, projectId: projectId || null, name, config: serverConfig });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/mcp/servers/:name  { scope, projectId?, config }
+app.put('/api/mcp/servers/:name', (req, res) => {
+  try {
+    const { scope, projectId, config: serverConfig } = req.body;
+    if (!scope || !serverConfig) return res.status(400).json({ error: 'scope y config son requeridos' });
+    mcp.updateServer({ scope, projectId: projectId || null, name: req.params.name, config: serverConfig });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/mcp/servers/:name?scope=&projectId=
+app.delete('/api/mcp/servers/:name', (req, res) => {
+  try {
+    const { scope, projectId } = req.query;
+    if (!scope) return res.status(400).json({ error: 'scope es requerido' });
+    mcp.removeServer({ scope, projectId: projectId || null, name: req.params.name });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/mcp/servers/:name/test  { config }
+app.post('/api/mcp/servers/:name/test', async (req, res) => {
+  try {
+    const { config: serverConfig } = req.body;
+    if (!serverConfig) return res.status(400).json({ error: 'config es requerido' });
+    const result = await mcp.testServer(req.params.name, serverConfig);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/mcp/servers/:name/tools?projectId=
+app.get('/api/mcp/servers/:name/tools', async (req, res) => {
+  try {
+    const tools = await mcp.listTools([req.params.name], req.query.projectId || null);
+    res.json({ tools });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/mcp/status
+app.get('/api/mcp/status', (req, res) => {
+  try { res.json(mcp.getStatus()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 function startServer(port = PORT, host = '127.0.0.1') {

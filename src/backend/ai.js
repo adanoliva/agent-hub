@@ -272,6 +272,16 @@ async function callAI(prompt, opts = {}) {
 // ── CLI backend ───────────────────────────────────────────────────────────────
 
 function callCLI(prompt, opts = {}) {
+  // Sync MCP servers to the project's .claude/settings.json before spawning
+  if (opts.cwd && opts.mcpServers && Object.keys(opts.mcpServers).length > 0) {
+    try {
+      const mcp = require('./mcp');
+      mcp.syncCliSettings(opts.cwd, opts.mcpServers);
+    } catch (e) {
+      console.warn('[ai] MCP sync failed:', e.message);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const timeout   = opts.timeout || CALL_TIMEOUT_MS;
     const args      = ['--print', '--output-format', 'json'];
