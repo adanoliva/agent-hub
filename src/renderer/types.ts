@@ -61,6 +61,7 @@ export interface Agent {
   projectId?: string;
   suggested?: boolean;
   skills?: string[];
+  mcp_servers?: string[];
 }
 
 export interface Skill {

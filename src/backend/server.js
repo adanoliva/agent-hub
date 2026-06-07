@@ -1549,8 +1549,23 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
     return res.status(400).json({ error: 'Subsystem CLI is only for api and github providers. Use the CLI provider natively.' });
   }
 
-  const { prompt, agentSystemPrompt, projectContext, maxTurns, timeout, useBrowser } = req.body;
+  const { prompt, agentSystemPrompt, projectContext, maxTurns, timeout, useBrowser, agentName } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
+
+  // Resolve MCP servers for the agent (if agentName provided)
+  let mcpServers = {};
+  if (agentName) {
+    try {
+      const mcpModule = require('./mcp');
+      const { listProjectAgents, getApplicableAgents } = require('./agents');
+      const allAgents = [
+        ...getApplicableAgents(project.categoryId),
+        ...listProjectAgents(project),
+      ];
+      const agent = allAgents.find(a => a.name === agentName);
+      if (agent) mcpServers = mcpModule.getServersForAgent(agent, project.id);
+    } catch { /* ignore */ }
+  }
 
   try {
     const result = await callAIWithSubsystemCLI(prompt, agentSystemPrompt || '', {
@@ -1560,6 +1575,8 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
       maxTurns:       maxTurns  || 10,
       timeout:        timeout   || 1_800_000,
       useBrowser:     useBrowser || false,
+      mcpServers,
+      projectId:      project.id,
     });
     res.json(result);
   } catch (e) {

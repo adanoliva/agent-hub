@@ -806,6 +806,7 @@ class OrchestrationExecutor extends EventEmitter {
           projectPath: this.project.path, projectContext: contextFile,
           provider, maxTurns: orchestration.executionConfig?.maxTurns || 10,
           timeout: stepRemaining, useBrowser: orchestrationUsesBrowser,
+          mcpServers: agentMcpServers, projectId: this.project.id,
         });
         if (!cliResult.success && cliResult.error) {
           if (cliResult.finalResponse?.trim()) {

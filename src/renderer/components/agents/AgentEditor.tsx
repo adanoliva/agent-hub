@@ -24,7 +24,8 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const [genBusy,  setGenBusy]  = useState(false);
   const [optBusy,  setOptBusy]  = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
-  const [allSkills, setAllSkills] = useState<Skill[]>([]);
+  const [allSkills,      setAllSkills]      = useState<Skill[]>([]);
+  const [allMcpServers,  setAllMcpServers]  = useState<{ name: string }[]>([]);
 
   // Always-fresh ref — avoids stale closure in async save().
   const aRef = React.useRef<Agent>(a);
@@ -44,8 +45,11 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   useEffect(() => {
     if (node.level === 'project') {
       req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
+      const pid = node.projectId ?? '';
+      req<{ name: string }[]>('GET', `/mcp/servers${pid ? `?projectId=${pid}` : ''}`)
+        .then(setAllMcpServers).catch(() => {});
     }
-  }, [node.level]);
+  }, [node.level, node.projectId]);
 
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
 
@@ -253,6 +257,44 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
             </div>
             <p className="agent-hint">
               Las skills inyectan conocimiento tecnológico en el system prompt. Mantén el prompt enfocado en la tarea; el contexto técnico va en skills.
+            </p>
+          </div>
+        )}
+
+        {/* MCP Servers — solo en agentes de proyecto */}
+        {node.level === 'project' && (allMcpServers.length > 0 || (a.mcp_servers || []).length > 0) && (
+          <div className="field">
+            <label>Servidores MCP</label>
+            <div className="agent-skills-selector">
+              {(a.mcp_servers || []).map(srvName => (
+                <span key={srvName} className="tool-pill agent-skill-chip">
+                  <i className="ti ti-plug-connected" />
+                  {srvName}
+                  <button
+                    className="agent-skill-remove"
+                    onClick={() => update({ mcp_servers: (a.mcp_servers || []).filter(s => s !== srvName) })}
+                    title="Quitar"
+                  >×</button>
+                </span>
+              ))}
+              {allMcpServers.filter(s => !(a.mcp_servers || []).includes(s.name)).length > 0 && (
+                <select
+                  className="input sm agent-skill-add"
+                  value=""
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    update({ mcp_servers: [...(a.mcp_servers || []), e.target.value] });
+                  }}
+                >
+                  <option value="">Añadir servidor MCP…</option>
+                  {allMcpServers.filter(s => !(a.mcp_servers || []).includes(s.name)).map(s => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <p className="agent-hint">
+              Los servidores MCP aportan herramientas externas (GitHub, Linear, etc.) al agente durante la ejecución.
             </p>
           </div>
         )}

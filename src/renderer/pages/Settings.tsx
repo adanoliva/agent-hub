@@ -60,6 +60,7 @@ export function Settings() {
   const [mcpForm,           setMcpForm]           = useState<Partial<McpServerEntry & { argsRaw: string; envRaw: string; headersRaw: string }> | null>(null);
   const [mcpTesting,        setMcpTesting]        = useState(false);
   const [mcpTestResult,     setMcpTestResult]     = useState<{ tools: { name: string; description?: string }[] } | null>(null);
+  const [mcpProjectId,      setMcpProjectId]      = useState<string>('');
 
   // External scripts validation
   const [scriptValidating,  setScriptValidating]  = useState(false);
@@ -153,11 +154,12 @@ export function Settings() {
   React.useEffect(() => {
     if (tab !== 'mcp') return;
     setMcpLoading(true);
-    req<McpServerEntry[]>('GET', '/mcp/servers')
+    const url = mcpProjectId ? `/mcp/servers?projectId=${mcpProjectId}` : '/mcp/servers';
+    req<McpServerEntry[]>('GET', url)
       .then(setMcpServers)
       .catch(() => setMcpServers([]))
       .finally(() => setMcpLoading(false));
-  }, [tab]);
+  }, [tab, mcpProjectId]);
 
   // Sync local token/key/model when config changes (e.g. on mount)
   React.useEffect(() => {
@@ -1153,6 +1155,7 @@ export function Settings() {
 
       {/* ── Tab: MCP ── */}
       {tab === 'mcp' && (
+        <>
         <div className="settings-section">
           <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Servidores MCP globales</span>
@@ -1206,6 +1209,76 @@ export function Settings() {
             </div>
           ))}
         </div>
+
+        {/* ── Servidores por proyecto ── */}
+        <div className="settings-section" style={{ marginTop: 16 }}>
+          <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Servidores MCP del proyecto</span>
+            {mcpProjectId && (
+              <button
+                className="btn sm primary"
+                onClick={() => { setMcpForm({ scope: 'project', projectId: mcpProjectId, config: { type: 'stdio' }, argsRaw: '', envRaw: '', headersRaw: '' }); setMcpTestResult(null); }}
+              >
+                <i className="ti ti-plus" /> Añadir servidor
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <label style={{ fontSize: 12, color: 'var(--text2)', flexShrink: 0 }}>Proyecto:</label>
+            <select
+              value={mcpProjectId}
+              onChange={e => setMcpProjectId(e.target.value)}
+              style={{ flex: 1, fontSize: 12 }}
+            >
+              <option value="">— Seleccionar proyecto —</option>
+              {(config?.projects ?? []).map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {!mcpProjectId && (
+            <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>Selecciona un proyecto para gestionar sus servidores MCP específicos.</p>
+          )}
+
+          {mcpProjectId && !mcpLoading && mcpServers.filter(s => s.scope === 'project').length === 0 && (
+            <div style={{ color: 'var(--text3)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>
+              <i className="ti ti-plug-connected-x" style={{ fontSize: 20, display: 'block', marginBottom: 6 }} />
+              Sin servidores MCP específicos para este proyecto
+            </div>
+          )}
+
+          {mcpProjectId && !mcpLoading && mcpServers.filter(s => s.scope === 'project').map(srv => (
+            <div key={srv.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 8, border: '1px solid var(--border)' }}>
+              <i className="ti ti-plug-connected" style={{ color: 'var(--blue)', fontSize: 16, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text0)' }}>{srv.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text2)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {srv.config.type === 'url' ? srv.config.url : `${srv.config.command} ${(srv.config.args || []).join(' ')}`}
+                </div>
+              </div>
+              <span style={{ fontSize: 10, background: 'var(--bg3)', color: 'var(--text2)', padding: '2px 7px', borderRadius: 4, border: '1px solid var(--border2)', fontFamily: 'var(--mono)' }}>
+                {srv.config.type}
+              </span>
+              <button className="btn sm ghost" onClick={() => {
+                const argsRaw    = (srv.config.args || []).join('\n');
+                const envRaw     = Object.entries(srv.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                const headersRaw = Object.entries(srv.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                setMcpForm({ ...srv, argsRaw, envRaw, headersRaw });
+                setMcpTestResult(null);
+              }}>
+                <i className="ti ti-edit" />
+              </button>
+              <button className="btn sm ghost" style={{ color: 'var(--coral)' }} onClick={async () => {
+                await req('DELETE', `/mcp/servers/${srv.name}?scope=project&projectId=${mcpProjectId}`);
+                setMcpServers(prev => prev.filter(s => !(s.name === srv.name && s.scope === 'project')));
+              }}>
+                <i className="ti ti-trash" />
+              </button>
+            </div>
+          ))}
+        </div>
+        </>
       )}
 
       {/* ── Modal: MCP Server Form ── */}

@@ -42,6 +42,11 @@ export function AgentCard({ agent: a, selected, suggested, node, onClick, onChat
         {(a.tools ?? []).length > 3 && (
           <span style={{ fontSize: 10, color: 'var(--text3)' }}>+{(a.tools ?? []).length - 3}</span>
         )}
+        {(a.mcp_servers ?? []).length > 0 && (
+          <span className="tool-pill" style={{ color: 'var(--green)', borderColor: 'var(--green)' }} title={`MCP: ${(a.mcp_servers ?? []).join(', ')}`}>
+            <i className="ti ti-plug-connected" />{(a.mcp_servers ?? []).length}
+          </span>
+        )}
         <span className={`tool-pill model-${model}`} style={{ marginLeft: 'auto' }}>
           <i className={`ti ${mIcon}`} />{model}
         </span>

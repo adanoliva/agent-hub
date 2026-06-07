@@ -59,7 +59,7 @@ function parseAgentResponse(text) {
     if (!toolMatch) continue;
 
     const tool = toolMatch[1].toLowerCase();
-    if (!['read', 'write', 'bash', 'grep', 'browser_get', 'browser_action', 'browser_screenshot'].includes(tool)) continue;
+    if (!['read', 'write', 'bash', 'grep', 'browser_get', 'browser_action', 'browser_screenshot', 'mcp'].includes(tool)) continue;
 
     let toolCall = null;
 
@@ -154,6 +154,29 @@ function parseAgentResponse(text) {
         tool: 'browser_screenshot',
         args: { selector: selectorMatch ? selectorMatch[1].trim() : undefined },
         raw:  block.trim(),
+      };
+    }
+
+    if (tool === 'mcp') {
+      const serverMatch   = block.match(/^SERVER:\s*(.+)$/m);
+      const functionMatch = block.match(/^FUNCTION:\s*(.+)$/m);
+      const inputMatch    = block.match(/^INPUT:\s*\n([\s\S]*)$/m);
+      if (!serverMatch || !functionMatch) continue;
+
+      let inputObj = {};
+      if (inputMatch) {
+        try { inputObj = JSON.parse(inputMatch[1].trim()); } catch { /* ignore bad JSON */ }
+      }
+
+      toolCall = {
+        id:   crypto.randomUUID(),
+        tool: 'mcp',
+        args: {
+          server:   serverMatch[1].trim(),
+          function: functionMatch[1].trim(),
+          input:    inputObj,
+        },
+        raw: block.trim(),
       };
     }
 
@@ -299,6 +322,32 @@ async function executeToolCall(toolCall, projectPath) {
   }
 }
 
+/**
+ * Executes a single MCP tool call.
+ * Requires the server to already be running (spawnServers called by execute()).
+ */
+async function executeMcpToolCall(toolCall, projectId) {
+  const start = Date.now();
+  const { server, function: fn, input } = toolCall.args;
+  try {
+    const mcp    = require('./mcp');
+    const output = await mcp.callTool(server, fn, input, projectId);
+    return {
+      toolCall,
+      success:       true,
+      data:          { output },
+      executionTime: Date.now() - start,
+    };
+  } catch (err) {
+    return {
+      toolCall,
+      success: false,
+      error:   { code: 'MCP_ERROR', message: err.message },
+      executionTime: Date.now() - start,
+    };
+  }
+}
+
 // ── Message builder ───────────────────────────────────────────────────────────
 
 /**
@@ -317,12 +366,13 @@ function buildToolResultsMessage(results) {
   for (const result of results) {
     const tc = result.toolCall;
     lines.push(`▶ ${tc.tool.toUpperCase()}`);
-    if (tc.args.path)    lines.push(`  Archivo: ${tc.args.path}`);
-    if (tc.args.command) lines.push(`  Comando: ${tc.args.command}`);
-    if (tc.args.pattern) lines.push(`  Patrón: ${tc.args.pattern} en ${tc.args.file}`);
-    if (tc.args.url)     lines.push(`  URL: ${tc.args.url}`);
-    if (tc.args.action)  lines.push(`  Acción: ${tc.args.action}`);
+    if (tc.args.path)     lines.push(`  Archivo: ${tc.args.path}`);
+    if (tc.args.command)  lines.push(`  Comando: ${tc.args.command}`);
+    if (tc.args.pattern)  lines.push(`  Patrón: ${tc.args.pattern} en ${tc.args.file}`);
+    if (tc.args.url)      lines.push(`  URL: ${tc.args.url}`);
+    if (tc.args.action)   lines.push(`  Acción: ${tc.args.action}`);
     if (tc.args.selector) lines.push(`  Selector: ${tc.args.selector}`);
+    if (tc.tool === 'mcp') lines.push(`  Servidor: ${tc.args.server} · Función: ${tc.args.function}`);
 
     if (result.success) {
       lines.push('  ✓ EXITOSO');
@@ -379,6 +429,11 @@ function buildToolResultsMessage(results) {
         // Screenshots produce binary PNG — not transmittable as text to the model.
         lines.push('  Captura realizada (imagen binaria, no disponible como texto).');
       }
+
+      if (tc.tool === 'mcp' && result.data) {
+        lines.push('  Resultado:');
+        lines.push('  ' + String(result.data.output || '').slice(0, 8_000).split('\n').join('\n  '));
+      }
     } else {
       lines.push('  ✗ ERROR');
       lines.push(`  Código: ${result.error?.code || 'UNKNOWN'}`);
@@ -408,7 +463,7 @@ function buildToolResultsMessage(results) {
  * @returns {string}
  */
 function buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, opts = {}) {
-  const { useBrowser = false } = opts;
+  const { useBrowser = false, mcpTools = [] } = opts;
 
   const toolInstructions = `HERRAMIENTAS DISPONIBLES:
 ─────────────────────────
@@ -471,7 +526,26 @@ REGLAS:
 - Al usar WRITE incluye el contenido COMPLETO del archivo
 - Los --- deben estar solos en su línea
 - Puedes usar múltiples herramientas en un mismo turno
-- Cuando no necesites más herramientas, da tu respuesta final directamente (sin bloques TOOL)`;
+- Cuando no necesites más herramientas, da tu respuesta final directamente (sin bloques TOOL)${mcpTools.length > 0 ? `
+
+---
+
+## Herramientas MCP disponibles
+
+Tienes acceso a las siguientes herramientas externas a través de MCP:
+
+${mcpTools.map(t => `- **${t.serverName}__${t.name}**: ${t.description || '(sin descripción)'}`).join('\n')}
+
+Para invocar una herramienta MCP usa este formato:
+TOOL: mcp
+SERVER: <serverName>
+FUNCTION: <toolName>
+INPUT:
+<JSON object con los argumentos>
+
+---
+
+El resultado de la herramienta aparecerá en el siguiente turno como TOOL_RESULT.` : ''}`;
 
   const parts = [];
   if (agentSystemPrompt?.trim()) {
@@ -512,12 +586,27 @@ async function execute(prompt, agentSystemPrompt, config) {
     maxTurns       = 10,
     timeout        = 300_000,
     useBrowser     = false,
+    mcpServers     = {},   // Record<name, config> — servers for this agent
+    projectId      = null,
   } = config;
 
   if (!projectPath) throw new Error('projectPath is required for Subsystem CLI');
   if (typeof callAIRaw !== 'function') throw new Error('callAIRaw function is required');
 
-  const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, { useBrowser });
+  // Start MCP servers and discover tools before building the system prompt
+  let mcpTools = [];
+  const mcpServerNames = Object.keys(mcpServers);
+  if (mcpServerNames.length > 0) {
+    try {
+      const mcp = require('./mcp');
+      await mcp.spawnServers(mcpServerNames, projectId);
+      mcpTools = await mcp.listTools(mcpServerNames, projectId);
+    } catch (e) {
+      console.warn('[subsystem-cli] MCP init error:', e.message);
+    }
+  }
+
+  const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, { useBrowser, mcpTools });
   const messages      = [{ role: 'user', content: String(prompt) }];
 
   const allToolCalls     = [];
@@ -576,7 +665,9 @@ async function execute(prompt, agentSystemPrompt, config) {
     // 4. Execute each tool call
     const turnResults = [];
     for (const toolCall of parsed.toolCalls) {
-      const result = await executeToolCall(toolCall, projectPath);
+      const result = toolCall.tool === 'mcp'
+        ? await executeMcpToolCall(toolCall, projectId)
+        : await executeToolCall(toolCall, projectPath);
       turnResults.push(result);
       allToolCalls.push(toolCall);
       allResults.push(result);

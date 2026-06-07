@@ -1287,9 +1287,11 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     maxTurns:       opts.maxTurns       || 10,
     timeout:        opts.timeout        || 300_000,
     useBrowser:     opts.useBrowser     || false,
+    mcpServers:     opts.mcpServers     || {},
+    projectId:      opts.projectId      || null,
     callAIRaw: (messages, systemPrompt, callOpts = {}) =>
-      callAIChatWithTokens(messages, systemPrompt, { 
-        provider, 
+      callAIChatWithTokens(messages, systemPrompt, {
+        provider,
         timeout: callOpts.timeout,
         cwd: opts.projectPath
       }),
