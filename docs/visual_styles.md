@@ -159,3 +159,25 @@ Patrón compartido por `AgentEditor` y `SkillEditor`:
 El toggle de idioma (`.lang-toggle`) se alinea a la derecha del label del campo, en la misma fila.
 
 **Regla de uso:** el input de descripción es obligatorio antes de generar. Si el campo está vacío, se muestra un toast de error sin hacer la llamada a la API.
+
+---
+
+## 11. Nodos flotantes en el canvas de orquestaciones (`.orch-floating`)
+
+Un nodo es **flotante** cuando ha sido arrastrado al canvas pero aún no está conectado al Orquestador (su `isRoot` es `false`). El estado flotante se comunica visualmente de dos maneras:
+
+### Clase CSS `.orch-node-agent.orch-floating`
+- `border-style: dashed` — el borde sólido del nodo pasa a ser discontinuo.
+- `opacity: .7` — el nodo se muestra atenuado respecto a los nodos conectados.
+
+### Etiqueta `::after`
+- Contenido: texto `'sin conectar'`.
+- `position: absolute`, `top: -18px` — aparece sobre el borde superior del nodo.
+- Color `--text3` (placeholder), `font-size: 9px`, `font-family: var(--mono)`.
+
+### Comportamiento de conexión
+
+- El nodo sale del estado flotante cuando el usuario hace clic en el **port-out del Orquestador** y luego en el nodo flotante, lo que establece `isRoot: true` y dibuja la arista Orquestador → nodo.
+- Para desconectar del Orquestador: hacer clic en el punto central de la arista Orquestador → nodo (queda seleccionada y aparece un botón **✕** coral) → clic en **✕** → el nodo vuelve a estado flotante (`isRoot: false`).
+- La excepción al estado flotante: si se suelta un agente encima de un nodo ya existente en el canvas, el nuevo nodo se conecta automáticamente debajo de ese nodo (`dependsOn: [targetNode.id]`) con `isRoot` heredado del grafo — esto no crea un nodo flotante.
+- La validación previa a la ejecución (`POST /orchestrations/:id/validate`) detecta nodos con `isRoot: false` y devuelve error: `"El nodo X está sin conectar"`.

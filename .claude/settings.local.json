@@ -57,7 +57,25 @@
       "Bash(sed -n '20,35p' src/backend/projects.js)",
       "Bash(sed -n '644,660p' src/backend/projects.js)",
       "Bash(sed -n '1522,1540p' src/backend/server.js)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "Bash(Select-Object Name)",
+      "Skill(run)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \"LISTEN\")",
+      "Bash(findstr -E \"5173|3737|5174|5175|4173\")",
+      "Bash(findstr \":5\")",
+      "Bash(curl -s http://localhost:3737/api/health)",
+      "Bash(findstr \":3737\")",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -I{} taskkill /PID {} /F)",
+      "Skill(claude-api)",
+      "WebSearch",
+      "Bash(rtk curl *)",
+      "Bash(Invoke-WebRequest -Uri \"http://localhost:3737/api/mcp/catalog\" -UseBasicParsing)",
+      "Bash(Select-Object -ExpandProperty Content)",
+      "Bash(Out-String)",
+      "Bash(Select-Object -First 200)",
+      "PowerShell(try { \\(Invoke-WebRequest -Uri \"http://localhost:3737/api/mcp/catalog\" -UseBasicParsing\\).Content } catch { \"ERROR: $_\" })"
     ]
   }
 }

@@ -564,9 +564,18 @@ class OrchestrationExecutor extends EventEmitter {
       errors.push('La orquestación debe tener al menos 1 agente');
     }
 
+    // Floating nodes (isRoot: false with no dependencies) are not connected to any flow
+    const floatingNodes = nodes.filter(n => n.dependsOn.length === 0 && n.isRoot === false);
+    for (const n of floatingNodes) {
+      errors.push(`El nodo "${n.agentName}" está sin conectar — conéctalo al Orquestador o a otro nodo`);
+    }
+
+    // Only validate/execute connected nodes
+    const connectedNodes = nodes.filter(n => !(n.dependsOn.length === 0 && n.isRoot === false));
+
     // Cycle detection via topological sort
-    const levels = computeTopologicalLevels(nodes);
-    if (levels.reduce((s, l) => s + l.length, 0) !== nodes.length) {
+    const levels = computeTopologicalLevels(connectedNodes);
+    if (levels.reduce((s, l) => s + l.length, 0) !== connectedNodes.length) {
       errors.push('La orquestación contiene un ciclo — verifica las conexiones');
     }
 
@@ -936,7 +945,8 @@ class OrchestrationExecutor extends EventEmitter {
     const cfg        = readConfig();
     const provider   = cfg.aiProvider || 'cli';
     const { orchestration } = this;
-    const nodes      = orchestration.nodes || [];
+    // Filter out floating nodes (isRoot: false with no dependencies) — they are not part of any flow
+    const nodes = (orchestration.nodes || []).filter(n => !(n.dependsOn.length === 0 && n.isRoot === false));
 
     // Create execution directory
     const timestamp   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

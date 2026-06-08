@@ -195,6 +195,17 @@ export function NodeCanvas({
     e.stopPropagation();
     if (dragging) return;
     if (connecting) {
+      if (connecting === '__orch__') {
+        // Connecting from Orchestrator → floating node only
+        const target = nodes.find(n => n.id === nodeId);
+        if (target && target.dependsOn.length === 0 && target.isRoot === false) {
+          onNodesChange(nodes.map(n => n.id === nodeId ? { ...n, isRoot: true } : n));
+          onSelectEdge({ fromId: null, toId: nodeId });
+        }
+        setConnecting(null);
+        setMousePos(null);
+        return;
+      }
       if (connecting === nodeId) { setConnecting(null); return; }
       const target = nodes.find(n => n.id === nodeId);
       if (!target || target.dependsOn.includes(connecting)) { setConnecting(null); return; }
@@ -208,7 +219,8 @@ export function NodeCanvas({
       return;
     }
     const node = nodes.find(n => n.id === nodeId);
-    if (node?.dependsOn.length === 0) onSelectEdge({ fromId: null, toId: nodeId });
+    // Only select the Orch→node edge if the node is an actual root (not floating)
+    if (node?.dependsOn.length === 0 && node.isRoot !== false) onSelectEdge({ fromId: null, toId: nodeId });
   }, [dragging, connecting, nodes, onNodesChange, onSelectEdge]);
 
   const handlePortOutClick = useCallback((e: React.MouseEvent, nodeId: string) => {
@@ -231,11 +243,15 @@ export function NodeCanvas({
 
   const handleRemoveNode = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
-    onNodesChange(
-      nodes.filter(n => n.id !== nodeId).map(n => ({ ...n, dependsOn: n.dependsOn.filter(id => id !== nodeId) }))
-    );
+    const remaining = nodes.filter(n => n.id !== nodeId).map(n => ({ ...n, dependsOn: n.dependsOn.filter(id => id !== nodeId) }));
+    onNodesChange(remaining);
     if (selectedEdge?.toId === nodeId || selectedEdge?.fromId === nodeId) onSelectEdge(null);
     if (connecting === nodeId) setConnecting(null);
+    // Cancel orch-connecting if no floating nodes remain after removal
+    if (connecting === '__orch__') {
+      const stillFloating = remaining.some(n => n.dependsOn.length === 0 && n.isRoot === false);
+      if (!stillFloating) setConnecting(null);
+    }
   }, [nodes, onNodesChange, selectedEdge, onSelectEdge, connecting]);
 
   const handleAutoLayout = useCallback((e: React.MouseEvent) => {
@@ -243,8 +259,9 @@ export function NodeCanvas({
     onNodesChange(autoLayoutNodes(nodes));
   }, [nodes, onNodesChange]);
 
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
-  const roots   = nodes.filter(n => n.dependsOn.length === 0);
+  const nodeMap  = new Map(nodes.map(n => [n.id, n]));
+  const roots    = nodes.filter(n => n.dependsOn.length === 0 && n.isRoot !== false);
+  const floating = nodes.filter(n => n.dependsOn.length === 0 && n.isRoot === false);
 
   // Orchestrator node: centered above root nodes, not stored in dagNodes
   const orchCenterX = roots.length > 0
@@ -259,9 +276,13 @@ export function NodeCanvas({
   const canvasW = Math.max(880, ...nodes.map(n => (n.x ?? 0) + NODE_W + 80), orchX + NODE_W + 80);
   const canvasH = Math.max(520, ...nodes.map(n => (n.y ?? 0) + NODE_H + 120), orchBottom + 120);
 
-  const connectingNode = connecting ? nodeMap.get(connecting) : null;
-  const connX = connectingNode ? (connectingNode.x ?? 0) + NODE_W / 2 : 0;
-  const connY = connectingNode ? (connectingNode.y ?? 0) + NODE_H : 0;
+  const connectingNode = connecting && connecting !== '__orch__' ? nodeMap.get(connecting) : null;
+  const connX = connecting === '__orch__'
+    ? orchX + NODE_W / 2
+    : connectingNode ? (connectingNode.x ?? 0) + NODE_W / 2 : 0;
+  const connY = connecting === '__orch__'
+    ? orchBottom
+    : connectingNode ? (connectingNode.y ?? 0) + NODE_H : 0;
 
   return (
     <div
@@ -328,6 +349,19 @@ export function NodeCanvas({
                 ? <text x={mx} y={my + 4.5} textAnchor="middle" fontSize={12} className="orch-conn-dot-icon">⚙</text>
                 : <text x={mx} y={my + 4}   textAnchor="middle" fontSize={11} className="orch-conn-dot-icon-dim">↓</text>
               }
+              {isSelected && (
+                <g
+                  style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNodesChange(nodes.map(n => n.id === root.id ? { ...n, isRoot: false } : n));
+                    onSelectEdge(null);
+                  }}
+                >
+                  <circle cx={mx} cy={my - 22} r={9} fill="var(--bg2)" stroke="var(--coral)" strokeWidth={1.5} />
+                  <text x={mx} y={my - 18} textAnchor="middle" fontSize={10} style={{ fill: 'var(--coral)', fontWeight: 700, pointerEvents: 'none' }}>✕</text>
+                </g>
+              )}
             </g>
           );
         })}
@@ -404,7 +438,7 @@ export function NodeCanvas({
         )}
 
         {/* In-progress connection line */}
-        {connecting && connectingNode && mousePos && (
+        {connecting && (connecting === '__orch__' || connectingNode) && mousePos && (
           <line
             x1={connX} y1={connY} x2={mousePos.x} y2={mousePos.y}
             stroke="var(--accent)"
@@ -417,7 +451,7 @@ export function NodeCanvas({
 
       {/* Orchestrator entry node — static, not in dagNodes */}
       <div
-        className="orch-node-agent orch-node-entry"
+        className={`orch-node-agent orch-node-entry${connecting === '__orch__' ? ' connecting-source' : ''}`}
         style={{ position: 'absolute', left: orchX, top: orchY, width: NODE_W, height: NODE_H, zIndex: 2, cursor: 'default' }}
       >
         <div className="orch-node-icon"><i className="ti ti-circuit-diode" /></div>
@@ -426,6 +460,13 @@ export function NodeCanvas({
           <span className="orch-node-model model-orch">punto de entrada</span>
         </div>
         <span className="orch-node-entry-badge">INICIO</span>
+        {!executionState && floating.length > 0 && (
+          <div
+            className={`orch-node-port-out${connecting === '__orch__' ? ' active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setConnecting(prev => prev === '__orch__' ? null : '__orch__'); }}
+            title="Conectar con nodo flotante"
+          />
+        )}
       </div>
 
       {/* Nodes */}
@@ -443,15 +484,21 @@ export function NodeCanvas({
         const isSelFrom   = selectedEdge?.fromId === node.id;
         const isSelTo     = selectedEdge?.toId   === node.id;
         const isConnSrc   = connecting === node.id;
-        const isConnTgt   = !!(connecting && connecting !== node.id);
+        const isFloating  = node.dependsOn.length === 0 && node.isRoot === false;
+        // Valid target when connecting from Orchestrator: only floating nodes
+        // Valid target when connecting from another node: any node except source
+        const isValidConnTarget = connecting === '__orch__'
+          ? isFloating
+          : !!(connecting && connecting !== node.id);
         const isDragged   = dragging?.nodeId === node.id;
 
         let cls = 'orch-node-agent';
-        if (isScript) cls += ' orch-node-script';
-        if (model)    cls += ` model-${model}`;
-        if (execStatus === 'running') cls += ' exec-running';
-        else if (execStatus === 'done')  cls += ' exec-done';
-        else if (execStatus === 'error') cls += ' exec-error';
+        if (isScript)   cls += ' orch-node-script';
+        if (isFloating) cls += ' orch-floating';
+        if (model)      cls += ` model-${model}`;
+        if (execStatus === 'running')  cls += ' exec-running';
+        else if (execStatus === 'done')   cls += ' exec-done';
+        else if (execStatus === 'error')  cls += ' exec-error';
         else if (execStatus === 'pending') cls += ' exec-pending';
         if (isSelFrom || isSelTo) cls += ' node-active';
         if (isConnSrc) cls += ' connecting-source';
@@ -468,8 +515,8 @@ export function NodeCanvas({
               width:  NODE_W,
               height: NODE_H,
               zIndex: isDragged ? 10 : 2,
-              cursor: isDragged ? 'grabbing' : (connecting ? (isConnTgt ? 'crosshair' : 'not-allowed') : 'grab'),
-              opacity: (connecting && connecting !== node.id && isConnSrc === false) ? (isConnTgt ? 1 : 0.7) : 1,
+              cursor: isDragged ? 'grabbing' : (connecting ? (isValidConnTarget ? 'crosshair' : 'not-allowed') : 'grab'),
+              opacity: connecting ? (isConnSrc ? 1 : (isValidConnTarget ? 1 : 0.6)) : 1,
             }}
             onMouseDown={e => handleNodeMouseDown(e, node.id)}
             onClick={e => handleNodeClick(e, node.id)}
@@ -511,8 +558,8 @@ export function NodeCanvas({
               />
             )}
 
-            {/* Port-in indicator (top) — shown when connecting to another node */}
-            {connecting && connecting !== node.id && (
+            {/* Port-in indicator (top) — shown only when this node is a valid connection target */}
+            {isValidConnTarget && (
               <div className="orch-node-port-in" />
             )}
           </div>
