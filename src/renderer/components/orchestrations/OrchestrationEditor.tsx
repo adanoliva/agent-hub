@@ -30,6 +30,7 @@ function makeNode(agentName: string, x: number, y: number): OrchestrationNode {
     id:           `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     agentName,
     dependsOn:    [],
+    isRoot:       false,
     x,
     y,
     dataFlow:     { ...DEFAULT_DATA_FLOW },

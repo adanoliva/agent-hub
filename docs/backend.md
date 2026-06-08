@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-06 · Versión: 2.3.0-dev
+> Última actualización: 2026-06-08 · Versión: 2.3.0-dev
 
 ---
 
@@ -800,14 +800,21 @@ Implementa la ejecución **DAG** de una orquestación: los nodos sin dependencia
 El motor calcula los **niveles topológicos** del grafo al inicio. Cada nivel es un conjunto de nodos que pueden ejecutarse en paralelo porque sus dependencias ya han completado. El algoritmo:
 
 ```
-1. Calcular niveles topológicos (BFS desde nodos raíz)
-2. Para cada nivel:
+1. Filtrar nodos flotantes (isRoot === false)
+2. Calcular niveles topológicos (BFS desde nodos raíz)
+3. Para cada nivel:
    a. Promise.allSettled([ejecutarNodo(n) for n in nivel])
    b. Cada nodo corre de forma independiente (tokensUsed, cost, handoff propios)
-3. Si algún nodo falla y stopOnError=true → abortar niveles siguientes
+4. Si algún nodo falla y stopOnError=true → abortar niveles siguientes
 ```
 
 Los handoffs de un nivel anterior se agregan (merged) para los nodos del siguiente nivel que los consuman.
+
+### Nodos flotantes
+
+Un nodo con `isRoot: false` y `dependsOn: []` es un **nodo flotante** — existe en el JSON de la orquestación pero no forma parte del flujo de ejecución. El motor los filtra antes de calcular los niveles topológicos. La validación (`POST /orchestrations/:id/validate`) los detecta y devuelve un error por cada nodo flotante encontrado: `"El nodo X está sin conectar"`.
+
+Un nodo se convierte en raíz real cuando el usuario conecta el port-out del nodo Orquestador a ese nodo en el canvas (lo que establece `isRoot: true`). La desconexión del Orquestador vuelve a poner `isRoot: false`.
 
 ### Eventos emitidos
 

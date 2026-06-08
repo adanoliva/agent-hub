@@ -199,7 +199,8 @@ interface OpsLedger {
 interface OrchestrationNode {
   id:            string;                    // UUID estable, e.g. "node-abc123"
   agentName:     string;                    // nombre del agente o "__script:name__"
-  dependsOn:     string[];                  // ids de nodos predecesores (vacío = nodo raíz)
+  dependsOn:     string[];                  // ids de nodos predecesores
+  isRoot?:       boolean;                   // true/undefined = conectado al Orquestador; false = nodo flotante sin conexión
   x?:            number;                    // posición en el canvas (px)
   y?:            number;
   dataFlow:      DataFlow;
@@ -518,7 +519,7 @@ Los agentes del proyecto tienen prioridad (aparecen primero). Los agentes exclui
 
 **Paleta colapsable:** botón `ti-layout-sidebar-left-collapse` en la cabecera colapsa la paleta a una tira vertical con los iconos de tab. Se re-expande desde la tira.
 
-**Drag-and-drop desde paleta:** al arrastrar un agente o script sobre el canvas, se crea un nodo en la posición de suelta. Si se suelta sobre un nodo existente, el nuevo nodo se coloca debajo y se conecta automáticamente con `dependsOn = [targetNode.id]`. Un agente solo puede aparecer una vez en el canvas (los scripts sí pueden repetirse).
+**Drag-and-drop desde paleta:** al arrastrar un agente o script sobre el canvas, se crea un nodo en la posición de suelta con `isRoot: false` (flotante, sin conexión). Si se suelta sobre un nodo existente, el nuevo nodo se coloca debajo y se conecta automáticamente con `dependsOn = [targetNode.id]`. Un agente solo puede aparecer una vez en el canvas (los scripts sí pueden repetirse).
 
 **Purga del canvas:** al cargar, si un agente del canvas ya no existe en disco, se elimina automáticamente. Sus conexiones (`dependsOn`) también se limpian.
 
@@ -557,7 +558,9 @@ export interface ScriptParamSchema {
 
 Lienzo 2D interactivo basado en HTML absoluto + SVG overlay para las aristas.
 
-**Nodo Orquestador:** nodo estático (no en `dagNodes`) que representa el punto de entrada. Se posiciona centrado sobre los nodos raíz. No es arrastrable ni tiene port-out.
+**Nodo Orquestador:** nodo estático (no en `dagNodes`) que representa el punto de entrada. Se posiciona centrado sobre los nodos raíz (`isRoot !== false`). No es arrastrable. Cuando hay nodos flotantes, muestra un port-out en la parte inferior para conectarlos: click en el port-out del Orquestador → click en el nodo flotante → el nodo pasa a `isRoot: true` (raíz real).
+
+**Nodos flotantes:** nodos con `isRoot: false` y `dependsOn: []`. Se muestran con borde discontinuo y la etiqueta "sin conectar". No reciben arista del Orquestador. Al seleccionar la arista Orquestador→raíz (click en el punto central), aparece un botón `✕` para desconectar ese nodo del Orquestador (vuelve a flotante).
 
 **Nodos de usuario:** div absolutos draggables. Cada nodo tiene:
 - Handle de arrastre (`ti-grip-vertical`) + índice topológico.

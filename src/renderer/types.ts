@@ -258,6 +258,7 @@ export interface OrchestrationNode {
   id:            string;          // UUID estable del nodo
   agentName:     string;          // nombre del agente o "__script:name__"
   dependsOn:     string[];        // ids de nodos predecesores ([] = nodo raíz)
+  isRoot?:       boolean;         // true/undefined = conectado al Orquestador; false = flotante sin conexión
   x?:            number;          // posición en el canvas (px)
   y?:            number;
   dataFlow:      DataFlow;
