@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-06-09 · Versión: 2.3.0-dev
+> Última actualización: 2026-06-09 · Versión: 2.4.0
 
 ---
 
@@ -165,7 +165,7 @@ interface DashboardNotification {
   level?: string; categoryId?: string | null;
 }
 
-// ── v2.3.0 — Orquestaciones DAG paralelas ───────────────────────────────
+// ── v2.4.0 — Orquestaciones DAG paralelas ───────────────────────────────
 
 interface QualityScore {
   score:         number;          // 0–100

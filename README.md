@@ -1,4 +1,4 @@
-# Agent Hub · v2.3.0
+# Agent Hub · v2.4.0
 
 Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
@@ -45,7 +45,7 @@ $env:CDM_DATA_DIR = "C:\MiCarpetaDatos"
 npm run dev
 ```
 
-## Novedades v2.3.0
+## Novedades v2.4.0
 
 - **Modelo DAG**: cada nodo declara sus dependencias con `dependsOn[]`. Nodos sin dependencias se ejecutan en paralelo con `Promise.allSettled` por niveles topológicos.
 - **Canvas 2D interactivo**: lienzo HTML+SVG con aristas Bézier, port-in/out, auto-layout topológico, detección de ciclos y paleta colapsable con tabs Agentes/Scripts.

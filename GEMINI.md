@@ -1,6 +1,6 @@
 # Agent Hub — Project Instructions (GEMINI.md)
 
-> Current Version: **2.3.0** · Update this field on every release.
+> Current Version: **2.4.0** · Update this field on every release.
 
 This file provides project-specific instructions, conventions, and workflows for Gemini CLI.
 Full technical documentation: [`docs/backend.md`](docs/backend.md), [`docs/frontend.md`](docs/frontend.md).
@@ -83,7 +83,7 @@ src/
 - Auto-sync to providers: `.claude/settings.json`, `~/.gemini/settings.json`, CLI flags.
 - REST: `GET/POST/PUT/DELETE /api/mcp/servers`, `POST /api/mcp/servers/:name/test`.
 
-### DAG Orchestrations (v2.3.0)
+### DAG Orchestrations (v2.4.0)
 - Each node: `id`, `agentName`, `dependsOn[]`, `dataFlow`, `contextExtra`, `gateAfter?`, `scriptParams?`.
 - Engine computes topological levels and runs each level with `Promise.allSettled` (parallel).
 - Floating nodes (`isRoot: false`, `dependsOn: []`) are excluded from execution.

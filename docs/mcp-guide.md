@@ -1,7 +1,7 @@
 # Guía de configuración y uso de MCP
 
 > Agent Hub — Model Context Protocol
-> Versión del motor: **2.3.0** · Fecha: 2026-06-09
+> Versión del motor: **2.4.0** · Fecha: 2026-06-09
 
 Esta guía cubre la configuración de servidores MCP en Agent Hub, su asociación con agentes y su comportamiento durante la ejecución. Se asume familiaridad con el concepto de agentes y proveedores de IA de la app.
 

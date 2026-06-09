@@ -11,7 +11,7 @@ Module._load = function (request, ...args) {
     return {
       app: {
         isPackaged: false,
-        getVersion: () => '2.3.0',
+        getVersion: () => '2.4.0',
         quit: () => process.exit(0),
       },
       BrowserWindow: class {},
