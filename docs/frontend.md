@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-06-07 · Versión: 2.3.0-dev
+> Última actualización: 2026-06-09 · Versión: 2.3.0-dev
 
 ---
 
@@ -399,7 +399,7 @@ Editor en overlay modal. Campos: nombre, descripción, modelo, herramientas, sys
 - **Generar con IA:** toggle ES/EN + input de descripción + botón → `POST /ai/generate-prompt`.
 - **Optimizar:** botón visible solo si `!agent.optimized && agent.system` → `POST /ai/optimize-agent`.
 - **Skills (solo nivel proyecto):** selector multi-chip para `agent.skills[]`. Se carga con `GET /skills/flat` únicamente cuando `node.level === 'project'`.
-- **Servidores MCP (solo nivel proyecto):** selector multi-chip para `agent.mcp_servers[]`. Se carga con `GET /mcp/servers?projectId=` cuando `node.level === 'project'`. Permite asociar servidores MCP al agente para que se activen automáticamente al ejecutarlo.
+- **Servidores MCP (todos los niveles):** selector multi-chip para `agent.mcp_servers[]`. Se carga con `GET /mcp/servers?projectId=` (con `projectId` opcional) en todos los niveles — no solo en agentes de proyecto. Permite asociar servidores MCP al agente para que se activen automáticamente al ejecutarlo.
 - **Tip de orquestación:** recuadro acento al pie del system prompt cuando el agente se va a usar en orquestaciones.
 
 ### `SkillsCenter.tsx`
@@ -491,11 +491,12 @@ Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 
 **Tab Directorio:** toggle habilitado, URL del repo, estado de última sync, botón "Sincronizar ahora", resolución de conflictos inline, import desde URL individual.
 
-**Tab MCP:** gestión de servidores MCP en dos secciones:
-- **Servidores globales:** disponibles en todos los proyectos y agentes. CRUD completo con modal de add/edit.
-- **Servidores de proyecto:** selector de proyecto + lista de servidores específicos del proyecto. También con CRUD.
-- El modal de add/edit incluye un botón "Probar conexión" que llama a `POST /api/mcp/servers/:name/test` y muestra las herramientas descubiertas si la conexión es exitosa.
+**Tab MCP:** gestión de servidores MCP en tres bloques:
+- **Catálogo:** grid de servidores predefinidos (tab "Sin credenciales" / "Con credenciales"). Cada card tiene un icono `.info-icon` con tooltip (`entry.tip`) que explica para qué sirve el servidor. Botón "Añadir" pre-rellena el modal con la configuración del catálogo.
+- **Mis servidores:** toggle Global/Proyecto + lista de servidores configurados. Cada item muestra el `.info-icon` con tooltip si `srv.config.description` o `catalogEntry?.tip` existe. CRUD completo con modal de add/edit.
+- **Modal add/edit:** campos nombre, tipo (stdio/url), descripción (opcional — aparece como tooltip en la lista), comando/args/env o URL/headers, y botón "Probar conexión" que llama a `POST /api/mcp/servers/:name/test` y muestra las herramientas descubiertas.
 - Estado `mcpProjectId` controla qué proyecto está activo en la sección de servidores de proyecto.
+- El campo `description` del modal se persiste en `srv.config.description` del servidor; al abrir el modal de edición se pre-rellena desde `srv.config.description`.
 
 ### `Chat.tsx`
 

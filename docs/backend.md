@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-08 · Versión: 2.3.0-dev
+> Última actualización: 2026-06-09 · Versión: 2.3.0-dev
 
 ---
 
@@ -1058,7 +1058,8 @@ mcp_servers: github, linear, postgres
       "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_TOKEN": "$env:GITHUB_TOKEN" }
+      "env": { "GITHUB_TOKEN": "$env:GITHUB_TOKEN" },
+      "description": "Acceso a repositorios y PRs de GitHub"
     },
     "postgres": {
       "transport": "http",

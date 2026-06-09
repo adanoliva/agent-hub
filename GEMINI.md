@@ -1,86 +1,126 @@
 # Agent Hub — Project Instructions (GEMINI.md)
 
-> Current Version: **2.1.0** · Update this field on every release.
+> Current Version: **2.3.0** · Update this field on every release.
 
 This file provides project-specific instructions, conventions, and workflows for Gemini CLI.
+Full technical documentation: [`docs/backend.md`](docs/backend.md), [`docs/frontend.md`](docs/frontend.md).
 
 ## Project Overview
 
-**Agent Hub** is a desktop application (**Electron + Express + React 19 + TypeScript**) for managing AI agents and development projects. It generates a portable `.exe` for Windows x64.
+**Agent Hub** is a desktop application (**Electron + Express + React 19 + TypeScript**) for managing AI agents and development projects. Portable `.exe` for Windows x64.
 
-It allows organizing projects by categories, creating and synchronizing Claude Code agents (`.md` with YAML frontmatter), managing **skills** (technology context blocks injected into agent prompts at execution time), chatting with AI (CLI / Anthropic API / GitHub Copilot), generating project context, and executing agents directly on a project.
-
-Full technical documentation: [`docs/backend.md`](docs/backend.md), [`docs/frontend.md`](docs/frontend.md) and [`docs/visual_styles.md`](docs/visual_styles.md).
-
-## Key architectural changes (v2.1.0)
-
-### Orchestrations — advanced pipeline features
-
-- **Deterministic scripts**: nodes prefixed `__script:{name}__` execute Node.js logic without AI calls. Available scripts: `prepare-context`, `generate-file-index`, `diff-since-step`, `validate-json`, `quality-score`, `validate-output`. Zero token consumption.
-- **HITL gates**: `node.gateAfter = true` pauses execution after that step. SSE event `gate-open` triggers frontend review UI. Actions: `approve` (continue), `revise` (revert + re-run with feedback text), `cancel`. Gate wait time does NOT count against the global timeout.
-- **Quality Score**: calculated automatically after each AI step without AI calls. Score 0–100 with green/amber/red grade. Stored in `stepResult.qualityScore`.
-- **Git Checkpointer** (`git-checkpointer.js`): when `project.gitEnabled === true` and the project is a git repo, commits each completed step automatically. SHA stored in `stepResult.gitCommitSha` for precise rollback via `git reset --hard`.
-- **Ops Ledger** (`ops-ledger.js`): append-only record of every atomic file operation per orchestration. Persists in `.agent-hub/ops/{orchId}-ledger.json`. Each entry tracks file, agent, step, and status (`applied`/`reverted`). Accessible via `GET /api/orchestrations/:id/ops`.
-- **Resume interrupted executions**: execution state persisted after each step in `execution-state.json`. `POST /executions/:execId/resume` restores completed steps from state and continues from the interruption point.
-- **Skills injected in orchestration agents**: agents with `skills[]` in their frontmatter have skill content appended to their system prompt automatically.
-- **`maxContextChars`**: new `executionConfig` field (default 4 000) limits user message size per step to avoid token window overflow.
-
-### Previous changes (v1.9.5)
-
-- **Skills system**: replaces the removed `tech` hierarchy level. Skills are Markdown blocks in `agents/skills/*.md` injected into agent system prompts at execution.
-- **No `techId`**: projects no longer have `techId`. Technology specificity comes from `project.skills[]`.
-- **Agent hierarchy**: global → section → project (no `tech` level).
-- **Unified search**: agents and skills searchable by name+description with 250ms debounce.
+It allows organizing projects by categories, creating and synchronizing AI agents (`.md` with YAML frontmatter), managing **skills** (technology context blocks injected into agent prompts at execution time), chatting with AI (CLI / Anthropic API / GitHub Copilot / Gemini…), generating project context, executing agents directly on a project, orchestrating multi-agent pipelines via a DAG engine, and integrating external tools via MCP servers (stdio and HTTP/SSE).
 
 ## Tech Stack
 
-- **Shell:** Electron (main process + preload)
-- **API:** Express 4 on `localhost:3737`
-- **Renderer:** React 19 + Vite + TypeScript
-- **State Management:** Zustand 5
-- **Styling:** Global CSS (`styles.css`) + CSS variables (no preprocessors)
-- **Icons:** Tabler Icons CDN v3.6.0 (`ti ti-*`)
-- **Fonts:** JetBrains Mono + Syne (Google Fonts)
-- **AI Integration:** Claude CLI, Anthropic SDK, GitHub Models (Azure)
-- **Build:** electron-builder → portable `.exe` x64
+| Layer | Technology |
+|---|---|
+| Shell | Electron (main process + preload) |
+| API | Express 4 on `localhost:3737` |
+| Renderer | React 19 + Vite 8 + TypeScript |
+| State | Zustand 5 |
+| Styles | Global CSS (`styles.css`) + CSS variables, no preprocessors |
+| Icons | Tabler Icons CDN v3.6.0 (`ti ti-*`) |
+| Fonts | JetBrains Mono + Syne (Google Fonts) |
+| AI | Claude CLI · Anthropic SDK · GitHub Models · Gemini CLI · Aider · Goose · DeepSeek · Groq · OpenRouter |
+| MCP | stdio · HTTP/SSE · process pool with refcounting · `$env:VAR` resolution |
+| Build | electron-builder → portable `.exe` x64 |
 
-## Critical Commands
+## Commands
 
 ```bash
-npm run dev      # Launch Electron + Vite dev server
-npm run build    # Build portable .exe in dist/
-npm run release  # Build and publish to GitHub Releases
+npm run dev      # Electron + Vite dev server (DevTools open)
+npm run build    # Portable .exe in dist/
+npm run release  # Build + publish to GitHub Releases
 ```
 
-### Environment Variables
-- `CDM_DATA_DIR`: Custom data directory (defaults to app root).
-- `GH_TOKEN`: Required for `npm run release`.
+Environment variables:
+- `CDM_DATA_DIR` — custom data directory (defaults to app root in dev)
+- `GH_TOKEN` — required for `npm run release`
+
+## Project Structure
+
+```
+src/
+  backend/
+    main.js           ← entry point, BrowserWindow, IPC handlers
+    server.js         ← all /api/* routes (Express)
+    agents.js         ← agent CRUD (.md with YAML frontmatter)
+    skills.js         ← skill CRUD (context blocks)
+    projects.js       ← project CRUD, agent sync
+    ai.js             ← multi-provider AI calls
+    mcp.js            ← MCP client: pool, CRUD, CLI sync
+    orchestrator.js   ← DAG execution engine + SSE streaming
+    workflows.js      ← orchestration CRUD (.agent-hub/*.json)
+    scripts-registry.js ← deterministic scripts (no AI)
+    git-checkpointer.js ← auto-commits per step
+    ops-ledger.js     ← append-only atomic operation log
+  renderer/
+    pages/            ← Dashboard, Projects, Agents, Chat, Orchestrations, Settings
+    components/       ← layout, ui, projects, agents, orchestrations
+    store/index.ts    ← Zustand global store
+    api.ts            ← req<T>() helper for HTTP calls
+    styles.css        ← single global CSS file
+```
+
+## Key Modules
+
+### Agents
+- Format: `.md` file with YAML frontmatter (`name`, `description`, `model`, `tools`, `system`, `mcp_servers?`).
+- Three levels: `global` (all projects), `section` (category), `project` (single project).
+- `mcp_servers` field (CSV): names of MCP servers activated when the agent runs.
+
+### Skills
+- Markdown blocks in `agents/skills/*.md`.
+- Injected into the agent system prompt at execution time for projects that have them assigned.
+- Code skills in English; documentation skills in Spanish.
+
+### MCP (Model Context Protocol)
+- Config in `config.json` → `mcpServers` (global) or `projects[i].mcpServers` (per project).
+- Transport: `stdio` (default) or `http`.
+- Env vars use `$env:VAR` syntax — actual credential values are never stored.
+- Process pool: `acquireServers()` / `releaseServers()` with 30 s idle timeout.
+- Auto-sync to providers: `.claude/settings.json`, `~/.gemini/settings.json`, CLI flags.
+- REST: `GET/POST/PUT/DELETE /api/mcp/servers`, `POST /api/mcp/servers/:name/test`.
+
+### DAG Orchestrations (v2.3.0)
+- Each node: `id`, `agentName`, `dependsOn[]`, `dataFlow`, `contextExtra`, `gateAfter?`, `scriptParams?`.
+- Engine computes topological levels and runs each level with `Promise.allSettled` (parallel).
+- Floating nodes (`isRoot: false`, `dependsOn: []`) are excluded from execution.
+- Scripts: `agentName` starting with `__script:` delegates to `scripts-registry.js` (no AI, zero tokens).
+- HITL gates: `gateAfter: true` pauses after the step. Actions: `approve`, `revise`, `cancel`.
+- Git checkpointing: automatic commit after each step when `project.gitEnabled === true`.
+- Budget guard: `__script:budget-guard` with `maxBudgetUSD` param cancels if cumulative cost exceeds limit.
+
+### Previous features (v2.1.0)
+- **Quality Score**: auto-calculated after each AI step. Score 0–100 with green/amber/red grade.
+- **Ops Ledger**: append-only file-operation log per orchestration. `GET /api/orchestrations/:id/ops`.
+- **Resume executions**: `POST /executions/:execId/resume` restores completed steps and continues.
 
 ## Development Conventions
 
-- **Language:** **Spanish in UI**, English in code, types, and documentation.
-- **State:** Centralized in Zustand (`src/renderer/store/index.ts`). Use `useState` only for strictly local component state.
-- **Styles:** Use `src/renderer/styles.css`. Do not use CSS Modules or preprocessors.
-- **Validation:** `onConfirm` in Modals should `throw` errors (not return) to keep the modal open on failure.
-- **Electron Safety:** Always use optional chaining for `window.api` (e.g., `api?.method?.()`) as the renderer might run in a browser context during development.
-- **API Communication (CRITICAL):**
-    - ALWAYS use the `req()` helper from `src/renderer/api.ts`.
-    - NEVER include the `/api` prefix in the path passed to `req()` (e.g., use `/projects` instead of `/api/projects`).
-    - If using native APIs (e.g., `EventSource`), ALWAYS use the exported `API_BASE` constant to construct the URL.
-- **No Optimistic Updates:** Always wait for server confirmation before updating local state.
-- **Testing:** Add/update tests in `tests/` after making changes. Use existing tests as a reference.
+- **Language:** Spanish in UI, English in code, types, and technical comments.
+- **State:** Centralized in Zustand (`store/index.ts`). Use `useState` only for strictly local state.
+- **Styles:** Single `styles.css`. No CSS Modules or preprocessors.
+- **No optimistic updates:** Always wait for server confirmation before updating local state.
+- **`window.api` optional chaining:** `api?.method?.()` — renderer may run outside Electron.
+- **API communication (CRITICAL):**
+  - ALWAYS use the `req()` helper from `src/renderer/api.ts`.
+  - NEVER include the `/api` prefix in the path passed to `req()`.
+  - For native APIs (e.g., `EventSource`), ALWAYS use the exported `API_BASE` constant.
+- **Modal `onConfirm`:** must `throw` (not return) to keep the modal open when validation fails.
 
-## Documentation & Updates
+## Version Checklist
 
-- **Documentation:** Always update `docs/backend.md` or `docs/frontend.md` when adding or modifying features.
-- **Version Updates:** When bumping version, update:
-    1. `package.json`
-    2. `DEFAULT_CONFIG` in `src/backend/config.js`
-    3. Version line at the top of this file and `CLAUDE.md`.
+When bumping version, update:
+1. `version` in `package.json`
+2. `version` in `DEFAULT_CONFIG` in `src/backend/config.js`
+3. Version line at the top of `CLAUDE.md` and `GEMINI.md`
+4. Commit + tag → `npm run release`
 
 ## Golden Rules
 
-1. **Self-Documenting Code:** Prioritize clear code over comments. Comments should explain "why", not "what".
-2. **Minimalism:** Avoid unnecessary abstractions, flags, or parameters.
-3. **User Priority:** Active conversation instructions take precedence over these guidelines.
-4. **Verification:** Always verify changes by running the project or relevant tests.
+1. **Self-documenting code** — comments explain *why*, not *what*.
+2. **Minimalism** — no abstraction, flag, or parameter beyond what the current requirement demands.
+3. **Active conversation takes priority** — user instructions in the current session override these guidelines.
+4. **Always update docs** — any new or modified feature must be reflected in `docs/backend.md` or `docs/frontend.md` before closing the task.

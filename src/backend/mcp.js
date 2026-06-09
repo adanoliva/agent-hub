@@ -542,6 +542,7 @@ const MCP_CATALOG = [
     id:          'fetch',
     label:       'Fetch',
     description: 'Realiza peticiones HTTP GET/POST desde el agente',
+    tip:         'Útil con proveedores API/GitHub que no tienen acceso nativo a la web. Si usas Claude Code CLI con la tool WebFetch activada, este servidor es redundante.',
     icon:        'ti-world',
     requiresCredentials: false,
     defaultConfig: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'] },
@@ -550,6 +551,7 @@ const MCP_CATALOG = [
     id:          'memory',
     label:       'Memory',
     description: 'Grafo de conocimiento persistente entre sesiones',
+    tip:         'El agente puede guardar y recuperar hechos entre ejecuciones distintas. Ideal para agentes que acumulan contexto a lo largo de un proyecto (decisiones tomadas, preferencias, entidades conocidas).',
     icon:        'ti-brain',
     requiresCredentials: false,
     defaultConfig: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'] },
@@ -558,6 +560,7 @@ const MCP_CATALOG = [
     id:          'sequential-thinking',
     label:       'Sequential Thinking',
     description: 'Razonamiento estructurado paso a paso',
+    tip:         'Fuerza al modelo a descomponer el problema antes de responder. Mejora la calidad en tareas de análisis, planificación o revisión de código a costa de más tokens y latencia.',
     icon:        'ti-list-numbers',
     requiresCredentials: false,
     defaultConfig: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequentialthinking'] },
@@ -567,6 +570,7 @@ const MCP_CATALOG = [
     id:          'github',
     label:       'GitHub',
     description: 'Lee y escribe issues, PRs, repos y code search',
+    tip:         'Permite al agente crear issues, comentar PRs, buscar código y gestionar repositorios. Requiere un Personal Access Token con permisos repo.',
     icon:        'ti-brand-github',
     requiresCredentials: true,
     envVars: [{ key: 'GITHUB_TOKEN', label: 'GitHub Token', placeholder: 'ghp_...' }],
@@ -581,6 +585,7 @@ const MCP_CATALOG = [
     id:          'jira',
     label:       'Jira + Confluence',
     description: 'Gestiona issues, sprints, boards y páginas de Confluence',
+    tip:         'El agente puede leer y crear tickets, mover issues entre estados y editar páginas de Confluence. Requiere URL de instancia, email y API Token de Atlassian.',
     icon:        'ti-brand-atlassian',
     requiresCredentials: true,
     envVars: [
@@ -603,6 +608,7 @@ const MCP_CATALOG = [
     id:          'postgres',
     label:       'PostgreSQL',
     description: 'Ejecuta queries y explora el esquema de una base de datos',
+    tip:         'El agente puede explorar tablas, ejecutar SELECTs y hacer cambios DML. Usa con cuidado en producción — recomendado con un usuario de solo lectura.',
     icon:        'ti-database',
     requiresCredentials: true,
     envVars: [{ key: 'POSTGRES_URL', label: 'Connection string', placeholder: 'postgresql://user:pass@host/db' }],
@@ -616,6 +622,7 @@ const MCP_CATALOG = [
     id:          'sqlite',
     label:       'SQLite',
     description: 'Consulta y modifica una base de datos SQLite local',
+    tip:         'Ideal para proyectos con base de datos local. El agente puede leer y escribir directamente en el archivo .db sin servidor intermediario.',
     icon:        'ti-database',
     requiresCredentials: true,
     envVars: [{ key: 'SQLITE_DB_PATH', label: 'Ruta al archivo .db', placeholder: 'C:/ruta/base.db' }],
@@ -629,6 +636,7 @@ const MCP_CATALOG = [
     id:          'brave-search',
     label:       'Brave Search',
     description: 'Búsqueda web en tiempo real con privacidad',
+    tip:         'Búsqueda web sin rastreo. Alternativa a WebSearch cuando necesitas resultados actualizados o el proveedor no tiene tool de búsqueda nativa. API gratuita hasta 2.000 queries/mes.',
     icon:        'ti-search',
     requiresCredentials: true,
     envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API Key', placeholder: 'BSA...' }],
@@ -643,6 +651,7 @@ const MCP_CATALOG = [
     id:          'slack',
     label:       'Slack',
     description: 'Lee y envía mensajes en canales y DMs',
+    tip:         'El agente puede leer el historial de canales, enviar mensajes y notificaciones. Útil para agentes de reporte que publican resultados automáticamente en un canal del equipo.',
     icon:        'ti-brand-slack',
     requiresCredentials: true,
     envVars: [
@@ -657,6 +666,34 @@ const MCP_CATALOG = [
     },
   },
 ];
+
+// ── Bootstrap default servers ─────────────────────────────────────────────────
+
+/**
+ * Adds the catalog entries without credentials to globalMcpServers if not already present.
+ * Called once at startup so users have working defaults out of the box.
+ */
+function bootstrapDefaultMcpServers() {
+  const cfg = readConfig();
+  cfg.globalMcpServers = cfg.globalMcpServers || {};
+
+  let changed = false;
+  for (const entry of MCP_CATALOG) {
+    if (entry.requiresCredentials) continue;
+    if (cfg.globalMcpServers[entry.id]) continue;
+
+    const d = entry.defaultConfig;
+    cfg.globalMcpServers[entry.id] = {
+      type:    d.transport === 'http' ? 'url' : 'stdio',
+      command: d.command,
+      args:    d.args || [],
+      env:     d.env || {},
+    };
+    changed = true;
+  }
+
+  if (changed) writeConfig(cfg);
+}
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
@@ -679,5 +716,6 @@ module.exports = {
   updateServer,
   removeServer,
   testServer,
+  bootstrapDefaultMcpServers,
   MCP_CATALOG,
 };

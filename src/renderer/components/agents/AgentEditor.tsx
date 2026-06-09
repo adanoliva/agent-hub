@@ -45,10 +45,10 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   useEffect(() => {
     if (node.level === 'project') {
       req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
-      const pid = node.projectId ?? '';
-      req<{ name: string }[]>('GET', `/mcp/servers${pid ? `?projectId=${pid}` : ''}`)
-        .then(setAllMcpServers).catch(() => {});
     }
+    const pid = node.projectId ?? '';
+    req<{ name: string }[]>('GET', `/mcp/servers${pid ? `?projectId=${pid}` : ''}`)
+      .then(setAllMcpServers).catch(() => {});
   }, [node.level, node.projectId]);
 
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
@@ -261,8 +261,8 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
           </div>
         )}
 
-        {/* MCP Servers — solo en agentes de proyecto */}
-        {node.level === 'project' && (allMcpServers.length > 0 || (a.mcp_servers || []).length > 0) && (
+        {/* MCP Servers */}
+        {(allMcpServers.length > 0 || (a.mcp_servers || []).length > 0) && (
           <div className="field">
             <label>Servidores MCP</label>
             <div className="agent-skills-selector">

@@ -10,6 +10,7 @@ const { createTray, destroyTray }                                = require('./tr
 const { readConfig, bootstrapDirectories, APP_DIR }              = require('./config');
 const { migrateAgentFiles, syncGlobalAgentsToClaudeDir }         = require('./agents');
 const agentsSync                                                  = require('./agents-sync');
+const { bootstrapDefaultMcpServers }                              = require('./mcp');
 
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
@@ -191,6 +192,7 @@ app.whenReady().then(async () => {
   // Bootstrap directories
   const cfg = readConfig();
   bootstrapDirectories(cfg);
+  bootstrapDefaultMcpServers();
 
   // Migrate existing agent files to current serialization format
   const migrated = migrateAgentFiles();

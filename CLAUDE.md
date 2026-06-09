@@ -10,7 +10,7 @@
 
 **Agent Hub** es una aplicación de escritorio **Electron + Express + React 19 + TypeScript** para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
-Permite organizar proyectos por categorías, crear y sincronizar agentes Claude Code (`.md` con frontmatter YAML), gestionar skills de contexto tecnológico, chatear con IA (CLI / Anthropic API / GitHub Copilot), generar contexto de proyecto, ejecutar agentes directamente sobre un proyecto y orquestar pipelines multiagente con scripts determinísticos, gates HITL, quality score automático y checkpointing git.
+Permite organizar proyectos por categorías, crear y sincronizar agentes IA (`.md` con frontmatter YAML), gestionar skills de contexto tecnológico, chatear con IA (CLI / Anthropic API / GitHub Copilot / Gemini…), generar contexto de proyecto, ejecutar agentes directamente sobre un proyecto, orquestar pipelines multiagente con scripts determinísticos, gates HITL, quality score automático y checkpointing git, e integrar herramientas externas vía servidores MCP (stdio y HTTP/SSE).
 
 La documentación técnica completa está en [`docs/backend.md`](docs/backend.md) y [`docs/frontend.md`](docs/frontend.md).
 
@@ -27,7 +27,8 @@ La documentación técnica completa está en [`docs/backend.md`](docs/backend.md
 | Estilos | CSS global (`styles.css`) + variables CSS, sin preprocesadores |
 | Iconos | Tabler Icons CDN v3.6.0 (`ti ti-*`) |
 | Fuentes | JetBrains Mono + Syne (Google Fonts) |
-| IA | Claude CLI · Anthropic SDK · GitHub Models (Azure) |
+| IA | Claude CLI · Anthropic SDK · GitHub Models · Gemini CLI · Aider · Goose · DeepSeek · Groq · OpenRouter |
+| MCP | stdio · HTTP/SSE · pool con refcounting · `$env:VAR` |
 | Build | electron-builder → portable `.exe` x64 |
 
 ---

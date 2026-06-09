@@ -236,6 +236,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <a class="nav-item" href="#quality-score"><i class="ti ti-chart-bar" aria-hidden="true"></i> Quality Score</a>
   <a class="nav-item" href="#git-checkpointer"><i class="ti ti-git-commit" aria-hidden="true"></i> Git Checkpointer</a>
   <a class="nav-item" href="#ops-ledger"><i class="ti ti-list-check" aria-hidden="true"></i> Ops Ledger</a>
+  <a class="nav-item" href="#mcp"><i class="ti ti-plug-connected" aria-hidden="true"></i> MCP — Herramientas externas</a>
   <a class="nav-item" href="#ajustes"><i class="ti ti-settings" aria-hidden="true"></i> Vista Ajustes</a>
   <a class="nav-item" href="#jerarquia"><i class="ti ti-sitemap" aria-hidden="true"></i> Jerarquía de niveles</a>
 
@@ -271,7 +272,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <div class="hero" id="inicio">
     <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.3.0</div>
     <h1 class="hero-title">Agent <span>Hub</span></h1>
-    <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Incluye orquestaciones DAG con ejecución paralela, scripts determinísticos, gates HITL, skills por agente y mucho más. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
+    <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Incluye orquestaciones DAG con ejecución paralela, scripts determinísticos, gates HITL, skills por agente, servidores MCP y mucho más. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
     <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
   </div>
 
@@ -1760,18 +1761,162 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <div class="sep"></div>
 
   <!-- ══════════════════════ -->
+  <!-- MCP                    -->
+  <!-- ══════════════════════ -->
+  <div class="section" id="mcp">
+    <div class="section-badge">La aplicación</div>
+    <h2 class="section-title">MCP — <span>Herramientas externas</span></h2>
+    <p class="section-intro"><strong>Model Context Protocol (MCP)</strong> es el estándar de Anthropic para conectar agentes de IA con herramientas y fuentes de datos externas mediante JSON-RPC 2.0. Con MCP, cualquier agente de Agent Hub puede usar herramientas de GitHub, Linear, PostgreSQL, Slack y decenas de servicios más — sin tocar el código de la app. Se configura desde <strong>Ajustes → MCP</strong>.</p>
+
+    <h4>Por qué usar MCP</h4>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-icon"><i class="ti ti-plug-connected" style="color:var(--accent)"></i></div>
+        <div class="card-title">Herramientas tipadas</div>
+        <div class="card-body">El agente llama a <code>create_issue</code>, <code>list_prs</code> o <code>query</code> con parámetros validados — no improvisa sintaxis de bash.</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-icon"><i class="ti ti-puzzle" style="color:var(--green)"></i></div>
+        <div class="card-title">Sin cambios de código</div>
+        <div class="card-body">Añades un servidor MCP desde la UI y está disponible para todos los agentes. Sin reiniciar, sin tocar ficheros de configuración manualmente.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-icon"><i class="ti ti-world" style="color:var(--blue)"></i></div>
+        <div class="card-title">Ecosistema creciente</div>
+        <div class="card-body">GitHub, Linear, Notion, Jira, Slack, PostgreSQL, SQLite, Brave Search… Decenas de servidores MCP listos para usar.</div>
+      </div>
+    </div>
+
+    <h4>Servidores sin credenciales (preinstalados)</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Tres servidores se activan automáticamente en el primer arranque de la app. No requieren configuración:
+    </p>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-title"><i class="ti ti-world-www" style="margin-right:6px;color:var(--accent)"></i>fetch</div>
+        <div class="card-body">Descarga el contenido de cualquier URL y lo devuelve al agente. Útil con proveedores API/GitHub que no tienen acceso nativo a la web.</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-title"><i class="ti ti-database" style="margin-right:6px;color:var(--green)"></i>memory</div>
+        <div class="card-body">Almacenamiento clave-valor persistente entre ejecuciones distintas del mismo agente. El agente puede «recordar» hechos entre sesiones.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title"><i class="ti ti-brain" style="margin-right:6px;color:var(--blue)"></i>sequential-thinking</div>
+        <div class="card-body">Fuerza al modelo a descomponer el problema antes de responder. Mejora la calidad en tareas analíticas complejas.</div>
+      </div>
+    </div>
+
+    <h4>Catálogo de servidores con credenciales</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Desde <strong>Ajustes → MCP → Catálogo → Con credenciales</strong> puedes añadir estos servidores rellenando solo tus credenciales — el comando, los args y la estructura de variables de entorno ya están preconfigurados:
+    </p>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card"><div class="card-title"><i class="ti ti-brand-github" style="margin-right:6px"></i>github</div><div class="card-body">Repositorios, issues, PRs, ramas y releases de GitHub.</div></div>
+      <div class="card"><div class="card-title"><i class="ti ti-layout-kanban" style="margin-right:6px"></i>jira</div><div class="card-body">Proyectos, tickets y sprints de Jira Cloud.</div></div>
+      <div class="card"><div class="card-title"><i class="ti ti-database" style="margin-right:6px"></i>postgres</div><div class="card-body">Consultas SQL sobre una base de datos PostgreSQL.</div></div>
+      <div class="card"><div class="card-title"><i class="ti ti-database" style="margin-right:6px"></i>sqlite</div><div class="card-body">Consultas sobre una base de datos SQLite local.</div></div>
+      <div class="card"><div class="card-title"><i class="ti ti-search" style="margin-right:6px"></i>brave-search</div><div class="card-body">Búsqueda web y de noticias en tiempo real vía Brave Search API.</div></div>
+      <div class="card"><div class="card-title"><i class="ti ti-brand-slack" style="margin-right:6px"></i>slack</div><div class="card-body">Envío y lectura de mensajes en canales de Slack.</div></div>
+    </div>
+
+    <h4>Variables de entorno y credenciales</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Agent Hub usa el formato <code>$env:NOMBRE_VARIABLE</code> para referencias a variables de entorno. Los valores reales <strong>nunca se almacenan</strong> en <code>config.json</code> — solo la referencia. Se resuelven en tiempo de ejecución desde el entorno del sistema operativo.
+    </p>
+    <div class="code-block" style="margin-bottom:12px">
+      <span class="dim"># En el campo Variables de entorno del servidor:</span><br>
+      <span class="hi">GITHUB_TOKEN</span>=<span class="acc">$env:GITHUB_TOKEN</span><br>
+      <span class="dim"># Agent Hub sustituye $env:GITHUB_TOKEN por el valor real al arrancar el servidor</span>
+    </div>
+    <div class="callout warn">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Reinicia la app tras definir variables de entorno</div>
+        <div class="callout-text">Las variables de entorno del sistema operativo se leen cuando Electron arranca. Si defines una variable mientras la app ya está abierta, debes reiniciar Agent Hub para que el proceso la detecte.</div>
+      </div>
+    </div>
+
+    <h4>Servidores globales vs. de proyecto</h4>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-title">Globales</div>
+        <div class="card-body">Disponibles en todos los proyectos y agentes. Ideales para herramientas transversales: <code>fetch</code>, <code>memory</code>, tu instancia de Linear o Jira corporativo.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">De proyecto</div>
+        <div class="card-body">Solo para ese proyecto. Útiles cuando distintos proyectos necesitan el mismo tipo de servidor con credenciales diferentes: p.ej. dos instancias de <code>postgres</code> apuntando a BDs distintas.</div>
+      </div>
+    </div>
+
+    <h4>Asociar un servidor MCP a un agente</h4>
+    <div class="steps" style="margin-bottom:20px">
+      <div class="step">
+        <div class="step-num accent">1</div>
+        <div class="step-body">
+          <div class="step-title">Configura el servidor en Ajustes → MCP</div>
+          <div class="step-desc">Añade el servidor desde el catálogo o manualmente. Prueba la conexión con el botón <strong>Probar conexión</strong> — si la respuesta muestra las herramientas disponibles, el servidor está listo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">2</div>
+        <div class="step-body">
+          <div class="step-title">Abre el editor del agente</div>
+          <div class="step-desc">En la sección <strong>Servidores MCP</strong>, usa el selector para añadir los servidores que el agente puede usar. Se guardan como chips eliminables. Disponible en agentes de cualquier nivel.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num accent">3</div>
+        <div class="step-body">
+          <div class="step-title">El agente tiene acceso a las herramientas</div>
+          <div class="step-desc">Al ejecutar el agente (standalone o en orquestación), Agent Hub arranca los procesos MCP necesarios antes del primer turno. El agente llama a las herramientas MCP igual que a las herramientas nativas. El badge <i class="ti ti-plug-connected" style="color:var(--green);font-size:12px"></i> en la card del agente confirma que tiene servidores MCP asociados.</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Comportamiento por proveedor</h4>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card accent-l">
+        <div class="card-title">Proveedor CLI nativo (<code>claude</code>)</div>
+        <div class="card-body">Agent Hub escribe <code>{proyecto}/.claude/settings.json</code> con los servidores MCP del agente antes de cada spawn. El CLI los activa automáticamente — sin intervención adicional.</div>
+      </div>
+      <div class="card blue-l">
+        <div class="card-title">Proveedores API / GitHub / Custom</div>
+        <div class="card-body">Las herramientas MCP se inyectan en el system prompt con su formato de invocación. El subsistema CLI multi-turno intercepta las llamadas y las ejecuta. Funciona con todos los modelos de alta capacidad.</div>
+      </div>
+      <div class="card green-l">
+        <div class="card-title"><code>gemini-cli</code></div>
+        <div class="card-body">Agent Hub sincroniza la configuración en <code>~/.gemini/settings.json</code> con el mismo formato que Claude CLI.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">En orquestaciones</div>
+        <div class="card-body">El orquestador adquiere los procesos MCP antes de ejecutar cada paso y los libera al terminar. Un pool de 30 s evita el cold start entre pasos consecutivos que usen los mismos servidores.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <i class="ti ti-file-description" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Guía completa de MCP</div>
+        <div class="callout-text">Para una referencia detallada con ejemplos de cada servidor, tipos de transporte, troubleshooting y configuración avanzada, consulta <code>docs/mcp-guide.md</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ══════════════════════ -->
   <!-- Vista Ajustes          -->
   <!-- ══════════════════════ -->
   <div class="section" id="ajustes">
     <div class="section-badge">La aplicación</div>
     <h2 class="section-title">Vista <span>Ajustes</span></h2>
-    <p class="section-intro">La pantalla de Ajustes tiene cuatro secciones: General, Categorías, Directorio de Agentes y Cómo usar los agentes. El toggle de <strong>tema claro/oscuro</strong> se muestra directamente en el Topbar de esta vista.</p>
+    <p class="section-intro">La pantalla de Ajustes tiene cinco secciones: General, Categorías, Directorio de Agentes, MCP y Cómo usar los agentes. El toggle de <strong>tema claro/oscuro</strong> se muestra directamente en el Topbar de esta vista.</p>
 
     <div class="screenshot">
       <div class="screenshot-placeholder">
         <i class="ti ti-photo" aria-hidden="true"></i>
         <span>screenshots/11-settings.png</span>
-        <em>Vista de ajustes con las cuatro secciones</em>
+        <em>Vista de ajustes con las cinco secciones (General, Categorías, Directorio, MCP, Cómo usar)</em>
       </div>
     </div>
 
@@ -1844,6 +1989,19 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="card-body">
         Importa un único agente desde cualquier URL que devuelva un fichero <code>.md</code> con frontmatter válido. Útil para incorporar un agente concreto sin añadir todo un repositorio. Consulta la sección <a href="#importar-externo" style="color:var(--accent)">Importar agente externo</a> para el flujo completo.
       </div>
+    </div>
+
+    <h4>Sección MCP</h4>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
+      Gestión completa de servidores MCP (Model Context Protocol). Ver sección <a href="#mcp" style="color:var(--accent)">MCP — Herramientas externas</a> para el detalle completo. En resumen, esta sección contiene:
+    </p>
+    <div class="card accent-l" style="margin-bottom:10px">
+      <div class="card-title"><i class="ti ti-grid-dots" style="margin-right:6px;color:var(--accent)"></i>Catálogo</div>
+      <div class="card-body">Servidores MCP predefinidos divididos en dos tabs: <strong>Sin credenciales</strong> (fetch, memory, sequential-thinking — auto-instalados) y <strong>Con credenciales</strong> (GitHub, Jira, PostgreSQL, Slack…). Cada card tiene un icono <i class="ti ti-info-circle" style="font-size:11px"></i> con tooltip explicando para qué sirve el servidor.</div>
+    </div>
+    <div class="card blue-l" style="margin-bottom:10px">
+      <div class="card-title"><i class="ti ti-list" style="margin-right:6px;color:var(--blue)"></i>Mis servidores</div>
+      <div class="card-body">Lista de servidores configurados, dividida por ámbito (Global / Proyecto). Botón <strong>Añadir manualmente</strong> para servidores fuera del catálogo. El modal de añadir/editar incluye nombre, tipo (stdio / url), comando, args, variables de entorno, descripción (aparece como tooltip en la lista) y botón <strong>Probar conexión</strong> que muestra las herramientas descubiertas si la conexión tiene éxito.</div>
     </div>
 
     <h4>Sección Cómo usar los agentes</h4>

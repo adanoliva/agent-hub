@@ -2097,12 +2097,6 @@ app.get('/api/browser/installed', (req, res) => {
   }
 });
 
-// ── Catch-all ─────────────────────────────────────────────────────────────────
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(RENDERER_DIR, 'index.html'));
-});
-
 // ── MCP endpoints ─────────────────────────────────────────────────────────────
 
 const mcp = require('./mcp');
@@ -2170,6 +2164,12 @@ app.get('/api/mcp/status', (req, res) => {
 // GET /api/mcp/catalog
 app.get('/api/mcp/catalog', (req, res) => {
   res.json(mcp.MCP_CATALOG);
+});
+
+// ── Catch-all ─────────────────────────────────────────────────────────────────
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(RENDERER_DIR, 'index.html'));
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

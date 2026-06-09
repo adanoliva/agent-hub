@@ -4,9 +4,10 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 
 ## Qué hace
 
-- **Agentes**: crea, edita y sincroniza agentes Claude Code (archivos `.md` con frontmatter YAML) organizados en tres niveles: global → categoría → proyecto.
+- **Agentes**: crea, edita y sincroniza agentes IA (archivos `.md` con frontmatter YAML) organizados en tres niveles: global → categoría → proyecto.
 - **Skills**: bloques de contexto tecnológico (React, PostgreSQL, Unity…) que se inyectan automáticamente en el system prompt del agente al ejecutar. Generables con IA en ES/EN.
-- **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`CLAUDE.md` / `copilot-instructions.md`), sincronización de agentes, skills asignadas y ejecución directa.
+- **MCP**: integración nativa con servidores Model Context Protocol (stdio y HTTP/SSE). Pool de procesos con refcounting, catálogo de servidores predefinidos, variables `$env:VAR` resueltas en runtime, configuración global y por proyecto.
+- **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`CLAUDE.md` / `copilot-instructions.md` / `GEMINI.md`…), sincronización de agentes, skills asignadas y ejecución directa.
 - **Chat**: conversación multi-turno con agentes activos, soporte `@mention`, historial por proyecto.
 - **Orquestaciones DAG**: flujos multiagente en grafo dirigido acíclico. Los nodos sin dependencias entre sí se ejecutan **en paralelo** por niveles topológicos. Incluye canvas 2D interactivo, **scripts determinísticos** (sin IA), **gates HITL**, **quality score** automático, **git checkpointing**, **ops ledger** y reanudación de ejecuciones interrumpidas.
 - **Directorio de agentes**: sincronización automática (agentes + skills) desde un repositorio GitHub externo con resolución de conflictos.
@@ -20,7 +21,8 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 | API | Express 4 en `localhost:3737` |
 | Renderer | React 19 + Vite + TypeScript |
 | Estado | Zustand 5 |
-| IA | Claude CLI · Anthropic SDK · GitHub Models · DeepSeek · Groq · OpenRouter · Perplexity |
+| IA | Claude CLI · Anthropic SDK · GitHub Models · DeepSeek · Groq · OpenRouter · Perplexity · Gemini CLI · Aider · Goose |
+| MCP | stdio · HTTP/SSE · pool con refcounting · catálogo de servidores |
 | Build | electron-builder → portable `.exe` x64 |
 
 ## Requisitos
@@ -54,6 +56,7 @@ npm run dev
 
 - [Backend — API, módulos Node.js, orquestaciones](docs/backend.md)
 - [Frontend — componentes React, store, estilos](docs/frontend.md)
+- [Guía MCP — configuración y uso de servidores MCP](docs/mcp-guide.md)
 
 ## Proveedores de IA soportados
 

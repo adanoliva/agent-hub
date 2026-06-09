@@ -11,12 +11,13 @@ import type { Agent, AgentDirectoryStatus, AIProvider, Category, Config, CustomA
 type Tab = 'general' | 'cats' | 'ext-agents' | 'mcp';
 
 interface McpServerConfig {
-  type:     'stdio' | 'url';
-  command?: string;
-  args?:    string[];
-  env?:     Record<string, string>;
-  url?:     string;
-  headers?: Record<string, string>;
+  type:         'stdio' | 'url';
+  command?:     string;
+  args?:        string[];
+  env?:         Record<string, string>;
+  url?:         string;
+  headers?:     Record<string, string>;
+  description?: string;
 }
 interface McpServerEntry { name: string; scope: 'global' | 'project'; projectId?: string; config: McpServerConfig; }
 
@@ -1084,6 +1085,159 @@ export function Settings() {
           </>
         )}
 
+      {/* ── Tab: MCP ── */}
+      {tab === 'mcp' && (
+        <>
+        {/* ① Intro */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 24 }}>
+          <i className="ti ti-plug-connected" style={{ fontSize: 20, color: 'var(--accent)', marginTop: 1, flexShrink: 0 }} />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text0)', marginBottom: 4 }}>Model Context Protocol</div>
+            <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+              Conecta los agentes a herramientas externas (GitHub, Jira, bases de datos…) sin cambiar su código.
+              Añade un servidor desde el catálogo, luego decláralo en el agente con <code style={{ background: 'var(--bg3)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>mcp_servers: nombre</code>.
+            </div>
+          </div>
+        </div>
+
+        {/* ② Catálogo */}
+        {mcpCatalog.length > 0 && (
+          <div className="settings-section" style={{ marginBottom: 24 }}>
+            <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span>Catálogo</span>
+              <div className="lang-toggle">
+                {(['available', 'credentials'] as const).map(s => (
+                  <button
+                    key={s}
+                    className={`lang-btn${mcpCatalogSection === s ? ' active' : ''}`}
+                    onClick={() => setMcpCatalogSection(s)}
+                  >
+                    {s === 'available' ? 'Sin credenciales' : 'Con credenciales'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+              {mcpCatalog.filter(c => mcpCatalogSection === 'available' ? !c.requiresCredentials : c.requiresCredentials).map((entry: any) => {
+                const alreadyAdded = mcpServers.some(s => s.name === entry.id);
+                return (
+                  <div key={entry.id} style={{ position: 'relative', background: 'var(--bg2)', border: `1px solid ${alreadyAdded ? 'var(--green)' : 'var(--border)'}`, borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {entry.tip && (
+                      <span className="info-icon" style={{ position: 'absolute', top: 12, right: 12 }}>
+                        <i className="ti ti-info-circle" />
+                        <span className="tip">{entry.tip}</span>
+                      </span>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: alreadyAdded ? 0.65 : 1, paddingRight: entry.tip ? 20 : 0 }}>
+                      <i className={`ti ${entry.icon}`} style={{ color: alreadyAdded ? 'var(--green)' : 'var(--accent)', fontSize: 16 }} />
+                      <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text0)', flex: 1 }}>{entry.label}</span>
+                      {alreadyAdded
+                        ? <span style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--mono)' }}><i className="ti ti-check" /> activo</span>
+                        : <button className="btn sm ghost" style={{ padding: '3px 8px' }} onClick={() => {
+                            const cfg = entry.defaultConfig;
+                            setMcpForm({
+                              name: entry.id, scope: 'global',
+                              config: { type: cfg.transport === 'http' ? 'url' : 'stdio', command: cfg.command, args: cfg.args, env: cfg.env, url: cfg.url } as any,
+                              argsRaw: (cfg.args || []).join('\n'),
+                              envRaw: Object.entries(cfg.env || {}).map(([k, v]) => `${k}=${v}`).join('\n'),
+                              headersRaw: '',
+                            } as any);
+                            setMcpTestResult(null);
+                          }}><i className="ti ti-plus" /> Añadir</button>
+                      }
+                    </div>
+                    <p style={{ margin: 0, fontSize: 11, color: 'var(--text2)', lineHeight: 1.5, opacity: alreadyAdded ? 0.65 : 1 }}>{entry.description}</p>
+                    {entry.requiresCredentials && entry.envVars?.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                        {entry.envVars.map((v: any) => (
+                          <span key={v.key} style={{ fontSize: 9, fontFamily: 'var(--mono)', background: 'var(--bg3)', color: 'var(--text3)', padding: '1px 5px', borderRadius: 3 }}>{v.key}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ③ Mis servidores */}
+        <div className="settings-section">
+          <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Mis servidores</span>
+              {/* scope toggle */}
+              <div className="lang-toggle" style={{ marginLeft: 8 }}>
+                <button className={`lang-btn${!mcpProjectId ? ' active' : ''}`} onClick={() => setMcpProjectId('')}>Global</button>
+                <button className={`lang-btn${mcpProjectId ? ' active' : ''}`} onClick={() => { if (!mcpProjectId && config?.projects?.length) setMcpProjectId(config.projects[0].id); }}>Proyecto</button>
+              </div>
+              {mcpProjectId && (
+                <select value={mcpProjectId} onChange={e => setMcpProjectId(e.target.value)} style={{ fontSize: 12, marginLeft: 4 }}>
+                  {(config?.projects ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+            </div>
+            <button
+              className="btn sm primary"
+              onClick={() => {
+                const scope = mcpProjectId ? 'project' : 'global';
+                setMcpForm({ scope, ...(mcpProjectId ? { projectId: mcpProjectId } : {}), config: { type: 'stdio' } as any, argsRaw: '', envRaw: '', headersRaw: '' } as any);
+                setMcpTestResult(null);
+              }}
+            >
+              <i className="ti ti-plus" /> Añadir manualmente
+            </button>
+          </div>
+
+          {mcpLoading && <div style={{ color: 'var(--text2)', fontSize: 12 }}>Cargando…</div>}
+
+          {!mcpLoading && mcpServers.filter(s => mcpProjectId ? s.scope === 'project' : s.scope === 'global').length === 0 && (
+            <div style={{ color: 'var(--text3)', fontSize: 12, padding: '28px 0', textAlign: 'center' }}>
+              <i className="ti ti-plug-connected-x" style={{ fontSize: 22, display: 'block', marginBottom: 8 }} />
+              {mcpProjectId ? 'Sin servidores específicos para este proyecto' : 'Ningún servidor global configurado — añade uno desde el catálogo'}
+            </div>
+          )}
+
+          {!mcpLoading && mcpServers.filter(s => mcpProjectId ? s.scope === 'project' : s.scope === 'global').map(srv => {
+            const catalogEntry = mcpCatalog.find((c: any) => c.id === srv.name);
+            return (
+              <div key={srv.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 8, border: '1px solid var(--border)' }}>
+                <i className={`ti ${catalogEntry?.icon || 'ti-plug-connected'}`} style={{ color: 'var(--green)', fontSize: 16, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text0)' }}>
+                    {srv.name}{catalogEntry && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{catalogEntry.label}</span>}
+                    {(srv.config.description || catalogEntry?.tip) && (
+                      <span className="info-icon" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+                        <i className="ti ti-info-circle" />
+                        <span className="tip">{srv.config.description || catalogEntry?.tip}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text2)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {srv.config.type === 'url' ? srv.config.url : `${srv.config.command} ${(srv.config.args || []).join(' ')}`}
+                  </div>
+                </div>
+                <span style={{ fontSize: 10, background: 'var(--bg3)', color: 'var(--text2)', padding: '2px 7px', borderRadius: 4, border: '1px solid var(--border2)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+                  {srv.config.type}
+                </span>
+                <button className="btn sm ghost" onClick={() => {
+                  const argsRaw    = (srv.config.args || []).join('\n');
+                  const envRaw     = Object.entries(srv.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                  const headersRaw = Object.entries(srv.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+                  setMcpForm({ ...srv, argsRaw, envRaw, headersRaw, description: srv.config.description || '' }); setMcpTestResult(null);
+                }}><i className="ti ti-edit" /></button>
+                <button className="btn sm ghost" style={{ color: 'var(--coral)' }} onClick={async () => {
+                  const qs = mcpProjectId ? `?scope=project&projectId=${mcpProjectId}` : '?scope=global';
+                  await req('DELETE', `/mcp/servers/${srv.name}${qs}`);
+                  setMcpServers(prev => prev.filter(s => s.name !== srv.name || s.scope !== srv.scope));
+                }}><i className="ti ti-trash" /></button>
+              </div>
+            );
+          })}
+        </div>
+        </>
+      )}
+
       </div>
 
       {/* ── Modal: Nueva categoría ── */}
@@ -1158,145 +1312,6 @@ export function Settings() {
         </Modal>
       )}
 
-      {/* ── Tab: MCP ── */}
-      {tab === 'mcp' && (
-        <>
-        {/* ① Intro */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 24 }}>
-          <i className="ti ti-plug-connected" style={{ fontSize: 20, color: 'var(--accent)', marginTop: 1, flexShrink: 0 }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text0)', marginBottom: 4 }}>Model Context Protocol</div>
-            <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
-              Conecta los agentes a herramientas externas (GitHub, Jira, bases de datos…) sin cambiar su código.
-              Añade un servidor desde el catálogo, luego decláralo en el agente con <code style={{ background: 'var(--bg3)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>mcp_servers: nombre</code>.
-            </div>
-          </div>
-        </div>
-
-        {/* ② Catálogo */}
-        {mcpCatalog.length > 0 && (
-          <div className="settings-section" style={{ marginBottom: 24 }}>
-            <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span>Catálogo</span>
-              <div className="lang-toggle">
-                {(['available', 'credentials'] as const).map(s => (
-                  <button
-                    key={s}
-                    className={`lang-btn${mcpCatalogSection === s ? ' active' : ''}`}
-                    onClick={() => setMcpCatalogSection(s)}
-                  >
-                    {s === 'available' ? 'Sin credenciales' : 'Con credenciales'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-              {mcpCatalog.filter(c => mcpCatalogSection === 'available' ? !c.requiresCredentials : c.requiresCredentials).map((entry: any) => {
-                const alreadyAdded = mcpServers.some(s => s.name === entry.id);
-                return (
-                  <div key={entry.id} style={{ background: 'var(--bg2)', border: `1px solid ${alreadyAdded ? 'var(--green)' : 'var(--border)'}`, borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6, opacity: alreadyAdded ? 0.75 : 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <i className={`ti ${entry.icon}`} style={{ color: alreadyAdded ? 'var(--green)' : 'var(--accent)', fontSize: 16 }} />
-                      <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text0)', flex: 1 }}>{entry.label}</span>
-                      {alreadyAdded
-                        ? <span style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--mono)' }}><i className="ti ti-check" /> activo</span>
-                        : <button className="btn sm ghost" style={{ padding: '3px 8px' }} onClick={() => {
-                            const cfg = entry.defaultConfig;
-                            setMcpForm({
-                              name: entry.id, scope: 'global',
-                              config: { type: cfg.transport === 'http' ? 'url' : 'stdio', command: cfg.command, args: cfg.args, env: cfg.env, url: cfg.url } as any,
-                              argsRaw: (cfg.args || []).join('\n'),
-                              envRaw: Object.entries(cfg.env || {}).map(([k, v]) => `${k}=${v}`).join('\n'),
-                              headersRaw: '',
-                            } as any);
-                            setMcpTestResult(null);
-                          }}><i className="ti ti-plus" /> Añadir</button>
-                      }
-                    </div>
-                    <p style={{ margin: 0, fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{entry.description}</p>
-                    {entry.requiresCredentials && entry.envVars?.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                        {entry.envVars.map((v: any) => (
-                          <span key={v.key} style={{ fontSize: 9, fontFamily: 'var(--mono)', background: 'var(--bg3)', color: 'var(--text3)', padding: '1px 5px', borderRadius: 3 }}>{v.key}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ③ Mis servidores */}
-        <div className="settings-section">
-          <div className="settings-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Mis servidores</span>
-              {/* scope toggle */}
-              <div className="lang-toggle" style={{ marginLeft: 8 }}>
-                <button className={`lang-btn${!mcpProjectId ? ' active' : ''}`} onClick={() => setMcpProjectId('')}>Global</button>
-                <button className={`lang-btn${mcpProjectId ? ' active' : ''}`} onClick={() => { if (!mcpProjectId && config?.projects?.length) setMcpProjectId(config.projects[0].id); }}>Proyecto</button>
-              </div>
-              {mcpProjectId && (
-                <select value={mcpProjectId} onChange={e => setMcpProjectId(e.target.value)} style={{ fontSize: 12, marginLeft: 4 }}>
-                  {(config?.projects ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              )}
-            </div>
-            <button
-              className="btn sm primary"
-              onClick={() => {
-                const scope = mcpProjectId ? 'project' : 'global';
-                setMcpForm({ scope, ...(mcpProjectId ? { projectId: mcpProjectId } : {}), config: { type: 'stdio' } as any, argsRaw: '', envRaw: '', headersRaw: '' } as any);
-                setMcpTestResult(null);
-              }}
-            >
-              <i className="ti ti-plus" /> Añadir manualmente
-            </button>
-          </div>
-
-          {mcpLoading && <div style={{ color: 'var(--text2)', fontSize: 12 }}>Cargando…</div>}
-
-          {!mcpLoading && mcpServers.filter(s => mcpProjectId ? s.scope === 'project' : s.scope === 'global').length === 0 && (
-            <div style={{ color: 'var(--text3)', fontSize: 12, padding: '28px 0', textAlign: 'center' }}>
-              <i className="ti ti-plug-connected-x" style={{ fontSize: 22, display: 'block', marginBottom: 8 }} />
-              {mcpProjectId ? 'Sin servidores específicos para este proyecto' : 'Ningún servidor global configurado — añade uno desde el catálogo'}
-            </div>
-          )}
-
-          {!mcpLoading && mcpServers.filter(s => mcpProjectId ? s.scope === 'project' : s.scope === 'global').map(srv => {
-            const catalogEntry = mcpCatalog.find((c: any) => c.id === srv.name);
-            return (
-              <div key={srv.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 8, border: '1px solid var(--border)' }}>
-                <i className={`ti ${catalogEntry?.icon || 'ti-plug-connected'}`} style={{ color: 'var(--green)', fontSize: 16, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text0)' }}>{srv.name}{catalogEntry && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{catalogEntry.label}</span>}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text2)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {srv.config.type === 'url' ? srv.config.url : `${srv.config.command} ${(srv.config.args || []).join(' ')}`}
-                  </div>
-                </div>
-                <span style={{ fontSize: 10, background: 'var(--bg3)', color: 'var(--text2)', padding: '2px 7px', borderRadius: 4, border: '1px solid var(--border2)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
-                  {srv.config.type}
-                </span>
-                <button className="btn sm ghost" onClick={() => {
-                  const argsRaw    = (srv.config.args || []).join('\n');
-                  const envRaw     = Object.entries(srv.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n');
-                  const headersRaw = Object.entries(srv.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n');
-                  setMcpForm({ ...srv, argsRaw, envRaw, headersRaw }); setMcpTestResult(null);
-                }}><i className="ti ti-edit" /></button>
-                <button className="btn sm ghost" style={{ color: 'var(--coral)' }} onClick={async () => {
-                  const qs = mcpProjectId ? `?scope=project&projectId=${mcpProjectId}` : '?scope=global';
-                  await req('DELETE', `/mcp/servers/${srv.name}${qs}`);
-                  setMcpServers(prev => prev.filter(s => s.name !== srv.name || s.scope !== srv.scope));
-                }}><i className="ti ti-trash" /></button>
-              </div>
-            );
-          })}
-        </div>
-        </>
-      )}
-
       {/* ── Modal: MCP Server Form ── */}
       {mcpForm && (
         <Modal
@@ -1312,9 +1327,10 @@ export function Settings() {
             const env     = Object.fromEntries((envRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
             const headers = Object.fromEntries((headersRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
 
+            const description = (mcpForm as any).description?.trim() || undefined;
             const finalConfig: McpServerConfig = cfg_.type === 'url'
-              ? { type: 'url', url: cfg_.url, headers }
-              : { type: 'stdio', command: cfg_.command, args, env };
+              ? { type: 'url', url: cfg_.url, headers, ...(description ? { description } : {}) }
+              : { type: 'stdio', command: cfg_.command, args, env, ...(description ? { description } : {}) };
 
             const isEdit = mcpServers.some(s => s.name === name && s.scope === scope);
             if (isEdit) await req('PUT', `/mcp/servers/${name}`, { scope, config: finalConfig });
@@ -1373,6 +1389,15 @@ export function Settings() {
                 </div>
               </>
             )}
+
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Descripción <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(opcional — aparece como tooltip)</span></label>
+              <input
+                value={(mcpForm as any).description || ''}
+                placeholder="ej: Acceso a repositorios y PRs de GitHub"
+                onChange={e => setMcpForm({ ...mcpForm, description: e.target.value } as any)}
+              />
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
               <button
