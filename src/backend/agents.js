@@ -26,6 +26,42 @@ const { DEFAULT_AGENTS } = require('./defaults');
 const { adaptAgentForProvider, adaptFromGitHub, PROJECT_PROVIDERS } = require('./agent-adapters');
 const { adaptSystemPromptForProvider } = require('./ai');
 
+// Canonical tool names — lowercase key → canonical form
+const TOOL_CANONICAL = {
+  bash:              'Bash',
+  read:              'Read',
+  write:             'Write',
+  edit:              'Edit',
+  multiedit:         'MultiEdit',
+  grep:              'Grep',
+  webfetch:          'WebFetch',
+  websearch:         'WebSearch',
+  todoread:          'TodoRead',
+  todowrite:         'TodoWrite',
+  browser_open:      'browser_open',
+  browser_navigate:  'browser_navigate',
+  browser_extract:   'browser_extract',
+  browser_close:     'browser_close',
+  // GitHub Copilot names kept for round-trip compatibility
+  codebase:              'codebase',
+  terminallastcommand:   'terminalLastCommand',
+  fetch:                 'fetch',
+};
+
+function sanitizeTools(tools) {
+  if (!Array.isArray(tools)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const t of tools) {
+    if (typeof t !== 'string') continue;
+    const clean    = t.replace(/[\[\]]/g, '').trim();
+    if (!clean) continue;
+    const canonical = TOOL_CANONICAL[clean.toLowerCase()] ?? clean;
+    if (!seen.has(canonical)) { seen.add(canonical); result.push(canonical); }
+  }
+  return result;
+}
+
 // ── Model name map ────────────────────────────────────────────────────────────
 
 const MODEL_IDS = {
@@ -48,7 +84,7 @@ function shortModel(fullId) {
 // ── Parse & serialize ─────────────────────────────────────────────────────────
 
 function parseAgentFile(filePath) {
-  const raw = fs.readFileSync(filePath, 'utf8');
+  const raw = fs.readFileSync(filePath, 'utf8').replace(/^﻿/, '');
   const m   = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
 
   if (!m) {
@@ -62,7 +98,7 @@ function parseAgentFile(filePath) {
     };
   }
 
-  const fm = m[1];
+  const fm = m[1].replace(/\r/g, '');
 
   const get = (k) => {
     const r = fm.match(new RegExp(`^${k}:\\s*([^\\n]+)$`, 'm'));
@@ -75,11 +111,11 @@ function parseAgentFile(filePath) {
     return val;
   };
 
-  let tools = [];
+  let rawTools = [];
   if (/^tools:\s*\n/m.test(fm)) {
     const listMatch = fm.match(/^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)/m);
     if (listMatch) {
-      tools = listMatch[1]
+      rawTools = listMatch[1]
         .split('\n')
         .map(l => l.replace(/^[ \t]+-[ \t]+/, '').trim())
         .filter(Boolean);
@@ -87,12 +123,13 @@ function parseAgentFile(filePath) {
   } else {
     const inlineMatch = fm.match(/^tools:\s*(.+)$/m);
     if (inlineMatch) {
-      const val = inlineMatch[1].trim();
-      if (val !== '[]' && val !== '') {
-        tools = val.split(',').map(s => s.trim()).filter(Boolean);
+      const val = inlineMatch[1].trim().replace(/^\[|\]$/g, '');
+      if (val !== '') {
+        rawTools = val.split(',').map(s => s.trim()).filter(Boolean);
       }
     }
   }
+  const tools = sanitizeTools(rawTools);
 
   const rawModel = get('model');
 
@@ -105,7 +142,7 @@ function parseAgentFile(filePath) {
   const mcpParsed = mcpRaw ? mcpRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   return {
-    name:        get('name') || path.basename(filePath, '.md'),
+    name:        get('name') || path.basename(filePath, '.md').replace(/\.agent$/, ''),
     description: get('description'),
     tools,
     model:       shortModel(rawModel) || 'sonnet',
@@ -118,36 +155,42 @@ function parseAgentFile(filePath) {
 }
 
 function parseAgentFromString(content, fallbackName = 'imported-agent') {
-  const raw = content;
+  const raw = content.replace(/^﻿/, '');
   const m   = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
 
   if (!m) return { name: fallbackName, description: '', tools: [], model: 'sonnet', system: raw.trim() };
 
-  const fm  = m[1];
+  const fm  = m[1].replace(/\r/g, '');
   const get = (k) => { const r = fm.match(new RegExp(`^${k}:\\s*([^\\n]+)$`, 'm')); return r ? r[1].trim() : ''; };
 
-  let tools = [];
+  let rawTools = [];
   if (/^tools:\s*\n/m.test(fm)) {
     const lm = fm.match(/^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)/m);
-    if (lm) tools = lm[1].split('\n').map(l => l.replace(/^[ \t]+-[ \t]+/, '').trim()).filter(Boolean);
+    if (lm) rawTools = lm[1].split('\n').map(l => l.replace(/^[ \t]+-[ \t]+/, '').trim()).filter(Boolean);
   } else {
     const im = fm.match(/^tools:\s*(.+)$/m);
-    if (im) { const v = im[1].trim(); if (v !== '[]' && v !== '') tools = v.split(',').map(s => s.trim()).filter(Boolean); }
+    if (im) { const v = im[1].trim().replace(/^\[|\]$/g, ''); if (v !== '') rawTools = v.split(',').map(s => s.trim()).filter(Boolean); }
   }
 
-  const rawModel = get('model');
+  const rawModel   = get('model');
+  const skillsRaw  = get('skills');
+  const skillsParsed = skillsRaw ? skillsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const mcpRaw     = get('mcp_servers');
+  const mcpParsed  = mcpRaw ? mcpRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
   return {
     name:        get('name') || fallbackName,
     description: get('description'),
-    tools,
+    tools:       sanitizeTools(rawTools),
     model:       shortModel(rawModel) || 'sonnet',
+    optimized:   get('optimized') === 'true',
+    skills:      skillsParsed.length > 0 ? skillsParsed : undefined,
+    mcp_servers: mcpParsed.length > 0 ? mcpParsed : undefined,
     system:      m[2].trim(),
   };
 }
 
 function serializeAgent(agent) {
-  const toolsList = (Array.isArray(agent.tools) ? agent.tools : [])
-    .filter(Boolean)
+  const toolsList = sanitizeTools(agent.tools)
     .map(t => `  - ${t}`)
     .join('\n');
 
@@ -193,17 +236,30 @@ function listAgentsInDir(dir) {
   if (!fs.existsSync(dir)) return [];
   let files = [];
   try {
-    files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
+    files = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.md'))
+      // Plain .md files take precedence over .agent.md when names collide
+      .sort((a, b) => {
+        const aAgent = a.endsWith('.agent.md');
+        const bAgent = b.endsWith('.agent.md');
+        if (aAgent !== bAgent) return aAgent ? 1 : -1;
+        return a.localeCompare(b);
+      });
   } catch (err) {
     console.warn(`[agents] Could not list directory "${dir}": ${err.message}`);
     return [];
   }
 
+  const seen  = new Set();
   const parsed = [];
   for (const file of files) {
     const filePath = path.join(dir, file);
     try {
-      parsed.push(parseAgentFile(filePath));
+      const agent = parseAgentFile(filePath);
+      if (!seen.has(agent.name)) {
+        seen.add(agent.name);
+        parsed.push(agent);
+      }
     } catch (err) {
       console.warn(`[agents] Skipping invalid agent file "${filePath}": ${err.message}`);
     }
@@ -273,7 +329,7 @@ function getAgentsDirForProvider(projectPath, provider) {
 }
 
 function serializeAgentGitHub(agent) {
-  const toolsList  = (Array.isArray(agent.tools) ? agent.tools : []).filter(Boolean).map(t => `  - ${t}`).join('\n');
+  const toolsList  = sanitizeTools(agent.tools).map(t => `  - ${t}`).join('\n');
   const toolsBlock = toolsList ? `tools:\n${toolsList}` : 'tools: []';
 
   const lines = [
@@ -283,8 +339,12 @@ function serializeAgentGitHub(agent) {
     `model: ${agent.model}`,
     toolsBlock,
   ];
+  if (agent.optimized) lines.push('optimized: true');
   if (Array.isArray(agent.skills) && agent.skills.length > 0) {
     lines.push(`skills: ${agent.skills.join(', ')}`);
+  }
+  if (Array.isArray(agent.mcp_servers) && agent.mcp_servers.length > 0) {
+    lines.push(`mcp_servers: ${agent.mcp_servers.join(', ')}`);
   }
   lines.push('---');
 

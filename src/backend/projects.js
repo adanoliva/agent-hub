@@ -450,7 +450,20 @@ async function importProject({ name, categoryId, projectPath, description, statu
     throw new Error(`Project already registered: ${cleanPath}`);
   }
 
-  const providers = Array.isArray(aiProviders) && aiProviders.length > 0 ? aiProviders : ['claude'];
+  const explicitProviders = Array.isArray(aiProviders) && aiProviders.length > 0 ? aiProviders : [];
+
+  // Auto-detect providers already present in the project directory
+  const detectedProviders = [];
+  for (const [key, def] of Object.entries(PROJECT_PROVIDERS)) {
+    if (key === 'central') continue;
+    if (def.agentDir.length === 0) continue;
+    const dir = path.join(cleanPath, ...def.agentDir);
+    if (fs.existsSync(dir)) detectedProviders.push(key);
+  }
+
+  // Merge: explicit takes precedence; detected fills any gaps; fall back to claude
+  const mergedSet = new Set([...explicitProviders, ...detectedProviders]);
+  const providers = mergedSet.size > 0 ? [...mergedSet] : ['claude'];
 
   // Ensure central context exists or try to adopt existing one
   const centralPath = getContextFilePath({ path: cleanPath }, 'central');
@@ -505,7 +518,30 @@ async function importProject({ name, categoryId, projectPath, description, statu
   cfg.projects.push(project);
   writeConfig(cfg);
 
+  // Re-stamp orchestration files with the new projectId so resolveOrchProject works
+  rebaseOrchestrationIds(cleanPath, project.id);
+
   return project;
+}
+
+/**
+ * Updates the projectId field in existing orchestration JSON files so that
+ * resolveOrchProject can match them to the newly-imported project.
+ */
+function rebaseOrchestrationIds(projectPath, newProjectId) {
+  const orchDir = path.join(projectPath, '.agent-hub', 'orchestrations');
+  if (!fs.existsSync(orchDir)) return;
+  for (const file of fs.readdirSync(orchDir)) {
+    if (!file.endsWith('.json') || file.startsWith('.')) continue;
+    const filePath = path.join(orchDir, file);
+    try {
+      const orch = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (orch.projectId !== newProjectId) {
+        orch.projectId = newProjectId;
+        fs.writeFileSync(filePath, JSON.stringify(orch, null, 2), 'utf8');
+      }
+    } catch { /* skip malformed files */ }
+  }
 }
 
 /**

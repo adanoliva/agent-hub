@@ -609,7 +609,7 @@ syncProject(projectId)
 
 **`createProject({ name, categoryId, projectPath, skills?, aiProviders?, ... })`** — genera id, crea carpeta, escribe fichero de contexto, sincroniza agentes, persiste en config.
 
-**`importProject(...)`** — como `createProject` pero la carpeta ya existe; adopta contexto existente si lo encuentra.
+**`importProject(...)`** — como `createProject` pero la carpeta ya existe; adopta contexto existente si lo encuentra. Auto-detecta proveedores por directorios presentes (`.claude/agents/` → `claude`, `.github/agents/` → `github`, etc.) y los mezcla con los seleccionados explícitamente. Tras registrar el proyecto, re-estampa los JSON de orquestaciones existentes con el nuevo `projectId` (vía `rebaseOrchestrationIds`).
 
 **`updateProject(id, changes)`** — campos permitidos: `name`, `description`, `status`, `categoryId`, `skills`, `aiProviders`, `excludedAgents`, `includedAgents`, `gitEnabled`. Si `aiProviders` cambia, migra los agentes de nivel proyecto al nuevo directorio.
 

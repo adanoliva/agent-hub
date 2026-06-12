@@ -68,6 +68,7 @@ export function Agents() {
   const [selectedAgent,      setSelectedAgent]      = useState<string | null>(null);
   const [editorAgent,        setEditorAgent]        = useState<Agent | null>(null);
   const [editorIsNew,        setEditorIsNew]        = useState(false);
+  const [editorForceKey,     setEditorForceKey]     = useState(0);
 
   // Skills state
   const [skills,             setSkills]             = useState<Skill[]>([]);
@@ -108,14 +109,11 @@ export function Agents() {
 
   const loadAgents = useCallback(async (n: SelectedNode) => {
     try {
-      console.log('📡 loadAgents called with level:', n.level);
       let data: Agent[];
       if (n.level === 'project') {
         data = n.projectId ? await req<Agent[]>('GET', `/projects/${n.projectId}/agents`) : [];
       } else if (n.level === 'uncategorized') {
-        console.log('🔄 Loading uncategorized agents...');
         data = await req<Agent[]>('GET', '/agents?level=uncategorized');
-        console.log('📦 Uncategorized agents loaded:', data.map(a => a.name));
       } else {
         const q = new URLSearchParams({ level: n.level });
         if (n.categoryId) q.set('categoryId', n.categoryId);
@@ -415,6 +413,7 @@ export function Agents() {
       return next;
     });
     await loadAgents(node);
+    setEditorForceKey((k) => k + 1);
   }
 
   async function handleDeleted() {
@@ -590,6 +589,7 @@ export function Agents() {
               agent={editorAgent}
               isNew={editorIsNew}
               node={node}
+              forceKey={editorForceKey}
               onClose={handleCloseEditor}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
