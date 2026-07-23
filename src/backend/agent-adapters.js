@@ -56,6 +56,13 @@ const GITHUB_TO_CLAUDE_TOOL = {
   // browser tools are already in Claude format
 };
 
+// GitHub model → Claude alias (reverse of CLAUDE_TO_GITHUB_MODEL)
+const GITHUB_TO_CLAUDE_MODEL = {
+  'gpt-4o-mini': 'haiku',
+  'gpt-4o':      'sonnet',
+  'o1':          'opus',
+};
+
 // Friendly replacements used in system prompt text
 const TOOL_TEXT_MAP = {
   Bash:       'the terminal',
@@ -94,7 +101,8 @@ function adaptFromGitHub(agent) {
   const tools = [...new Set(
     (agent.tools || []).map(t => GITHUB_TO_CLAUDE_TOOL[t] || t),
   )];
-  return { ...agent, tools };
+  const model = GITHUB_TO_CLAUDE_MODEL[agent.model] || agent.model;
+  return { ...agent, tools, model };
 }
 
 // ── Provider adapter registry ─────────────────────────────────────────────────

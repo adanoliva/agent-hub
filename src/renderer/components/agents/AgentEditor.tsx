@@ -9,12 +9,13 @@ interface Props {
   agent: Agent;
   isNew: boolean;
   node: SelectedNode;
+  forceKey?: number;
   onClose: () => void;
   onSaved: (agent: Agent) => void;
   onDeleted: () => void;
 }
 
-export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onDeleted }: Props) {
+export function AgentEditor({ agent: initial, isNew, node, forceKey, onClose, onSaved, onDeleted }: Props) {
   const toast    = useToast();
   const projects = useStore((s) => s.projects);
 
@@ -31,25 +32,25 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
   const aRef = React.useRef<Agent>(a);
   useEffect(() => { aRef.current = a; });
 
-  // Only reset editor when the agent identity changes (different agent or new agent),
-  // not on every re-render — prevents tools from being wiped during async operations.
-  const prevKeyRef = React.useRef<string>(`${initial.name}::${isNew}`);
+  // Reset editor state when: different agent, isNew changes, or an explicit forceKey bump
+  // (forceKey is incremented by parent after save to sync with server response).
+  const prevKeyRef = React.useRef<string>(`${initial.name}::${isNew}::${forceKey ?? 0}`);
   useEffect(() => {
-    const key = `${initial.name}::${isNew}`;
+    const key = `${initial.name}::${isNew}::${forceKey ?? 0}`;
     if (key !== prevKeyRef.current) {
       prevKeyRef.current = key;
       setA({ ...initial });
     }
-  }, [initial, isNew]);
+  }, [initial, isNew, forceKey]);
 
   useEffect(() => {
-    if (node.level === 'project') {
+    if (node.level === 'project' || initial.level === 'project') {
       req<Skill[]>('GET', '/skills/flat').then(setAllSkills).catch(() => {});
     }
-    const pid = node.projectId ?? '';
+    const pid = node.projectId ?? (initial.projectId ?? '');
     req<{ name: string }[]>('GET', `/mcp/servers${pid ? `?projectId=${pid}` : ''}`)
       .then(setAllMcpServers).catch(() => {});
-  }, [node.level, node.projectId]);
+  }, [node.level, node.projectId, initial.level, initial.projectId]);
 
   const update = (patch: Partial<Agent>) => setA((prev) => ({ ...prev, ...patch }));
 
@@ -107,18 +108,22 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
     const agentToSave = aRef.current;
     if (!agentToSave.name?.trim()) { toast('El agente necesita un nombre', 'err'); return; }
     setSaveBusy(true);
+    const effectiveLevel    = agentToSave.level ?? node.level;
+    const effectiveProject  = agentToSave.projectId ?? node.projectId;
+    const effectiveCategory = agentToSave.categoryId ?? node.categoryId;
     try {
-      if (node.level === 'project') {
-        await req(isNew ? 'POST' : 'PUT', `/projects/${node.projectId}/agents`,
+      let saved: Agent;
+      if (effectiveLevel === 'project') {
+        saved = await req<Agent>(isNew ? 'POST' : 'PUT', `/projects/${effectiveProject}/agents`,
           isNew ? { agent: agentToSave } : { oldName: initial.name, agent: agentToSave });
       } else {
-        await req(isNew ? 'POST' : 'PUT', '/agents',
+        saved = await req<Agent>(isNew ? 'POST' : 'PUT', '/agents',
           isNew
-            ? { level: node.level, categoryId: node.categoryId, agent: agentToSave }
-            : { level: node.level, categoryId: node.categoryId, oldName: initial.name, agent: agentToSave });
+            ? { level: effectiveLevel, categoryId: effectiveCategory, agent: agentToSave }
+            : { level: effectiveLevel, categoryId: effectiveCategory, oldName: initial.name, agent: agentToSave });
       }
       toast(`Agente "${agentToSave.name}" guardado`);
-      onSaved(agentToSave);
+      onSaved(saved);
     } catch (e: any) { toast(e.message, 'err'); }
     setSaveBusy(false);
   }
@@ -200,9 +205,12 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
               const toggle = () => {
                 setA((prev) => {
                   const current = prev.tools ?? [];
-                  const isActive = group.tools.every(t => current.includes(t));
-                  if (isActive) return { ...prev, tools: current.filter(t => !group.tools.includes(t)) };
-                  return { ...prev, tools: [...current, ...group.tools.filter(t => !current.includes(t))] };
+                  const allActive = group.tools.every(t => current.includes(t));
+                  if (allActive) {
+                    return { ...prev, tools: current.filter(t => !group.tools.includes(t)) };
+                  }
+                  const missing = group.tools.filter(t => !current.includes(t));
+                  return { ...prev, tools: [...current, ...missing] };
                 });
               };
               return (
@@ -223,8 +231,8 @@ export function AgentEditor({ agent: initial, isNew, node, onClose, onSaved, onD
           </div>
         </div>
 
-        {/* Skills — solo en agentes de proyecto */}
-        {node.level === 'project' && (allSkills.length > 0 || (a.skills || []).length > 0) && (
+        {/* Skills — nivel proyecto (node o propio del agente) */}
+        {(node.level === 'project' || a.level === 'project') && (allSkills.length > 0 || (a.skills || []).length > 0) && (
           <div className="field">
             <label>Skills asociadas</label>
             <div className="agent-skills-selector">

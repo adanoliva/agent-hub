@@ -169,7 +169,7 @@ function list(projectPath) {
     .filter(f => f.endsWith('.json') && !f.startsWith('.'))
     .map(f => {
       try { return migrateOrchestration(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); }
-      catch { return null; }
+      catch (e) { console.error('[workflows] Failed to load', f, e.message); return null; }
     })
     .filter(Boolean)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
