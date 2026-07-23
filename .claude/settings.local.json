@@ -75,7 +75,9 @@
       "Bash(Select-Object -ExpandProperty Content)",
       "Bash(Out-String)",
       "Bash(Select-Object -First 200)",
-      "PowerShell(try { \\(Invoke-WebRequest -Uri \"http://localhost:3737/api/mcp/catalog\" -UseBasicParsing\\).Content } catch { \"ERROR: $_\" })"
+      "PowerShell(try { \\(Invoke-WebRequest -Uri \"http://localhost:3737/api/mcp/catalog\" -UseBasicParsing\\).Content } catch { \"ERROR: $_\" })",
+      "Bash(rtk find *)",
+      "Bash(GH_TOKEN=$\\(cat .token\\) npm run release)"
     ]
   }
 }
