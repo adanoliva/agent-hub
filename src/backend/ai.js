@@ -107,10 +107,10 @@ async function checkAllCLIs() {
     whichBin('claude'), whichBin('gemini'), whichBin('codex'), whichBin('gh'),
     whichBin('aider'), whichBin('cline'), whichBin('goose'),
   ]);
-  return { 
-    'cli': claude, 
-    'gemini-cli': gemini, 
-    'codex-cli': codex, 
+  return {
+    'cli': claude,
+    'gemini-cli': gemini,
+    'codex-cli': codex,
     'copilot-cli': gh,
     'aider-cli': aider,
     'cline-cli': cline,
@@ -223,7 +223,7 @@ async function callAI(prompt, opts = {}) {
                           model:   cfg.openaiModel ?? 'gpt-4o-mini',
                         }, opts);
     case 'github':      return callOpenAICompat(prompt, null, {
-                          baseUrl: GITHUB_MODELS_URL.replace('/chat/completions', ''),
+                          baseUrl: GITHUB_MODELS_BASE,
                           key:     cfg.githubToken,
                           model:   cfg.githubModel ?? GITHUB_MODELS_DEFAULT,
                         }, opts);
@@ -426,6 +426,7 @@ async function callAPI(prompt, apiKey, opts = {}) {
 // ── GitHub Models backend ─────────────────────────────────────────────────────
 
 const GITHUB_MODELS_URL = 'https://models.inference.ai.azure.com/chat/completions';
+const GITHUB_MODELS_BASE = GITHUB_MODELS_URL.replace('/chat/completions', '');
 const GITHUB_MODELS_DEFAULT = 'gpt-4o-mini';
 
 function isGitHubContentFilterMessage(msg) {
@@ -447,6 +448,31 @@ function mapGitHubModelsError(status, msg) {
     ].join(' ');
   }
   return `GitHub Models API error: ${msg}`;
+}
+
+function isUnknownModelMessage(msg) {
+  return /unknown model|model.*not found|invalid model|unsupported model|does not exist/i.test(String(msg || ''));
+}
+
+function buildGitHubModelFallbackWarning(invalidModel, fallbackModel, reason) {
+  return {
+    code: 'MODEL_FALLBACK_GITHUB',
+    provider: 'github',
+    invalidModel,
+    fallbackModel,
+    reason: String(reason || ''),
+    message: `Modelo del agente no valido en GitHub Models (${invalidModel}). Se uso el modelo global (${fallbackModel}).`,
+  };
+}
+
+function readGitHubTokenFromGhCLI() {
+  return new Promise((resolve) => {
+    exec('gh auth token', { timeout: 10_000 }, (err, stdout) => {
+      if (err) return resolve('');
+      const token = String(stdout || '').trim();
+      resolve(token);
+    });
+  });
 }
 
 async function callGitHub(prompt, githubToken, model, opts = {}) {
@@ -479,6 +505,40 @@ async function callGitHub(prompt, githubToken, model, opts = {}) {
     outputTokens: usage.completion_tokens || 0,
   });
   return data.choices?.[0]?.message?.content || '';
+}
+
+async function listGitHubModels({ token } = {}) {
+  const cfg = readConfig();
+  let githubToken = String(token ?? cfg.githubToken ?? '').trim();
+  if (!githubToken) githubToken = String(await readGitHubTokenFromGhCLI()).trim();
+  if (!githubToken) throw new Error('No GitHub token configured');
+
+  const response = await fetch(`${GITHUB_MODELS_BASE}/models`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${githubToken}`,
+      'Content-Type': 'application/json',
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const msg = err.error?.message || err.message || response.statusText;
+    throw new Error(mapGitHubModelsError(response.status, msg));
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  const rows = Array.isArray(payload?.data)
+    ? payload.data
+    : (Array.isArray(payload) ? payload : []);
+
+  const ids = rows
+    .map((row) => (typeof row === 'string' ? row : row?.id))
+    .filter((id) => Boolean(id && String(id).trim()))
+    .map((id) => String(id).trim());
+
+  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
 
 // ── OpenAI-compatible backend (OpenAI, Gemini, Mistral, Grok, GitHub) ────────
@@ -1096,17 +1156,17 @@ function parseJSONObjectSafely(raw) {
  * @param {number} [opts.maxTokens]
  * @returns {Promise<string>}
  */
-function _openAICompatConfigForProvider(cfg, provider) {
+function _openAICompatConfigForProvider(cfg, provider, modelOverride = null) {
   switch (provider) {
-    case 'openai':      return { baseUrl: 'https://api.openai.com/v1', key: cfg.openaiKey, model: cfg.openaiModel ?? 'gpt-4o-mini' };
-    case 'github':      return { baseUrl: 'https://models.inference.ai.azure.com', key: cfg.githubToken, model: cfg.githubModel ?? GITHUB_MODELS_DEFAULT };
-    case 'gemini-api':  return { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', key: cfg.geminiApiKey, model: cfg.geminiApiModel ?? 'gemini-2.5-flash' };
-    case 'mistral':     return { baseUrl: 'https://api.mistral.ai/v1', key: cfg.mistralKey, model: cfg.mistralModel ?? 'mistral-small-latest' };
-    case 'grok':        return { baseUrl: 'https://api.x.ai/v1', key: cfg.grokKey, model: cfg.grokModel ?? 'grok-3-mini' };
-    case 'deepseek':    return { baseUrl: 'https://api.deepseek.com', key: cfg.deepseekKey, model: cfg.deepseekModel ?? 'deepseek-chat' };
-    case 'groq':        return { baseUrl: 'https://api.groq.com/openai/v1', key: cfg.groqKey, model: cfg.groqModel ?? 'llama-3.3-70b-versatile' };
-    case 'openrouter':  return { baseUrl: 'https://openrouter.ai/api/v1', key: cfg.openrouterKey, model: cfg.openrouterModel ?? 'anthropic/claude-3.5-sonnet' };
-    case 'perplexity':  return { baseUrl: 'https://api.perplexity.ai', key: cfg.perplexityKey, model: cfg.perplexityModel ?? 'sonar-reasoning-pro' };
+    case 'openai':      return { baseUrl: 'https://api.openai.com/v1', key: cfg.openaiKey, model: modelOverride || (cfg.openaiModel ?? 'gpt-4o-mini') };
+    case 'github':      return { baseUrl: 'https://models.inference.ai.azure.com', key: cfg.githubToken, model: modelOverride || (cfg.githubModel ?? GITHUB_MODELS_DEFAULT) };
+    case 'gemini-api':  return { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', key: cfg.geminiApiKey, model: modelOverride || (cfg.geminiApiModel ?? 'gemini-2.5-flash') };
+    case 'mistral':     return { baseUrl: 'https://api.mistral.ai/v1', key: cfg.mistralKey, model: modelOverride || (cfg.mistralModel ?? 'mistral-small-latest') };
+    case 'grok':        return { baseUrl: 'https://api.x.ai/v1', key: cfg.grokKey, model: modelOverride || (cfg.grokModel ?? 'grok-3-mini') };
+    case 'deepseek':    return { baseUrl: 'https://api.deepseek.com', key: cfg.deepseekKey, model: modelOverride || (cfg.deepseekModel ?? 'deepseek-chat') };
+    case 'groq':        return { baseUrl: 'https://api.groq.com/openai/v1', key: cfg.groqKey, model: modelOverride || (cfg.groqModel ?? 'llama-3.3-70b-versatile') };
+    case 'openrouter':  return { baseUrl: 'https://openrouter.ai/api/v1', key: cfg.openrouterKey, model: modelOverride || (cfg.openrouterModel ?? 'anthropic/claude-3.5-sonnet') };
+    case 'perplexity':  return { baseUrl: 'https://api.perplexity.ai', key: cfg.perplexityKey, model: modelOverride || (cfg.perplexityModel ?? 'sonar-reasoning-pro') };
     default: return null;
   }
 }
@@ -1146,7 +1206,7 @@ async function callAIChat(messages, opts = {}) {
   }
 
   // OpenAI-compatible providers
-  const oaConfig = _openAICompatConfigForProvider(cfg, provider);
+  const oaConfig = _openAICompatConfigForProvider(cfg, provider, opts.model || null);
   if (oaConfig) {
     const { text } = await callOpenAICompatChat(messages, opts.systemPrompt || null, oaConfig, opts);
     return text;
@@ -1232,9 +1292,24 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
   }
 
   // OpenAI-compatible providers
-  const oaConfig = _openAICompatConfigForProvider(cfg, provider);
+  const oaConfig = _openAICompatConfigForProvider(cfg, provider, opts.model || null);
   if (oaConfig) {
-    return callOpenAICompatChat(messages, systemPrompt || null, oaConfig, opts);
+    try {
+      return await callOpenAICompatChat(messages, systemPrompt || null, oaConfig, opts);
+    } catch (err) {
+      // If an agent-level GitHub model override is invalid, retry once with global githubModel.
+      if (provider === 'github' && opts.model && isUnknownModelMessage(err?.message || '')) {
+        const fallbackConfig = _openAICompatConfigForProvider(cfg, provider, null);
+        const retry = await callOpenAICompatChat(messages, systemPrompt || null, fallbackConfig, opts);
+        return {
+          ...retry,
+          warnings: [
+            buildGitHubModelFallbackWarning(opts.model, fallbackConfig?.model || cfg.githubModel || GITHUB_MODELS_DEFAULT, err?.message || ''),
+          ],
+        };
+      }
+      throw err;
+    }
   }
 
   // CLI providers: flatten conversation to a single prompt and call in text-only mode.
@@ -1291,6 +1366,7 @@ function _callCLITextOnly(provider, prompt, cfg, opts = {}) {
  * @param {string}  opts.projectPath   — absolute path to project root
  * @param {string}  [opts.projectContext] — content of CLAUDE.md / instructions
  * @param {string}  [opts.provider]    — 'api' | 'github'
+ * @param {string}  [opts.model]       — optional model override for the active provider
  * @param {number}  [opts.maxTurns=10]
  * @param {number}  [opts.timeout=300000]
  * @returns {Promise<SubsystemCLIResult>}
@@ -1311,6 +1387,7 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     callAIRaw: (messages, systemPrompt, callOpts = {}) =>
       callAIChatWithTokens(messages, systemPrompt, {
         provider,
+        model: opts.model || null,
         timeout: callOpts.timeout,
         cwd: opts.projectPath
       }),
@@ -1364,7 +1441,7 @@ async function testConnection() {
       const url  = customCfg.baseUrl.endsWith('/chat/completions')
         ? customCfg.baseUrl
         : `${customCfg.baseUrl}/chat/completions`;
-      
+
       const finalHeaders = { 'Content-Type': 'application/json', ...customCfg.headers };
       if (!finalHeaders.Authorization && !finalHeaders['Ocp-Apim-Subscription-Key'] && customCfg.key) {
         finalHeaders.Authorization = `Bearer ${customCfg.key}`;
@@ -1385,10 +1462,10 @@ async function testConnection() {
   }
 
   if (CLI_PROVIDERS.includes(provider)) {
-    const binMap = { 
-      'cli': 'claude', 
-      'gemini-cli': 'gemini', 
-      'codex-cli': 'codex', 
+    const binMap = {
+      'cli': 'claude',
+      'gemini-cli': 'gemini',
+      'codex-cli': 'codex',
       'copilot-cli': 'gh',
       'aider-cli': 'aider',
       'cline-cli': 'cline',
@@ -1459,6 +1536,7 @@ module.exports = {
   getCachedSuggestions,
   clearSuggestionsCache,
   getProviderStatus,
+  listGitHubModels,
   testConnection,
   isCLIAvailable,
   getSessionUsage,

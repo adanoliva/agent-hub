@@ -485,6 +485,8 @@ Página de tres paneles (árbol / centro / editor). Gestiona dos modos: `agents`
 
 Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 
+**GitHub Models (tab General):** al seleccionar el proveedor `github`, el selector de modelo se rellena dinámicamente con `POST /api/ai/models`. Usa primero el token introducido en el formulario (sin necesidad de guardar) y, si está vacío, el backend intenta `gh auth token`. Si la detección falla, usa una lista fallback local y muestra el error en línea.
+
 **Tab Categorías:** lista simple de categorías con nombre, icono y color. Sin gestión de tecnologías (eliminada). Solo permite crear y eliminar categorías.
 
 **Import de agentes desde URL:** el selector de destino muestra Global y las secciones de cada categoría. No hay opciones `tech:` (eliminadas).

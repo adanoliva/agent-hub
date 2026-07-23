@@ -1,6 +1,6 @@
 {
   "name": "agent-hub",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Visual manager for IA agents and dev projects",
   "main": "src/backend/main.js",
   "scripts": {
@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
+    "@github/copilot": "^1.0.73",
     "cors": "^2.8.5",
     "electron-updater": "^6.8.3",
     "express": "^4.18.2",
@@ -37,7 +38,7 @@
     "cross-env": "^7.0.3",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
-    "sharp": "^0.33.0",
+    "sharp": "^0.35.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "wait-on": "^9.0.10"

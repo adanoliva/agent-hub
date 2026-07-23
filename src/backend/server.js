@@ -485,9 +485,9 @@ app.get('/api/projects/:id/context', (req, res) => {
   const cfg     = readConfig();
   const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  
+
   if (req.query.type === 'auto') return res.json(getContextAuto(project, cfg.aiProvider));
-  
+
   const type = req.query.type || (project.aiProviders?.includes('github') ? 'github' : 'claude');
   res.json(getContextFile(project, type));
 });
@@ -495,7 +495,7 @@ app.get('/api/projects/:id/context', (req, res) => {
 app.put('/api/projects/:id/context', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  
+
   const type     = req.body.type || (project.aiProviders?.includes('github') ? 'github' : 'claude');
   const filePath = saveContextFile(project, type, req.body.content || '');
   res.json({ ok: true, filePath });
@@ -1126,6 +1126,7 @@ app.post('/api/dashboard/notifications/restore', (req, res) => {
 
 const {
   getProviderStatus,
+  listGitHubModels,
   testConnection,
   generateAgentPrompt,
   getSuggestions,
@@ -1170,6 +1171,20 @@ app.get('/api/ai/status', async (req, res) => {
     res.json(await getProviderStatus());
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/ai/models — list available models for a provider
+app.post('/api/ai/models', async (req, res) => {
+  const provider = String(req.body?.provider || 'github');
+  try {
+    if (provider === 'github') {
+      const models = await listGitHubModels({ token: req.body?.token });
+      return res.json({ models });
+    }
+    return res.status(400).json({ error: `Provider no soportado para listado de modelos: ${provider}` });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -1554,6 +1569,7 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
 
   // Resolve MCP servers for the agent (if agentName provided)
   let mcpServers = {};
+  let modelOverride = null;
   if (agentName) {
     try {
       const mcpModule = require('./mcp');
@@ -1563,7 +1579,10 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
         ...listProjectAgents(project),
       ];
       const agent = allAgents.find(a => a.name === agentName);
-      if (agent) mcpServers = mcpModule.getServersForAgent(agent, project.id);
+      if (agent) {
+        mcpServers = mcpModule.getServersForAgent(agent, project.id);
+        if (provider === 'github') modelOverride = String(agent.model || '').trim() || null;
+      }
     } catch { /* ignore */ }
   }
 
@@ -1575,9 +1594,20 @@ app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
       maxTurns:       maxTurns  || 10,
       timeout:        timeout   || 1_800_000,
       useBrowser:     useBrowser || false,
+      model:          modelOverride,
       mcpServers,
       projectId:      project.id,
     });
+
+    const failedWrites = (result.results || []).filter((r) => !r.success && r.toolCall?.tool === 'write');
+    if (failedWrites.length > 0) {
+      const details = failedWrites
+        .slice(0, 3)
+        .map((r) => `${r.toolCall?.args?.path || '(sin path)'}: ${r.error?.message || 'error de escritura'}`)
+        .join(' | ');
+      return res.status(500).json({ error: `Fallaron ${failedWrites.length} escritura(s): ${details}`, result });
+    }
+
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -757,6 +757,8 @@ class OrchestrationExecutor extends EventEmitter {
 
     // ── Agente IA ─────────────────────────────────────────────────────────
     let userMessage = '';
+    let hasMcp = false;
+    let mcpNames = [];
     try {
       const systemPrompt = this._buildSystemPrompt(node);
       userMessage        = this._buildUserMessage(node, agentOutputs, stepIndex);
@@ -776,8 +778,8 @@ class OrchestrationExecutor extends EventEmitter {
 
       // Resolve MCP servers for this agent and acquire (start + refcount)
       const agentMcpServers = mcp.getServersForAgent(agent, this.project.id);
-      const mcpNames = Object.keys(agentMcpServers);
-      const hasMcp = mcpNames.length > 0;
+      mcpNames = Object.keys(agentMcpServers);
+      hasMcp = mcpNames.length > 0;
       if (hasMcp) {
         try { await mcp.acquireServers(mcpNames, this.project.id); }
         catch (e) { this._log('warn', `MCP acquire error: ${e.message}`); }
@@ -812,12 +814,31 @@ class OrchestrationExecutor extends EventEmitter {
         response = rich.text; inputTokens = rich.inputTokens; outputTokens = rich.outputTokens; stepCostUSD = rich.costUSD;
 
       } else {
+        const modelOverride = provider === 'github' ? String(agent?.model || '').trim() || null : null;
         const cliResult = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
           projectPath: this.project.path, projectContext: contextFile,
           provider, maxTurns: orchestration.executionConfig?.maxTurns || 10,
           timeout: stepRemaining, useBrowser: orchestrationUsesBrowser,
           mcpServers: agentMcpServers, projectId: this.project.id,
+          model: modelOverride,
         });
+
+        const runtimeWarnings = Array.isArray(cliResult.warnings) ? cliResult.warnings : [];
+        if (runtimeWarnings.length > 0) {
+          const issues = runtimeWarnings.map((w) => w.message || String(w));
+          this._log('warn', issues.join(' | '));
+          this.emit('step-warning', { nodeId: node.id, stepIndex, issues });
+        }
+
+        const failedWrites = (cliResult.results || []).filter((r) => !r.success && r.toolCall?.tool === 'write');
+        if (failedWrites.length > 0) {
+          const details = failedWrites
+            .slice(0, 3)
+            .map((r) => `${r.toolCall?.args?.path || '(sin path)'}: ${r.error?.message || 'error de escritura'}`)
+            .join(' | ');
+          throw new Error(`Fallaron ${failedWrites.length} escritura(s) de archivo: ${details}`);
+        }
+
         if (!cliResult.success && cliResult.error) {
           if (cliResult.finalResponse?.trim()) {
             this._log('warn', `${cliResult.error} — usando respuesta parcial`);
@@ -840,6 +861,7 @@ class OrchestrationExecutor extends EventEmitter {
 
       const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
       if (filesModified.length > 0) this._log('info', `${filesModified.length} archivo(s) modificado(s)`);
+      else this._log('warn', `El paso no modifico archivos en disco`);
 
       const handoff      = extractHandoff(response);
       const cleanResponse = stripHandoff(response);
@@ -917,11 +939,17 @@ class OrchestrationExecutor extends EventEmitter {
         } catch (e) { this._log('warn', `Git checkpoint falló: ${e.message}`); }
       }
 
-      if (hasMcp) mcp.releaseServers(mcpNames);
+      if (hasMcp) {
+        try { mcp.releaseServers(mcpNames); }
+        catch (e) { this._log('warn', `MCP release error: ${e.message}`); }
+      }
       return { stepResult, agentOutput };
 
     } catch (err) {
-      if (hasMcp) mcp.releaseServers(mcpNames);
+      if (hasMcp) {
+        try { mcp.releaseServers(mcpNames); }
+        catch (e) { this._log('warn', `MCP release error: ${e.message}`); }
+      }
       this._log('error', `Error en "${agentName}": ${err.message}`);
       const stepResult = {
         stepIndex, nodeId: node.id, agentName,
@@ -1020,11 +1048,34 @@ class OrchestrationExecutor extends EventEmitter {
         })),
       );
 
-      for (const settled of levelSettled) {
+      for (const [idx, settled] of levelSettled.entries()) {
         if (settled.status === 'rejected') {
-          this._log('error', `Nodo rechazado inesperadamente: ${settled.reason?.message}`);
+          const failedNode = level[idx];
+          const message = settled.reason?.message || 'Error inesperado en nodo';
+          this._log('error', `Nodo rechazado inesperadamente: ${message}`);
+
+          const rejectedStep = {
+            stepIndex:      Math.max(0, stepCounter - level.length + idx),
+            nodeId:         failedNode?.id,
+            agentName:      failedNode?.agentName || '(desconocido)',
+            input:          { systemPrompt: '', userMessage: '' },
+            output:         { response: '' },
+            filesModified:  [],
+            tokensUsed:     { input: 0, output: 0 },
+            estimatedCost:  0,
+            costIsEstimated:false,
+            duration:       0,
+            status:         'error',
+            error:          { message, category: 'unexpected_rejection', recoverable: true },
+            backupPath:     null,
+          };
+
+          this.results.push(rejectedStep);
+          this.emit('step-done', rejectedStep);
+          this._writeExecutionState(failedNode?.id || `rejected-${idx}`, rejectedStep);
           continue;
         }
+
         const { stepResult, agentOutput, budgetError } = settled.value;
         if (!stepResult) continue;
 
@@ -1036,11 +1087,8 @@ class OrchestrationExecutor extends EventEmitter {
 
       if (budgetExceededError) break;
 
-      if (
-        this.results.some(r => r.status === 'error') &&
-        orchestration.executionConfig?.stopOnError !== false
-      ) {
-        this._log('error', 'Deteniendo ejecución (stopOnError=true)');
+      if (this.results.some(r => r.status === 'error')) {
+        this._log('error', 'Deteniendo ejecución por error en un agente');
         break;
       }
 
@@ -1095,9 +1143,19 @@ class OrchestrationExecutor extends EventEmitter {
             this.results.push(reResult.stepResult);
             if (reResult.stepResult.status !== 'error') stepsCompleted++;
             if (reResult.agentOutput) agentOutputs[gatedNode.id] = reResult.agentOutput;
+            if (reResult.stepResult.status === 'error') {
+              this._log('error', `Deteniendo ejecución por error al revisar "${gatedNode.agentName}"`);
+              this.cancelled = true;
+              break;
+            }
           }
         }
         // approve → continue
+      }
+
+      if (this.results.some(r => r.status === 'error')) {
+        this._log('error', 'Deteniendo ejecución por error en un agente');
+        break;
       }
     }
 

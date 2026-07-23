@@ -613,6 +613,7 @@ async function execute(prompt, agentSystemPrompt, config) {
   const allResults       = [];
   const allErrors        = [];
   const allBackups       = [];
+  const warnings         = [];
   const filesModified    = new Set();
   const startTime        = Date.now();
   let   totalInput       = 0;
@@ -645,6 +646,7 @@ async function execute(prompt, agentSystemPrompt, config) {
         duration:      Date.now() - startTime,
         filesModified: [...filesModified],
         backups:       allBackups,
+        warnings,
         error:         err.message,
       };
     }
@@ -652,6 +654,9 @@ async function execute(prompt, agentSystemPrompt, config) {
     finalResponse  = aiResult.text;
     totalInput    += aiResult.inputTokens  || 0;
     totalOutput   += aiResult.outputTokens || 0;
+    if (Array.isArray(aiResult.warnings) && aiResult.warnings.length > 0) {
+      warnings.push(...aiResult.warnings);
+    }
 
     // 2. Parse tool calls from AI response
     const parsed = parseAgentResponse(finalResponse);
@@ -710,6 +715,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     duration:      Date.now() - startTime,
     filesModified: [...filesModified],
     backups:       allBackups,
+    warnings,
     ...(exceededTurns                    && { error: 'MAX_TURNS_EXCEEDED' }),
     ...(exceededTimeout && !exceededTurns && { error: 'TIMEOUT_EXCEEDED' }),
   };

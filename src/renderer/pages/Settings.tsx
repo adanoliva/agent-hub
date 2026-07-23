@@ -27,6 +27,8 @@ interface ScriptValidationReport { validatedAt: string; summary: { ok: number; w
 
 type CLICheck = { found: boolean; path: string | null };
 
+const FALLBACK_GITHUB_MODELS = ['gpt-4o-mini', 'gpt-4o', 'o1-mini'];
+
 // ── Modals state types ─────────────────────────────────────────────────────────
 
 interface AddCatForm  { id: string; name: string; color: string }
@@ -88,6 +90,9 @@ export function Settings() {
   // GitHub Models
   const [ghToken,     setGhToken]     = useState(config?.githubToken ?? '');
   const [ghModel,     setGhModel]     = useState(config?.githubModel ?? 'gpt-4o-mini');
+  const [ghModels,    setGhModels]    = useState<string[]>([]);
+  const [ghModelsLoading, setGhModelsLoading] = useState(false);
+  const [ghModelsError,   setGhModelsError]   = useState('');
 
   // Gemini API
   const [geminiApiKey,   setGeminiApiKey]   = useState(config?.geminiApiKey ?? '');
@@ -197,6 +202,39 @@ export function Settings() {
       setDirEnabled(config.agentsDirectoryEnabled ?? true);
     }
   }, [config]);
+
+  const ghModelOptions = React.useMemo(() => {
+    const base = ghModels.length ? ghModels : FALLBACK_GITHUB_MODELS;
+    return [...new Set([ghModel, ...base].filter(Boolean))];
+  }, [ghModel, ghModels]);
+
+  React.useEffect(() => {
+    if (pendingProvider !== 'github') return;
+
+    const token = ghToken.trim();
+    setGhModelsError('');
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setGhModelsLoading(true);
+      try {
+        const { models } = await req<{ models: string[] }>('POST', '/ai/models', { provider: 'github', token });
+        if (!cancelled) setGhModels(models || []);
+      } catch (e: any) {
+        if (!cancelled) {
+          setGhModels([]);
+          setGhModelsError(e?.message || 'No se pudo cargar el listado de modelos.');
+        }
+      } finally {
+        if (!cancelled) setGhModelsLoading(false);
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pendingProvider, ghToken]);
 
   // Load directory status when tab is open
   React.useEffect(() => {
@@ -399,7 +437,7 @@ export function Settings() {
 
   async function handleSaveCustom() {
     if (!editingCustom?.name || !editingCustom?.id) { toast('ID y Nombre son obligatorios', 'err'); throw new Error('validation'); }
-    
+
     let headers: Record<string, string> = {};
     try { if (customHeadersRaw.trim()) headers = JSON.parse(customHeadersRaw); }
     catch { toast('JSON de Headers inválido', 'err'); throw new Error('validation'); }
@@ -514,19 +552,19 @@ export function Settings() {
                       extra={<span className="badge amber"><i className="ti ti-flask" />exp</span>} />
                     <AIRadioRow value="copilot-cli" label="Copilot CLI (gh)" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['copilot-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    
+
                     <AIRadioRow value="aider-cli" label="Aider CLI" selected={pendingProvider === 'aider-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['aider-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    
+
                     <AIRadioRow value="cline-cli" label="Cline CLI" selected={pendingProvider === 'cline-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['cline-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    
+
                     <AIRadioRow value="goose-cli" label="Goose CLI" selected={pendingProvider === 'goose-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['goose-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
 
                     {/* Custom CLI Providers */}
                     {customProviders.filter(p => p.type === 'cli').map(p => (
-                      <AIRadioRow 
+                      <AIRadioRow
                         key={p.id} value={p.id} label={p.name} selected={pendingProvider === p.id} onSelect={setPendingProvider}
                         onEdit={() => startEditCustom(p)} onDelete={() => deleteCustom(p.id)}
                       />
@@ -544,8 +582,7 @@ export function Settings() {
                     </div>
                     <AIRadioRow value="api"        label="Anthropic API"   selected={pendingProvider === 'api'}        onSelect={setPendingProvider} />
                     <AIRadioRow value="openai"     label="OpenAI API"      selected={pendingProvider === 'openai'}     onSelect={setPendingProvider} />
-                    <AIRadioRow value="github"     label="GitHub Models"   selected={pendingProvider === 'github'}     onSelect={setPendingProvider}
-                      extra={<span className="badge blue"><i className="ti ti-api" />free</span>} />
+                    <AIRadioRow value="github"     label="GitHub Models"   selected={pendingProvider === 'github'}     onSelect={setPendingProvider} />
                     <AIRadioRow value="gemini-api" label="Gemini API"      selected={pendingProvider === 'gemini-api'} onSelect={setPendingProvider} />
                     <AIRadioRow value="mistral"    label="Mistral API"     selected={pendingProvider === 'mistral'}    onSelect={setPendingProvider} />
                     <AIRadioRow value="grok"       label="Grok (xAI)"      selected={pendingProvider === 'grok'}       onSelect={setPendingProvider} />
@@ -556,7 +593,7 @@ export function Settings() {
 
                     {/* Custom API Providers */}
                     {customProviders.filter(p => p.type === 'api').map(p => (
-                      <AIRadioRow 
+                      <AIRadioRow
                         key={p.id} value={p.id} label={p.name} selected={pendingProvider === p.id} onSelect={setPendingProvider}
                         onEdit={() => startEditCustom(p)} onDelete={() => deleteCustom(p.id)}
                       />
@@ -670,18 +707,25 @@ export function Settings() {
                   {pendingProvider === 'github' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="field" style={{ marginBottom: 0 }}>
-                        <label>Personal Access Token <span style={{ color: 'var(--text3)', fontWeight: 400 }}>permiso models:read</span></label>
+                        <label>Personal Access Token <span style={{ color: 'var(--text3)', fontWeight: 400 }}>opcional si gh ya esta autenticado</span></label>
                         <input type="password" value={ghToken} onChange={(e) => setGhToken(e.target.value)}
                           placeholder="ghp_…" style={{ fontFamily: 'var(--mono)' }} />
-                        <div className="hint">Settings → Developer settings → PAT → Fine-grained → Models: Read</div>
+                        <div className="hint">Si no introduces token, se intentara usar la sesion actual de gh (gh auth token). Con PAT: Settings → Developer settings → Fine-grained → Models: Read.</div>
                       </div>
                       <div className="field" style={{ marginBottom: 0 }}>
                         <label>Modelo</label>
                         <select value={ghModel} onChange={(e) => setGhModel(e.target.value)}>
-                          <option value="gpt-4o-mini">gpt-4o-mini — rápido, gratuito</option>
-                          <option value="gpt-4o">gpt-4o — potente</option>
-                          <option value="o1-mini">o1-mini — razonamiento</option>
+                          {ghModelOptions.map((modelId) => (
+                            <option key={modelId} value={modelId}>{modelId}</option>
+                          ))}
                         </select>
+                        {ghModelsLoading && <div className="hint">Detectando modelos disponibles para tu cuenta…</div>}
+                        {!ghModelsLoading && !ghModelsError && ghModels.length > 0 && (
+                          <div className="hint">Modelos detectados: {ghModels.length}</div>
+                        )}
+                        {!ghModelsLoading && ghModelsError && (
+                          <div className="hint" style={{ color: 'var(--coral)' }}>{ghModelsError}</div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -822,13 +866,13 @@ export function Settings() {
                       {testResult.ok ? `Conexión OK (${testResult.latencyMs}ms)` : testResult.error}
                     </span>
                   )}
-                  
+
                   {['api','openai','github','gemini-api','mistral','grok', 'deepseek', 'groq', 'openrouter', 'perplexity'].includes(pendingProvider) || customProviders.some(p => p.id === pendingProvider) ? (
                     <button className="btn sm ghost" onClick={testConn} disabled={testing || saving}>
                       {testing ? <><i className="ti ti-loader-2" /> Probando…</> : <><i className="ti ti-plug" /> Probar conexión</>}
                     </button>
                   ) : null}
-                  
+
                   <button className="btn primary sm" onClick={saveAll} disabled={saving || testing}>
                     {saving ? <><i className="ti ti-loader-2" /> Guardando…</> : <><i className="ti ti-device-floppy" /> Guardar</>}
                   </button>
@@ -907,7 +951,7 @@ export function Settings() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--text1)' }}>Al cerrar:</span>
-                  <select 
+                  <select
                     style={{ padding: '4px 8px', fontSize: 12, width: 'auto' }}
                     value={config?.closeAction ?? 'ask'}
                     onChange={async (e) => { await req('PUT', '/config', { closeAction: e.target.value }); await refreshConfig(); }}
@@ -1449,7 +1493,7 @@ export function Settings() {
       {showCustomChoice && (
         <Modal title="Añadir proveedor personalizado" onClose={() => setShowCustomChoice(false)} hideFooter>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div 
+            <div
               className="choice-card"
               onClick={() => { setShowCustomChoice(false); startEditCustom({ type: 'api', isOpenAICompatible: true }); }}
               style={{ padding: 20, borderRadius: 12, background: 'var(--bg2)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'center', transition: 'all .2s' }}
@@ -1458,7 +1502,7 @@ export function Settings() {
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Configurar a mano</div>
               <div style={{ fontSize: 11, color: 'var(--text2)' }}>Define URL, claves y cabeceras manualmente</div>
             </div>
-            <div 
+            <div
               className="choice-card"
               onClick={() => { setShowCustomChoice(false); importCustomFile(); }}
               style={{ padding: 20, borderRadius: 12, background: 'var(--bg2)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'center', transition: 'all .2s' }}
@@ -1498,10 +1542,10 @@ export function Settings() {
 
       {/* ── Modal: Proveedor IA Custom ── */}
       {editingCustom && (
-        <Modal 
-          title={editingCustom.id ? 'Editar Proveedor' : 'Nuevo Proveedor Personalizado'} 
-          confirmLabel="Guardar" 
-          onConfirm={handleSaveCustom} 
+        <Modal
+          title={editingCustom.id ? 'Editar Proveedor' : 'Nuevo Proveedor Personalizado'}
+          confirmLabel="Guardar"
+          onConfirm={handleSaveCustom}
           onClose={() => setEditingCustom(null)}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1555,7 +1599,7 @@ export function Settings() {
                 {!editingCustom.isOpenAICompatible && (
                   <div className="field" style={{ marginBottom: 0 }}>
                     <label>Headers Adicionales (JSON)</label>
-                    <textarea 
+                    <textarea
                       rows={4} value={customHeadersRaw} onChange={(e) => setCustomHeadersRaw(e.target.value)}
                       placeholder='{ "Ocp-Apim-Subscription-Key": "..." }'
                       style={{ fontFamily: 'var(--mono)', fontSize: 11 }}

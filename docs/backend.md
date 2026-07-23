@@ -330,6 +330,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/ai/status` | `{ provider, ready: bool }` |
+| POST | `/api/ai/models` | Lista modelos disponibles por proveedor. Soporta `github` con body `{ provider, token? }` y devuelve `{ models: string[] }`. Si `token` no llega, usa `config.githubToken` y luego fallback a `gh auth token`. |
 | GET | `/api/ai/usage` | `AIUsage`: `{ cumulative, session }` con tokens y coste estimado |
 | POST | `/api/ai/usage/reset` | Reinicia contadores de sesión |
 | POST | `/api/ai/usage/reset-all` | Reinicia todo; borra `cache/ai-usage.json` |
@@ -639,6 +640,8 @@ syncProject(projectId)
 | **Nativos** | DeepSeek, Groq, OpenRouter, Perplexity | `fetch` compatible OpenAI |
 | **CLIs** | Aider, Cline, Goose | Spawn de proceso nativo |
 | **Custom** | Dinámicos (API/CLI) | Soporta Azure, Headers custom |
+
+Para el proveedor `github` en ejecuciones por orquestador/subsistema, si el agente tiene `agent.model` definido se usa ese ID como prioridad; si no, se usa `config.githubModel`.
 
 ### `callAI(prompt, systemPrompt?)`
 

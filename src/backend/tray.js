@@ -44,6 +44,7 @@ function createTray(win) {
 
   // Left click → show/focus window
   tray.on('click', () => {
+    if (!win || win.isDestroyed()) return;
     if (win.isVisible()) {
       win.focus();
     } else {
@@ -65,7 +66,11 @@ function updateContextMenu(win) {
   const menu = Menu.buildFromTemplate([
     {
       label: 'Abrir Agent Hub',
-      click: () => { win.show(); win.focus(); },
+      click: () => {
+        if (!win || win.isDestroyed()) return;
+        win.show();
+        win.focus();
+      },
     },
     { type: 'separator' },
     {
