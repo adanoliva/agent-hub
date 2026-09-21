@@ -550,7 +550,7 @@ export function Settings() {
                     <AIRadioRow value="codex-cli" label="OpenAI Codex CLI" selected={pendingProvider === 'codex-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['codex-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>}
                       extra={<span className="badge amber"><i className="ti ti-flask" />exp</span>} />
-                    <AIRadioRow value="copilot-cli" label="Copilot CLI (gh)" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
+                    <AIRadioRow value="copilot-cli" label="Copilot CLI" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['copilot-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
 
                     <AIRadioRow value="aider-cli" label="Aider CLI" selected={pendingProvider === 'aider-cli'} onSelect={setPendingProvider}
@@ -660,10 +660,10 @@ export function Settings() {
 
                   {pendingProvider === 'copilot-cli' && (
                     <div style={{ fontSize: 12, color: 'var(--text1)' }}>
-                      <strong>GitHub Copilot CLI</strong> — requiere <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>gh</code> + extensión copilot.
+                      <strong>GitHub Copilot CLI</strong> — standalone <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>copilot</code> o <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>gh</code> + extensión copilot.
                       {cliChecks['copilot-cli']?.found
-                        ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> gh detectado en {cliChecks['copilot-cli'].path}</span>
-                        : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>gh no encontrado en PATH</span>}
+                        ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> detectado en {cliChecks['copilot-cli'].path}</span>
+                        : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>copilot / gh no encontrado en PATH</span>}
                     </div>
                   )}
 

@@ -724,6 +724,7 @@ Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta an
 |---|---|
 | `readFile(projectPath, filePath)` | Lee fichero. Devuelve `{ path, content, size, hash, language, modified }` |
 | `writeFile(projectPath, filePath, content)` | Escribe con backup automático. Devuelve `{ saved, path, hash, backupPath }` |
+| `createDirectory(projectPath, dirPath)` | Crea directorios de forma segura (recursivo). Devuelve `{ created, existed, path }` |
 | `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5). Máx. 500 resultados |
 | `bashCommand(projectPath, command)` | Ejecuta comando de la whitelist. Timeout 30 s |
 | `grepFiles(projectPath, pattern, glob?)` | Búsqueda regex. Máx. 300 coincidencias |
@@ -744,6 +745,9 @@ TOOL: write
 PATH: src/utils.ts
 CONTENT:
 [contenido]
+---
+TOOL: mkdir
+PATH: src/nueva-carpeta
 ---
 TOOL: bash
 COMMAND: find src -name "*.ts"

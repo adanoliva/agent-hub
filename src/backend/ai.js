@@ -96,22 +96,41 @@ function whichBin(bin) {
   return new Promise((resolve) => {
     const cmd = process.platform === 'win32' ? `where ${bin}` : `which ${bin}`;
     exec(cmd, (err, stdout) => {
-      const found = !err && stdout.trim().length > 0;
-      resolve({ found, path: found ? stdout.trim().split('\n')[0] : null });
+      const lines = String(stdout || '')
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      const found = !err && lines.length > 0;
+      if (!found) return resolve({ found: false, path: null });
+
+      if (process.platform !== 'win32') {
+        return resolve({ found: true, path: lines[0] });
+      }
+
+      const preferredExt = new Set(['.exe', '.cmd', '.bat']);
+      const direct = lines.find(p => preferredExt.has(path.extname(p).toLowerCase()));
+      if (direct) return resolve({ found: true, path: direct });
+
+      const cmdSibling = lines.find(p => !path.extname(p) && fs.existsSync(`${p}.cmd`));
+      if (cmdSibling) return resolve({ found: true, path: `${cmdSibling}.cmd` });
+
+      resolve({ found: true, path: lines[0] });
     });
   });
 }
 
 async function checkAllCLIs() {
-  const [claude, gemini, codex, gh, aider, cline, goose] = await Promise.all([
+  const [claude, gemini, codex, gh, copilotStandalone, aider, cline, goose] = await Promise.all([
     whichBin('claude'), whichBin('gemini'), whichBin('codex'), whichBin('gh'),
+    whichBin('copilot'),
     whichBin('aider'), whichBin('cline'), whichBin('goose'),
   ]);
   return {
     'cli': claude,
     'gemini-cli': gemini,
     'codex-cli': codex,
-    'copilot-cli': gh,
+    // standalone 'copilot' binary takes priority over 'gh copilot'
+    'copilot-cli': copilotStandalone.found ? copilotStandalone : gh,
     'aider-cli': aider,
     'cline-cli': cline,
     'goose-cli': goose,
@@ -621,7 +640,7 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
 
     const spawnOpts = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      shell: opts.shell !== undefined ? opts.shell : process.platform === 'win32',
       env: {
         ...process.env,
         CI: '1',          // tell CLIs they're running non-interactively
@@ -638,8 +657,12 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
 
     child.stdout.on('data', d => { stdout += d.toString(); });
     child.stderr.on('data', d => { stderr += d.toString(); });
-    child.stdin.write(prompt, 'utf8');
-    child.stdin.end();
+    if (opts.noStdin) {
+      child.stdin.end();
+    } else {
+      child.stdin.write(prompt, 'utf8');
+      child.stdin.end();
+    }
 
     const timer = setTimeout(() => {
       child.kill();
@@ -690,7 +713,30 @@ function callCodexCLI(prompt, opts = {}) {
   return callGenericCLI('codex', ['--model', model, '--quiet'], prompt, opts);
 }
 
-function callCopilotCLI(prompt, opts = {}) {
+async function callCopilotCLI(prompt, opts = {}) {
+  const standalone = await whichBin('copilot');
+  if (standalone.found) {
+    const promptText = String(prompt || '');
+    const useLongPromptFallback = promptText.length > 1800;
+    const isWinCmdWrapper = process.platform === 'win32' && /\.(cmd|bat)$/i.test(String(standalone.path || ''));
+    const copilotBin = isWinCmdWrapper ? 'copilot' : standalone.path;
+
+    // Copilot CLI wrappers on Windows can break with long --prompt args.
+    // In that case, use gh copilot (stdin-based) as a safe transport fallback.
+    if (process.platform === 'win32' && isWinCmdWrapper && useLongPromptFallback) {
+      return callGenericCLI('gh', ['copilot', 'suggest', '-t', 'shell'], promptText, opts);
+    }
+
+    if (process.platform === 'win32') {
+      return callGenericCLI(copilotBin, ['--prompt', promptText, '--allow-all-tools'], '', {
+        ...opts,
+        noStdin: true,
+        shell: isWinCmdWrapper ? true : false,
+      });
+    }
+
+    return callGenericCLI(standalone.path, ['--prompt', promptText], '', { ...opts, noStdin: true, shell: false });
+  }
   return callGenericCLI('gh', ['copilot', 'suggest', '-t', 'shell'], prompt, opts);
 }
 
@@ -1214,9 +1260,16 @@ async function callAIChat(messages, opts = {}) {
 
   // CLI providers: flatten conversation into a single prompt
   const lines = [];
-  if (opts.systemPrompt) lines.push(`[System]: ${opts.systemPrompt}\n`);
-  for (const m of messages) {
-    lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+  if (provider === 'copilot-cli') {
+    for (const m of messages) {
+      lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+    }
+    if (opts.systemPrompt) lines.push(`[System]: ${opts.systemPrompt}\n`);
+  } else {
+    if (opts.systemPrompt) lines.push(`[System]: ${opts.systemPrompt}\n`);
+    for (const m of messages) {
+      lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+    }
   }
   const flatPrompt = lines.join('\n\n');
   switch (provider) {

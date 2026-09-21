@@ -105,24 +105,41 @@ function whichCLI(bin) {
   const cmd = isWin ? `where ${bin}` : `which ${bin}`;
   return new Promise((resolve) => {
     exec(cmd, (err, stdout) => {
-      const found = !err && stdout.trim().length > 0;
-      resolve({ found, path: found ? stdout.trim().split('\n')[0] : null });
+      const lines = String(stdout || '')
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      const found = !err && lines.length > 0;
+      if (!found) return resolve({ found: false, path: null });
+
+      if (!isWin) return resolve({ found: true, path: lines[0] });
+
+      const preferredExt = new Set(['.exe', '.cmd', '.bat']);
+      const direct = lines.find(p => preferredExt.has(path.extname(p).toLowerCase()));
+      if (direct) return resolve({ found: true, path: direct });
+
+      const cmdSibling = lines.find(p => !path.extname(p) && fs.existsSync(`${p}.cmd`));
+      if (cmdSibling) return resolve({ found: true, path: `${cmdSibling}.cmd` });
+
+      resolve({ found: true, path: lines[0] });
     });
   });
 }
 
 app.get('/api/detect-cli', async (req, res) => {
-  const [claude, gemini, codex, gh] = await Promise.all([
+  const [claude, gemini, codex, gh, copilotStandalone] = await Promise.all([
     whichCLI('claude'),
     whichCLI('gemini'),
     whichCLI('codex'),
     whichCLI('gh'),
+    whichCLI('copilot'),
   ]);
   const checks = {
     'cli':         claude,
     'gemini-cli':  gemini,
     'codex-cli':   codex,
-    'copilot-cli': gh,
+    // standalone 'copilot' binary takes priority over 'gh copilot'
+    'copilot-cli': copilotStandalone.found ? copilotStandalone : gh,
   };
   const provider = readConfig().aiProvider;
   res.json({ found: !!(checks[provider]?.found), checks });

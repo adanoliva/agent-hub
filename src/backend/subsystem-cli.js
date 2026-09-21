@@ -25,6 +25,11 @@
  *
  *   ---
  *
+ *   TOOL: mkdir
+ *   PATH: src/new-feature
+ *
+ *   ---
+ *
  *   TOOL: bash
  *   COMMAND: find src -name "*.ts" -type f
  *
@@ -59,7 +64,7 @@ function parseAgentResponse(text) {
     if (!toolMatch) continue;
 
     const tool = toolMatch[1].toLowerCase();
-    if (!['read', 'write', 'bash', 'grep', 'browser_get', 'browser_action', 'browser_screenshot', 'mcp'].includes(tool)) continue;
+    if (!['read', 'write', 'mkdir', 'bash', 'grep', 'browser_get', 'browser_action', 'browser_screenshot', 'mcp'].includes(tool)) continue;
 
     let toolCall = null;
 
@@ -82,6 +87,17 @@ function parseAgentResponse(text) {
         id:   crypto.randomUUID(),
         tool: 'write',
         args: { path: pathMatch[1].trim(), content: contentMatch[1] },
+        raw:  block.trim(),
+      };
+    }
+
+    if (tool === 'mkdir') {
+      const pathMatch = block.match(/^PATH:\s*(.+)$/m);
+      if (!pathMatch) continue;
+      toolCall = {
+        id:   crypto.randomUUID(),
+        tool: 'mkdir',
+        args: { path: pathMatch[1].trim() },
         raw:  block.trim(),
       };
     }
@@ -231,6 +247,17 @@ async function executeToolCall(toolCall, projectPath) {
         };
       }
 
+      return {
+        toolCall,
+        success:       true,
+        data,
+        executionTime: Date.now() - start,
+        filesAffected: [data.path],
+      };
+    }
+
+    if (toolCall.tool === 'mkdir') {
+      const data = apiFs.createDirectory(projectPath, toolCall.args.path);
       return {
         toolCall,
         success:       true,
@@ -394,6 +421,10 @@ function buildToolResultsMessage(results) {
         if (result.data.backupPath) lines.push(`  Backup: ${result.data.backupPath}`);
       }
 
+      if (tc.tool === 'mkdir' && result.data) {
+        lines.push(`  ✓ Directorio ${result.data.existed ? 'ya existente' : 'creado'}: ${result.data.path}`);
+      }
+
       if (tc.tool === 'bash' && result.data) {
         lines.push('  Salida:');
         lines.push('  ' + (result.data.stdout || '(sin salida)').split('\n').join('\n  '));
@@ -453,6 +484,17 @@ function buildToolResultsMessage(results) {
   return lines.join('\n');
 }
 
+function isFatalToolError(error) {
+  const code = String(error?.code || '').toUpperCase();
+  return new Set([
+    'VALIDATION_FAILED',
+    'UNKNOWN_TOOL',
+    'MISSING_PATH',
+    'PATH_TRAVERSAL',
+    'PATH_OUT_OF_BOUNDS',
+  ]).has(code);
+}
+
 // ── System prompt builder ─────────────────────────────────────────────────────
 
 /**
@@ -483,20 +525,26 @@ CONTENT:
 
 ---
 
-3. BASH — Ejecutar comando de solo lectura (ls, find, grep, cat, wc, head, tail)
+3. MKDIR — Crear directorio(s)
+TOOL: mkdir
+PATH: src/nueva-carpeta/subcarpeta
+
+---
+
+4. BASH — Ejecutar comando de solo lectura (ls, find, grep, cat, wc, head, tail)
 TOOL: bash
 COMMAND: find src -name "*.ts" -type f
 
 ---
 
-4. GREP — Buscar patrón en archivos
+5. GREP — Buscar patrón en archivos
 TOOL: grep
 PATTERN: export const
 FILE: src/**/*.ts${useBrowser ? `
 
 ---
 
-5. BROWSER_GET — Navegar a una URL y obtener su contenido
+6. BROWSER_GET — Navegar a una URL y obtener su contenido
 TOOL: browser_get
 URL: https://jira.empresa.com/browse/PROJ-123
 [SELECTOR: #main-content]   ← opcional: esperar a que este elemento aparezca
@@ -504,7 +552,7 @@ URL: https://jira.empresa.com/browse/PROJ-123
 
 ---
 
-6. BROWSER_ACTION — Interactuar con la página actual del navegador
+7. BROWSER_ACTION — Interactuar con la página actual del navegador
 TOOL: browser_action
 ACTION: click|fill|select|hover|screenshot|wait|evaluate|tab
 SELECTOR: #summary-field     ← requerido para click/fill/select/hover/wait
@@ -513,7 +561,7 @@ SELECTOR: #summary-field     ← requerido para click/fill/select/hover/wait
 
 ---
 
-7. BROWSER_SCREENSHOT — Capturar pantalla (página completa o elemento)
+8. BROWSER_SCREENSHOT — Capturar pantalla (página completa o elemento)
 TOOL: browser_screenshot
 [SELECTOR: #main-content]   ← opcional: sólo ese elemento
 
@@ -615,6 +663,7 @@ async function execute(prompt, agentSystemPrompt, config) {
   const allBackups       = [];
   const warnings         = [];
   const filesModified    = new Set();
+  let   fatalError       = null;
   const startTime        = Date.now();
   let   totalInput       = 0;
   let   totalOutput      = 0;
@@ -647,6 +696,7 @@ async function execute(prompt, agentSystemPrompt, config) {
         filesModified: [...filesModified],
         backups:       allBackups,
         warnings,
+        fatal:         true,
         error:         err.message,
       };
     }
@@ -688,7 +738,18 @@ async function execute(prompt, agentSystemPrompt, config) {
           error:       result.error?.message || 'Unknown error',
           recoverable: !['PATH_TRAVERSAL', 'PATH_OUT_OF_BOUNDS'].includes(result.error?.code),
         });
+        if (!fatalError && isFatalToolError(result.error)) {
+          fatalError = {
+            code:    result.error.code,
+            message: result.error.message || 'Tool input error',
+            toolCall,
+          };
+        }
       }
+    }
+
+    if (fatalError) {
+      break;
     }
 
     // 5. Build results message and continue conversation
@@ -705,7 +766,7 @@ async function execute(prompt, agentSystemPrompt, config) {
   }
 
   return {
-    success:       completedNormally,
+    success:       completedNormally && !fatalError,
     finalResponse,
     turns:         turn,
     toolCalls:     allToolCalls,
@@ -716,6 +777,8 @@ async function execute(prompt, agentSystemPrompt, config) {
     filesModified: [...filesModified],
     backups:       allBackups,
     warnings,
+    fatal:         Boolean(fatalError),
+    ...(fatalError && { error: fatalError.message, errorCode: fatalError.code }),
     ...(exceededTurns                    && { error: 'MAX_TURNS_EXCEEDED' }),
     ...(exceededTimeout && !exceededTurns && { error: 'TIMEOUT_EXCEEDED' }),
   };

@@ -7,7 +7,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   cli:           'Claude Code CLI',
   'gemini-cli':  'Gemini CLI',
   'codex-cli':   'OpenAI Codex CLI',
-  'copilot-cli': 'Copilot CLI (gh)',
+  'copilot-cli': 'Copilot CLI',
   'aider-cli':   'Aider CLI',
   'cline-cli':   'Cline CLI',
   'goose-cli':   'Goose CLI',

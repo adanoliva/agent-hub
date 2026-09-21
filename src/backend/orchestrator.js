@@ -107,6 +107,25 @@ function stripHandoff(response) {
   return (response || '').replace(/^HANDOFF:\s*\{.+\}\s*$/m, '').trimEnd();
 }
 
+function hasExecutableTaskInMessage(message) {
+  const text = String(message || '');
+  const hasTaskSentence = /ejecuta ahora esta tarea concreta:\s*\S+/i.test(text)
+    || /solicitud ejecutable\s*:\s*\S+/i.test(text);
+
+  const kvLines = text.match(/^[ \t>*-]*[^:\n]{2,80}:\s*\S.+$/gim) || [];
+  const nonMetaKvLines = kvLines.filter(line => {
+    const trimmed = String(line).trim();
+    return !/^(system|user|assistant|role)\s*:/i.test(trimmed);
+  });
+
+  return hasTaskSentence || nonMetaKvLines.length > 0;
+}
+
+function looksLikeTaskRefusal(response) {
+  const text = String(response || '').toLowerCase();
+  return /no se ha indicado ninguna tarea concreta|no se incluy[oó] ninguna tarea|no hay .*objetivo|no puedo proceder sin saber qu[eé] tarea|indica(r)? la tarea espec[ií]fica/.test(text);
+}
+
 // ── DAG scheduler ────────────────────────────────────────────────────────────
 
 /**
@@ -296,22 +315,40 @@ class OrchestrationExecutor extends EventEmitter {
   }
 
   _getContextFile() {
-    // Use project.aiProvider to determine which context file format this project uses.
-    // cfg.aiProvider is the execution engine and is irrelevant here.
-    const projectProvider = this.project.aiProvider || 'claude';
+    // Resolve project context from current project provider setup.
+    // Supports legacy project.aiProvider and current project.aiProviders[] shape.
+    const cfg = readConfig();
+    const executionProvider = cfg.aiProvider || 'cli';
+    const executionPrefersGithub = GITHUB_GROUP_PROVIDERS.has(executionProvider);
 
-    const candidates = projectProvider === 'github'
-      ? [path.join(this.project.path, '.github', 'copilot-instructions.md')]
-      : projectProvider === 'both'
-        ? [
-            path.join(this.project.path, 'CLAUDE.md'),
-            path.join(this.project.path, '.claude', 'CLAUDE.md'),
-            path.join(this.project.path, '.github', 'copilot-instructions.md'),
-          ]
-        : [
-            path.join(this.project.path, 'CLAUDE.md'),
-            path.join(this.project.path, '.claude', 'CLAUDE.md'),
-          ];
+    const legacyProvider = String(this.project.aiProvider || '').toLowerCase();
+    const providers = Array.isArray(this.project.aiProviders)
+      ? this.project.aiProviders.map(p => String(p || '').toLowerCase()).filter(Boolean)
+      : [];
+
+    const hasGithub = legacyProvider === 'github' || legacyProvider === 'both' || providers.includes('github');
+    const hasClaudeLike = legacyProvider === 'claude'
+      || legacyProvider === 'both'
+      || providers.includes('claude')
+      || providers.includes('openai')
+      || providers.includes('gemini');
+
+    const githubContext = [path.join(this.project.path, '.github', 'copilot-instructions.md')];
+    const claudeContext = [
+      path.join(this.project.path, 'CLAUDE.md'),
+      path.join(this.project.path, '.claude', 'CLAUDE.md'),
+    ];
+
+    let candidates = [];
+    if (hasGithub && (executionPrefersGithub || !hasClaudeLike)) {
+      candidates = [...githubContext, ...claudeContext];
+    } else if (hasClaudeLike && hasGithub) {
+      candidates = [...claudeContext, ...githubContext];
+    } else if (hasGithub) {
+      candidates = githubContext;
+    } else {
+      candidates = claudeContext;
+    }
 
     for (const fp of candidates) {
       if (fs.existsSync(fp)) {
@@ -332,6 +369,8 @@ class OrchestrationExecutor extends EventEmitter {
 
     let prompt = agent?.system ||
       `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
+
+    prompt += `\n\n# REGLA DE EJECUCIÓN\nSi el mensaje incluye un bloque "## Solicitud ejecutable", "## Solicitud activa", "## Parametros de ejecucion" o "## Solicitud concreta a ejecutar", trata ese contenido como la tarea activa. No respondas que falta una tarea concreta si esos bloques existen.`;
 
     // Project context: root nodes include it by default; non-root only if explicitly requested
     const includeContext = isRoot
@@ -389,6 +428,37 @@ class OrchestrationExecutor extends EventEmitter {
     let message = '';
     const isRoot = node.dependsOn.length === 0;
 
+    const temporalItems = [];
+    for (const n of this.orchestration.nodes || []) {
+      for (const temp of (n.contextExtra?.temporal || [])) {
+        const value = this.temporalContextValues[`${n.id}-${temp.id}`];
+        if (!value) continue;
+        temporalItems.push({
+          label: String(temp.label || temp.id || 'INPUT').trim(),
+          value: String(value).trim(),
+        });
+      }
+    }
+
+    const isIdentifierLabel = (label) => /(^|[^a-z])(id|ids|uuid|guid|key|clave|codigo|c[oó]digo|referencia|ref)([^a-z]|$)/i.test(String(label || '').toLowerCase());
+    const actionableItems = temporalItems.filter(item => !isIdentifierLabel(item.label));
+
+    // Build a global execution-params block (LABEL: value) using the exact
+    // field names defined in the orchestration.
+    const globalParams = temporalItems.map(item => ({ key: item.label, value: item.value }));
+    const seenParams = new Set();
+    const paramLines = [];
+    for (const p of globalParams) {
+      if (seenParams.has(p.key)) continue;
+      seenParams.add(p.key);
+      paramLines.push(`${p.key}: ${p.value}`);
+    }
+    const paramsList = paramLines.join('\n');
+
+    if (!isRoot && paramsList) {
+      message += `## Parametros de ejecucion\n\n${paramsList}\n\n`;
+    }
+
     // Revision feedback (keyed by nodeId)
     const revisions = this._revisionFeedback?.[node.id];
     if (revisions?.length > 0) {
@@ -399,16 +469,35 @@ class OrchestrationExecutor extends EventEmitter {
     }
 
     if (isRoot) {
-      // Root node: temporal inputs and optional task text from the node itself
-      for (const temp of (node.contextExtra?.temporal || [])) {
-        const val = this.temporalContextValues[`${node.id}-${temp.id}`];
-        if (val) message += `## ${temp.label || 'Entrada'}\n\n${val}\n\n`;
-      }
+      // Root node: build one explicit active request from the orchestration inputs.
       const taskText = node.contextExtra?.fixed?.freeText?.trim();
-      message += taskText
-        ? `## Tarea\n\n${taskText}`
+      const nodeTemporalItems = [];
+      for (const temp of (node.contextExtra?.temporal || [])) {
+        const raw = this.temporalContextValues[`${node.id}-${temp.id}`];
+        if (!raw) continue;
+        nodeTemporalItems.push({
+          label: String(temp.label || temp.id || 'INPUT').trim(),
+          value: String(raw).trim(),
+        });
+      }
+
+      const primaryAction = actionableItems.length > 0 ? actionableItems[0] : null;
+      const actionableSummary = actionableItems.length > 0
+        ? actionableItems.map(item => `${item.label}: ${item.value}`).join('\n')
+        : '';
+      const nodeInputsSummary = nodeTemporalItems.length > 0
+        ? nodeTemporalItems.map(item => `${item.label}: ${item.value}`).join('\n')
+        : '';
+      const activeRequest = taskText || primaryAction?.value || nodeInputsSummary || actionableSummary;
+
+      const executableInstruction = `Como ${node.agentName}, ejecuta ahora esta tarea concreta: ${activeRequest}`;
+      const dynamicInputsBlock = nodeInputsSummary || paramsList || '(Sin parametros de entrada)';
+
+      message += activeRequest
+        ? `Solicitud ejecutable: ${executableInstruction}\n\nEntradas del orquestador (campos dinamicos):\n${dynamicInputsBlock}\n\nNo respondas pidiendo una tarea concreta: la tarea ya esta definida arriba y debes ejecutarla ahora.\n\n${taskText && taskText !== activeRequest ? `Instruccion de flujo:\n${taskText}\n\n` : ''}${paramsList ? `Parametros de ejecucion:\n${paramsList}\n\n` : ''}Ejecuta exactamente la solicitud ejecutable usando estos campos como fuente de verdad. Si falta contexto, inspecciona el repositorio y aplica el cambio mínimo necesario.`
         : `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${node.agentName}" en este proyecto.` +
-          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.`;
+          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.` +
+          (paramsList ? `\n\n## Parametros de ejecucion\n\n${paramsList}` : '');
 
     } else {
       // Non-root: merge outputs from all predecessor nodes
@@ -604,6 +693,16 @@ class OrchestrationExecutor extends EventEmitter {
           errors.push(`Nodo "${node.agentName}": archivo de contexto no existe: ${filePath}`);
         }
       }
+
+      for (const temp of (node.contextExtra?.temporal || [])) {
+        if (!temp.required) continue;
+        const value = this.temporalContextValues[`${node.id}-${temp.id}`];
+        const missing = value === undefined || value === null || String(value).trim() === '';
+        if (missing) {
+          const label = temp.label?.trim() || temp.id;
+          errors.push(`Nodo "${node.agentName}": falta el campo requerido "${label}"`);
+        }
+      }
     }
 
     if (!fs.existsSync(this.project.path)) {
@@ -769,10 +868,11 @@ class OrchestrationExecutor extends EventEmitter {
       const provider       = cfg.aiProvider || 'cli';
       const agent          = this._getAgent(agentName);
       const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
-      const CLI_NATIVE     = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+      const CLI_NATIVE     = ['cli', 'gemini-cli', 'codex-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
       const isCustomCLI    = (cfg.customProviders || []).some(p => p.id === provider && p.type === 'cli');
       const useNativeCLI   = CLI_NATIVE.includes(provider) || isCustomCLI;
       const stepRemaining  = Math.max(10_000, orchTimeout - (Date.now() - startTime));
+      const hasConcreteTask = hasExecutableTaskInMessage(userMessage);
 
       let response = '', inputTokens = 0, outputTokens = 0, stepCostUSD = 0;
 
@@ -785,8 +885,8 @@ class OrchestrationExecutor extends EventEmitter {
         catch (e) { this._log('warn', `MCP acquire error: ${e.message}`); }
       }
 
+      let browserContext = '';
       if (useNativeCLI) {
-        let browserContext = '';
         if (agentUsesBrowser) {
           try {
             const browser  = require('./browser');
@@ -806,7 +906,9 @@ class OrchestrationExecutor extends EventEmitter {
           browserContext = await this._buildBrowserContext();
         }
 
-        const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
+        const fullPrompt = provider === 'copilot-cli'
+          ? `${userMessage}\n\n---\n\n${systemPrompt}${browserContext}`
+          : `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
         const extraArgs  = provider === 'cli'
           ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
           : [];
@@ -815,7 +917,7 @@ class OrchestrationExecutor extends EventEmitter {
 
       } else {
         const modelOverride = provider === 'github' ? String(agent?.model || '').trim() || null : null;
-        const cliResult = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
+        const cliResult = await callAIWithSubsystemCLI(userMessage, systemPrompt || agent?.system || '', {
           projectPath: this.project.path, projectContext: contextFile,
           provider, maxTurns: orchestration.executionConfig?.maxTurns || 10,
           timeout: stepRemaining, useBrowser: orchestrationUsesBrowser,
@@ -839,6 +941,10 @@ class OrchestrationExecutor extends EventEmitter {
           throw new Error(`Fallaron ${failedWrites.length} escritura(s) de archivo: ${details}`);
         }
 
+        if (cliResult.fatal) {
+          throw new Error(cliResult.error || 'Error fatal de input en una tool');
+        }
+
         if (!cliResult.success && cliResult.error) {
           if (cliResult.finalResponse?.trim()) {
             this._log('warn', `${cliResult.error} — usando respuesta parcial`);
@@ -847,6 +953,48 @@ class OrchestrationExecutor extends EventEmitter {
         response = cliResult.finalResponse || cliResult.result || '';
         inputTokens = cliResult.tokens?.input || 0; outputTokens = cliResult.tokens?.output || 0;
         stepCostUSD = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', inputTokens, outputTokens);
+      }
+
+      if (hasConcreteTask && looksLikeTaskRefusal(response)) {
+        this._log('warn', `Rechazo de tarea detectado en "${agentName}"; reintentando con corrección obligatoria.`);
+        const retryUserMessage = `${userMessage}\n\n## Correccion obligatoria del orquestador\nExiste una tarea concreta ya definida y debes ejecutarla ahora. No pidas aclaraciones ni repitas que falta tarea. Realiza la accion solicitada y entrega resultado util.`;
+
+        if (useNativeCLI) {
+          const retryFullPrompt = provider === 'copilot-cli'
+            ? `${retryUserMessage}\n\n---\n\n${systemPrompt}${browserContext}`
+            : `${systemPrompt}${browserContext}\n\n---\n\n${retryUserMessage}`;
+          const retryExtraArgs  = provider === 'cli'
+            ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
+            : [];
+          const retryRich = await callAIRich(retryFullPrompt, { timeout: stepRemaining, extraArgs: retryExtraArgs, cwd: this.project.path, mcpServers: agentMcpServers });
+          response = retryRich.text || '';
+          inputTokens += retryRich.inputTokens || 0;
+          outputTokens += retryRich.outputTokens || 0;
+          stepCostUSD += retryRich.costUSD || 0;
+        } else {
+          const modelOverride = provider === 'github' ? String(agent?.model || '').trim() || null : null;
+          const retryCliResult = await callAIWithSubsystemCLI(retryUserMessage, systemPrompt || agent?.system || '', {
+            projectPath: this.project.path, projectContext: contextFile,
+            provider, maxTurns: orchestration.executionConfig?.maxTurns || 10,
+            timeout: stepRemaining, useBrowser: orchestrationUsesBrowser,
+            mcpServers: agentMcpServers, projectId: this.project.id,
+            model: modelOverride,
+          });
+
+          if (retryCliResult.fatal) {
+            throw new Error(retryCliResult.error || 'Error fatal de input en reintento');
+          }
+          if (!retryCliResult.success && retryCliResult.error && !retryCliResult.finalResponse?.trim()) {
+            throw new Error(retryCliResult.error);
+          }
+
+          response = retryCliResult.finalResponse || retryCliResult.result || '';
+          const retryInput = retryCliResult.tokens?.input || 0;
+          const retryOutput = retryCliResult.tokens?.output || 0;
+          inputTokens += retryInput;
+          outputTokens += retryOutput;
+          stepCostUSD += calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', retryInput, retryOutput);
+        }
       }
 
       let costIsEstimated = false;

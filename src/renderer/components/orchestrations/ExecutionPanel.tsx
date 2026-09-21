@@ -93,7 +93,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const setIsOrchestrating = useStore(s => s.setIsOrchestrating);
   const config             = useStore(s => s.config);
 
-  const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+  const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
   const provider   = config?.aiProvider ?? 'cli';
   const isNativeCLI = CLI_NATIVE.includes(provider) ||
     (config?.customProviders?.some(p => p.id === provider && p.type === 'cli') ?? false);
