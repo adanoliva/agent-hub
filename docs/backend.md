@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-06-09 · Versión: 2.4.0
+> Última actualización: 2026-10-17 · Versión: 2.5.0
 
 ---
 
@@ -540,6 +540,15 @@ function gitBlobSHA(content) {
 Las rutas `tech-*` del repositorio remoto se redirigen a `uncategorized`. El repositorio externo ya no debe tener carpetas `tech-*`.
 
 Los `README.md`, en cualquier carpeta, no se descargan: no son agentes. Antes acababan en `uncategorized/` y aparecían como un agente llamado "README".
+
+### Borrado de ficheros retirados
+
+Tras descargar, el sync recorre los ficheros del meta anterior que ya no están en el árbol remoto:
+- **Sin cambios locales** (el SHA en disco coincide con `localSHA`): se borran.
+- **Editados por el usuario**: se conservan, y dejan de figurar en el meta, así que pasan a ser locales.
+- **`README.md`**: se borran siempre. Nunca fueron agentes, y la migración antigua los reescribía, así que su SHA ya no coincide.
+
+El resultado incluye `removed` (número de ficheros borrados), que la UI muestra en el toast de sincronización.
 
 ### Detección de conflictos
 

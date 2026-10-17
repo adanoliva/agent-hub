@@ -344,8 +344,9 @@ export function Agents() {
 
           if (status.lastResult && !status.lastResult.error) {
             await loadAgents(node);
-            if (status.lastResult.updated > 0) {
-              toast(`Directorio sincronizado: ${status.lastResult.updated} agente(s) actualizado(s)`);
+            const { updated = 0, removed = 0 } = status.lastResult;
+            if (updated > 0 || removed > 0) {
+              toast(`Directorio sincronizado: ${updated} actualizado(s)${removed ? `, ${removed} eliminado(s)` : ''}`);
             }
           }
         } else if (status.pendingConflicts.length > 0) {

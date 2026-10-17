@@ -351,7 +351,7 @@ export function Settings() {
         else {
           setDirSyncing(false);
           if (s.lastResult?.error) toast('Error: ' + s.lastResult.error, 'err');
-          else toast(`Sincronizado: ${s.lastResult?.updated ?? 0} actualizado(s), ${s.lastResult?.skipped ?? 0} sin cambios`);
+          else toast(`Sincronizado: ${s.lastResult?.updated ?? 0} actualizado(s), ${s.lastResult?.removed ?? 0} eliminado(s), ${s.lastResult?.skipped ?? 0} sin cambios`);
         }
       };
       setTimeout(poll, 600);

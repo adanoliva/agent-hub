@@ -189,7 +189,7 @@ export interface AgentDirectoryStatus {
   repoCommitSHA:    string | null;
   agentCount:       number;
   pendingConflicts: SyncConflict[];
-  lastResult:       { updated: number; skipped: number; errors: { path: string; error: string }[]; error?: string; upToDate?: boolean } | null;
+  lastResult:       { updated: number; skipped: number; removed?: number; errors: { path: string; error: string }[]; error?: string; upToDate?: boolean } | null;
 }
 
 export type View = 'dashboard' | 'projects' | 'agents' | 'chat' | 'settings' | 'orchestrations';

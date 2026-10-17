@@ -216,6 +216,26 @@ async function performSync(directoryUrl) {
     syncState.progress.done++;
   }
 
+  // Files from a previous sync that are gone upstream (or now excluded, like README.md): delete unless the user edited them.
+  // READMEs always go: they were never agents, and the old migration rewrote them so their SHA no longer matches.
+  const remotePaths = new Set(tree.map((item) => item.path));
+  const removed     = [];
+  for (const [fileKey, fileMeta] of Object.entries(meta.files || {})) {
+    if (remotePaths.has(fileKey)) continue;
+    const localPath = mapRemotePathToLocal(fileKey);
+    try {
+      if (!fs.existsSync(localPath)) continue;
+      const isReadme   = /(^|\/)readme\.md$/i.test(fileKey);
+      const untouched  = gitBlobSHA(fs.readFileSync(localPath, 'utf8')) === fileMeta.localSHA;
+      if (isReadme || untouched) {
+        fs.unlinkSync(localPath);
+        removed.push(fileKey);
+      }
+    } catch (e) {
+      errors.push({ path: fileKey, error: e.message });
+    }
+  }
+
   writeMeta({
     directoryUrl,
     lastSync:      new Date().toISOString(),
@@ -224,11 +244,11 @@ async function performSync(directoryUrl) {
   });
 
   // Mirror globals to ~/.claude/agents/ after any update
-  if (updated.length > 0) {
+  if (updated.length > 0 || removed.length > 0) {
     try { syncGlobalAgentsToClaudeDir(); } catch {}
   }
 
-  return { updated: updated.length, skipped: skipped.length, conflicts, errors, upToDate: false };
+  return { updated: updated.length, skipped: skipped.length, removed: removed.length, conflicts, errors, upToDate: false };
 }
 
 // ── Public trigger (called from main.js and API) ──────────────────────────────
