@@ -9,7 +9,7 @@
  *   - url servers (HTTP/SSE remotes)
  */
 
-const { spawn }   = require('child_process');
+const spawn       = require('cross-spawn');
 const path        = require('path');
 const fs          = require('fs');
 const { readConfig, writeConfig, APP_DIR } = require('./config');
@@ -72,7 +72,6 @@ function _startProcess(name, cfg_) {
   const child = spawn(resolveEnv(cfg_.command), args, {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: process.platform === 'win32',
   });
 
   const entry = { process: child, buffer: '', pending: new Map(), refCount: 0, idleTimer: null };

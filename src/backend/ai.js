@@ -12,7 +12,8 @@
  *   - Provider status check
  */
 
-const { spawn, exec } = require('child_process');
+const { execFile } = require('child_process');
+const spawn = require('cross-spawn');
 const path  = require('path');
 const fs    = require('fs');
 const os    = require('os');
@@ -94,8 +95,7 @@ const GITHUB_GROUP_PROVIDERS = new Set(['github', 'copilot-cli']);
 
 function whichBin(bin) {
   return new Promise((resolve) => {
-    const cmd = process.platform === 'win32' ? `where ${bin}` : `which ${bin}`;
-    exec(cmd, (err, stdout) => {
+    execFile(process.platform === 'win32' ? 'where' : 'which', [bin], (err, stdout) => {
       const found = !err && stdout.trim().length > 0;
       resolve({ found, path: found ? stdout.trim().split('\n')[0] : null });
     });
@@ -165,8 +165,7 @@ async function getProviderStatus() {
 
 function isCLIAvailable() {
   return new Promise((resolve) => {
-    const cmd = process.platform === 'win32' ? 'where claude' : 'which claude';
-    exec(cmd, (err, stdout) => {
+    execFile(process.platform === 'win32' ? 'where' : 'which', ['claude'], (err, stdout) => {
       resolve(!err && stdout.trim().length > 0);
     });
   });
@@ -262,6 +261,7 @@ async function callAI(prompt, opts = {}) {
                           key:     cfg.perplexityKey,
                           model:   cfg.perplexityModel ?? 'sonar-reasoning-pro',
                         }, opts);
+    // ponytail: cmd.exe cuts args at the first newline when the CLI is a .cmd shim (.exe is fine); use a --message-file style flag if that bites
     case 'aider-cli':   return callGenericCLI('aider', ['--message', prompt], prompt, opts);
     case 'cline-cli':   return callGenericCLI('cline', ['--prompt', prompt], prompt, opts);
     case 'goose-cli':   return callGenericCLI('goose', ['--prompt', prompt], prompt, opts);
@@ -290,7 +290,6 @@ function callCLI(prompt, opts = {}) {
 
     const spawnOpts = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
     };
     if (opts.cwd) spawnOpts.cwd = opts.cwd;
 
@@ -561,7 +560,6 @@ function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
 
     const spawnOpts = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
       env: {
         ...process.env,
         CI: '1',          // tell CLIs they're running non-interactively

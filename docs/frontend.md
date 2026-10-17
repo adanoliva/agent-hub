@@ -308,7 +308,7 @@ Variables principales: `--bg0..5`, `--text0..3`, `--accent` (#7c6af7), `--green`
 
 ### `Modal.tsx`
 
-Props: `title`, `sub?`, `onClose`, `onConfirm: () => Promise<void>`, `confirmLabel?`, `confirmClass?`, `modalClassName?`, `bodyClassName?`, `children`.
+Props: `title`, `sub?`, `onClose`, `onConfirm?: () => Promise<void>`, `confirmLabel?`, `confirmClass?`, `modalClassName?`, `bodyClassName?`, `hideFooter?`, `children`. Con `hideFooter` no se renderiza el pie (Cancelar / Confirmar), para modales de solo elección.
 
 **Patrón crítico:** `onConfirm` debe lanzar `throw new Error()` (no `return`) para mantener el modal abierto cuando la validación falla.
 

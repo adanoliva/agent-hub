@@ -195,27 +195,6 @@ test('validate: orquestación válida con 2 agentes y 1 nodo pasa sin errores', 
   assert.equal(errors.length, 0);
 });
 
-test('validate: menos de 2 agentes produce error', async () => {
-  const dir  = makeProjectDir('proj-one-agent').dir;
-  const orch = makeOrch(['agent-uno'], []);
-  const executor = new OrchestrationExecutor(orch, { id: 'p2', path: dir, aiProvider: 'claude' });
-
-  const { valid, errors } = await executor.validate();
-  assert.equal(valid, false);
-  assert.ok(errors.some((e) => e.includes('al menos 2 agentes')));
-});
-
-test('validate: número de nodos incorrecto produce error', async () => {
-  const dir  = makeProjectDir('proj-wrong-nodes').dir;
-  // 2 agentes necesitan 1 nodo, pero pasamos 0
-  const orch = makeOrch(['agent-uno', 'agent-dos'], []);
-  const executor = new OrchestrationExecutor(orch, { id: 'p3', path: dir, aiProvider: 'claude' });
-
-  const { valid, errors } = await executor.validate();
-  assert.equal(valid, false);
-  assert.ok(errors.some((e) => e.includes('conexiones')));
-});
-
 test('validate: agente inexistente produce error', async () => {
   const dir  = makeProjectDir('proj-missing-agent').dir;
   const orch = makeOrch(['agent-uno', 'agente-que-no-existe'], [makeNode(0, 1)]);
@@ -249,13 +228,56 @@ test('validate: ruta de proyecto inexistente produce error', async () => {
   assert.ok(errors.some((e) => e.includes('ruta del proyecto')));
 });
 
-test('validate: nodo con índices incorrectos produce error', async () => {
-  const dir  = makeProjectDir('proj-bad-indices').dir;
-  // El nodo 0→1 se define con from=1,to=2 (debería ser from=0,to=1)
-  const orch = makeOrch(['agent-uno', 'agent-dos'], [makeNode(1, 2)]);
-  const executor = new OrchestrationExecutor(orch, { id: 'p7', path: dir, aiProvider: 'claude' });
+// ── validate (formato DAG) ───────────────────────────────────────────────────
 
-  const { valid, errors } = await executor.validate();
+function dagNode(id, agentName, dependsOn = [], extra = {}) {
+  return {
+    id, agentName, dependsOn,
+    dataFlow:     { agentOutput: true, filesModified: false },
+    contextExtra: { fixed: { freeText: '', files: [] }, temporal: [] },
+    ...extra,
+  };
+}
+
+function makeDag(nodes) {
+  return { id: 'orch-dag', name: 'DAG', projectId: 'p-test', nodes,
+    executionConfig: { timeout: 300_000, maxTurns: 10, stopOnError: true } };
+}
+
+test('validate: orquestación sin nodos produce error', async () => {
+  const dir = makeProjectDir('proj-dag-empty').dir;
+  const { valid, errors } = await new OrchestrationExecutor(makeDag([]), { id: 'p8', path: dir }).validate();
   assert.equal(valid, false);
-  assert.ok(errors.some((e) => e.includes('índices inválidos')));
+  assert.ok(errors.some((e) => e.includes('al menos 1 agente')));
+});
+
+test('validate: nodo flotante produce error', async () => {
+  const dir  = makeProjectDir('proj-dag-floating').dir;
+  const orch = makeDag([dagNode('a', 'agent-uno'), dagNode('b', 'agent-dos', [], { isRoot: false })]);
+  const { valid, errors } = await new OrchestrationExecutor(orch, { id: 'p9', path: dir }).validate();
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('sin conectar')));
+});
+
+test('validate: dependencia inexistente produce error', async () => {
+  const dir  = makeProjectDir('proj-dag-baddep').dir;
+  const orch = makeDag([dagNode('a', 'agent-uno'), dagNode('b', 'agent-dos', ['no-existe'])]);
+  const { valid, errors } = await new OrchestrationExecutor(orch, { id: 'p10', path: dir }).validate();
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('no existe')));
+});
+
+test('validate: nodo sin dependsOn no lanza', async () => {
+  const dir  = makeProjectDir('proj-dag-nodeps').dir;
+  const orch = makeDag([{ id: 'a', agentName: 'agent-uno' }]);
+  const { valid, errors } = await new OrchestrationExecutor(orch, { id: 'p11', path: dir }).validate();
+  assert.equal(valid, true, errors.join(', '));
+});
+
+test('validate: ciclo produce error', async () => {
+  const dir  = makeProjectDir('proj-dag-cycle').dir;
+  const orch = makeDag([dagNode('r', 'agent-uno'), dagNode('a', 'agent-dos', ['r', 'b']), dagNode('b', 'agent-uno', ['a'])]);
+  const { valid, errors } = await new OrchestrationExecutor(orch, { id: 'p12', path: dir }).validate();
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('ciclo')));
 });

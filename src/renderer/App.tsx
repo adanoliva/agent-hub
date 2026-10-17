@@ -1,5 +1,4 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { HashRouter } from 'react-router-dom';
 import { useStore } from './store';
 import { req } from './api';
 import { Sidebar } from './components/layout/Sidebar';
@@ -103,9 +102,7 @@ function AppInner() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <HashRouter>
-        <AppInner />
-      </HashRouter>
+      <AppInner />
     </ErrorBoundary>
   );
 }

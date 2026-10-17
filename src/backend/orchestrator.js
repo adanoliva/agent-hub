@@ -19,6 +19,7 @@ const prompts           = require('./prompts');
 const scriptsRegistry   = require('./scripts-registry');
 const gitCheckpointer   = require('./git-checkpointer');
 const opsLedger         = require('./ops-ledger');
+const { migrateOrchestration } = require('./workflows');
 const crypto2           = crypto; // alias for ops id generation
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -135,7 +136,8 @@ function computeTopologicalLevels(nodes) {
 class OrchestrationExecutor extends EventEmitter {
   constructor(orchestration, project, temporalContextValues = {}) {
     super();
-    this.orchestration         = orchestration;
+    const migrated             = migrateOrchestration(orchestration);
+    this.orchestration         = { ...migrated, nodes: (migrated.nodes || []).map(n => ({ ...n, dependsOn: n.dependsOn || [] })) };
     this.project               = project;
     this.temporalContextValues = temporalContextValues;
     this.executionId           = `exec-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;

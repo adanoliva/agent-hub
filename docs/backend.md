@@ -32,6 +32,7 @@
 16. [Plantillas de contexto (`templates.js`)](#16-plantillas-de-contexto-templatesjs)
 17. [Flujos clave end-to-end](#17-flujos-clave-end-to-end)
 18. [Dashboard y seguimiento de uso](#18-dashboard-y-seguimiento-de-uso)
+19. [CLI (`bin/agent-hub.js`)](#19-cli-binagent-hubjs)
 
 ---
 
@@ -227,13 +228,15 @@ El nivel `tech` fue eliminado. La especificidad tecnológica se gestiona mediant
 
 Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen el prefijo `/api`.
 
+**Protección de origen:** aunque escucha solo en `127.0.0.1`, cualquier web abierta en el navegador del usuario podría llamar a la API. Un middleware responde `403` si la cabecera `Origin` o `Host` no es `localhost`/`127.0.0.1` (cualquier puerto). Esto evita CSRF y DNS rebinding. CORS solo se concede a esos mismos orígenes.
+
 ### Tabla completa de endpoints
 
 #### Health y configuración
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/health` | `{ status: 'ok', port }` |
+| GET | `/api/health` | `{ status: 'ok', version }` (versión de `package.json`) |
 | GET | `/api/config` | Config completa |
 | PUT | `/api/config` | Actualiza campos de configuración |
 | GET | `/api/detect-cli` | `{ found: bool, path? }` — busca CLIs en PATH |
@@ -313,7 +316,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/projects/:id/context?type=auto` | Detecta proveedor y devuelve `ProjectContextInfo` completo |
 | PUT | `/api/projects/:id/context` | Guarda el fichero de contexto |
 | POST | `/api/projects/:id/generate-context?type=` | Genera con IA analizando el directorio del proyecto |
-| POST | `/api/projects/:id/execute-task` | Ejecuta un agente sobre el proyecto. Devuelve `{ result, task, durationMs }` |
+| POST | `/api/projects/:id/run` | Ejecuta un agente sobre el proyecto `{ agent, task, maxTurns?, timeout? }` → `{ result, agent, provider, durationMs }`. Inyecta skills del proyecto y del agente + MCP. Lo usa el CLI (§19) |
 
 #### Dashboard
 
@@ -640,6 +643,8 @@ syncProject(projectId)
 | **CLIs** | Aider, Cline, Goose | Spawn de proceso nativo |
 | **Custom** | Dinámicos (API/CLI) | Soporta Azure, Headers custom |
 
+Todos los procesos externos (CLIs de IA, servidores MCP stdio, `code`) se lanzan con **`cross-spawn`**, nunca con `shell: true`. En Windows resuelve el binario y, si es un shim `.cmd`, escapa los argumentos para `cmd.exe`, así que un prompt con `&`, `|` o `"` no se interpreta como comando. Limitación: `cmd.exe` corta los argumentos en el primer salto de línea cuando el CLI es un `.cmd` (con un `.exe` no pasa). Por eso el prompt también se envía por stdin.
+
 ### `callAI(prompt, systemPrompt?)`
 
 Punto de entrada único. Lee `config.aiProvider` y delega a la rama correspondiente. Captura uso de tokens y llama a `trackUsage()`.
@@ -709,11 +714,15 @@ Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta an
 
 ### Seguridad y restricciones
 
-- **Path traversal**: rechaza rutas con `..`.
+- **Path traversal**: rechaza rutas con `..` y rutas que, tras resolver symlinks/junctions (`realpathSync.native`), quedan fuera del proyecto.
 - **Directorios excluidos**: `node_modules`, `dist`, `.git`, `.next`, `build`, etc.
 - **Archivos binarios**: `.exe`, `.bin`, imágenes, audio, vídeo, fuentes, comprimidos.
 - **Tamaño máximo**: 10 MB por fichero.
-- **Bash whitelist**: solo `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`.
+- **Bash whitelist**: solo `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`. Además se rechazan:
+  - encadenado, redirección y expansión: `; & | \` < > ^ % $(`, y los saltos de línea;
+  - acciones de `find` con efectos (`-exec`, `-delete`, `-fprint`…);
+  - argumentos que apuntan fuera del proyecto (`..`, `~`, `C:`, `\ruta`, `//unc`, `/c/...`).
+- **Listado**: `listFiles` entra en los directorios ocultos (`.github`, `.claude`…), pero omite `.agent-hub/` y los ficheros `.env*` para que los secretos no lleguen al proveedor IA.
 
 ### Funciones exportadas
 
@@ -721,7 +730,7 @@ Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta an
 |---|---|
 | `readFile(projectPath, filePath)` | Lee fichero. Devuelve `{ path, content, size, hash, language, modified }` |
 | `writeFile(projectPath, filePath, content)` | Escribe con backup automático. Devuelve `{ saved, path, hash, backupPath }` |
-| `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5). Máx. 500 resultados |
+| `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5). Máx. 500 resultados. `pattern`: `*.ts` (a cualquier profundidad), glob completo `src/**/*.ts` (`path.matchesGlob`) o prefijo de directorio `src` |
 | `bashCommand(projectPath, command)` | Ejecuta comando de la whitelist. Timeout 30 s |
 | `grepFiles(projectPath, pattern, glob?)` | Búsqueda regex. Máx. 300 coincidencias |
 
@@ -776,7 +785,7 @@ Gestiona la persistencia de las definiciones de orquestación en `{projectPath}/
 - El `inputNode` antiguo (Orquestador → Agent[0]) mapea sus `dataFlow`/`contextExtra` al nodo raíz.
 - Las conexiones `nodes[i]` pasan a ser `dataFlow`/`contextExtra`/`gateAfter`/`scriptParams` del nodo destino.
 
-`migrateOrchestration` se aplica en `read()`, `list()` y `create()` (si el payload viene en formato antiguo). Es transparente para el motor.
+`migrateOrchestration` se aplica en `read()`, `list()`, `create()` (si el payload viene en formato antiguo) y en el constructor de `OrchestrationExecutor`, que además normaliza `dependsOn` a `[]` en los nodos que no lo tienen. Es transparente para el motor.
 
 ### Funciones exportadas
 
@@ -1229,14 +1238,15 @@ Frontend: POST /api/projects { name, categoryId, skills, aiProviders }
 ### Ejecución de agente con skills inyectadas
 
 ```
-POST /api/projects/:id/execute-task { agent }
+POST /api/projects/:id/run { agent, task }
   │
   server.js:
-    ├── getContextAuto() → leer contexto
-    ├── cargar project.skills[] → leer contenido de cada .md de skills
-    ├── buildSystemPrompt = agent.system + skillsBlock + contextContent
-    └── callAIChat([{ role:'user', content: task }], systemPrompt, opts)
-  ← { result, task, durationMs }
+    ├── resolver agente (proyecto → global + section)
+    ├── leer CLAUDE.md / .claude/CLAUDE.md / copilot-instructions.md
+    ├── systemPrompt = agent.system + skills (project.skills ∪ agent.skills)
+    ├── CLI nativo → callAIRich(prompt, { cwd: project.path, mcpServers })
+    └── API/GitHub → callAIWithSubsystemCLI(task, systemPrompt, {...})
+  ← { result, agent, provider, durationMs }
 ```
 
 ---
@@ -1272,3 +1282,19 @@ POST /api/projects/:id/execute-task { agent }
 ### Seguimiento de uso (`ai.js`)
 
 Fichero de persistencia: `cache/ai-usage.json`. Solo `cumulative` se persiste; `session` vive en memoria.
+
+---
+
+## 19. CLI (`bin/agent-hub.js`)
+
+Cliente de terminal sin dependencias (Node ≥ 18, `fetch` + `util.parseArgs`) sobre la API REST. **Requiere la app abierta** (o `npm run dev:backend`). URL configurable con `AGENT_HUB_URL` (default `http://localhost:3737`).
+
+Instalación local: `npm link` en la raíz del repo → comando `agent-hub` global.
+
+| Comando | Descripción |
+|---|---|
+| `agent-hub projects` | Lista proyectos (`id  nombre  [estado]  ruta`) |
+| `agent-hub agents -p <nombre\|id>` | Agentes del proyecto + aplicables (global/section) |
+| `agent-hub run -p <nombre\|id> -a <agente> "<tarea>" [--max-turns N]` | `POST /api/projects/:id/run`. Resultado por stdout, progreso por stderr |
+
+El proyecto se resuelve por id o por nombre (case-insensitive). Exit code `1` ante cualquier error.

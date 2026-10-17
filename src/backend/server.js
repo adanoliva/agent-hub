@@ -48,7 +48,18 @@ const { PROJECT_PROVIDERS } = require('./agent-adapters');
 const app  = express();
 const PORT = process.env.PORT || 3737;
 
-app.use(cors());
+// Bound to 127.0.0.1, but any web page open in the user's browser can still reach it:
+// reject foreign origins (CSRF) and foreign Host headers (DNS rebinding).
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const LOCAL_HOST   = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
+app.use((req, res, next) => {
+  const { origin, host } = req.headers;
+  if ((origin && !LOCAL_ORIGIN.test(origin)) || (host && !LOCAL_HOST.test(host))) {
+    return res.status(403).json({ error: 'Origen no permitido' });
+  }
+  next();
+});
+app.use(cors({ origin: LOCAL_ORIGIN }));
 app.use(express.json());
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'dist', 'renderer');
 app.use(express.static(RENDERER_DIR));
@@ -56,7 +67,7 @@ app.use(express.static(RENDERER_DIR));
 // ── Health ────────────────────────────────────────────────────────────────────
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.0.0', appDir: APP_DIR });
+  res.json({ status: 'ok', version: require('../../package.json').version });
 });
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -385,6 +396,65 @@ app.delete('/api/projects/:id/agents/:name', (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
   deleteProjectAgent(project.path, req.params.name, projectProviders(project));
   res.json({ ok: true });
+});
+
+// POST /api/projects/:id/run — runs one agent on the project (used by bin/agent-hub.js)
+// Body: { agent, task, maxTurns?, timeout? }
+app.post('/api/projects/:id/run', async (req, res) => {
+  const { callAIRich, callAIWithSubsystemCLI } = require('./ai');
+  const mcp = require('./mcp');
+  const cfg = readConfig();
+  const project = cfg.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { agent: agentName, task, maxTurns = 10, timeout = 1_800_000 } = req.body;
+  if (!agentName || !task) return res.status(400).json({ error: 'agent and task required' });
+
+  const agent = [
+    ...listProjectAgents(project.path, projectProviders(project)),
+    ...getApplicableAgents(project.categoryId),
+  ].find(a => a.name === agentName);
+  if (!agent) return res.status(404).json({ error: `Agent "${agentName}" not found for this project` });
+
+  const contextFile = ['CLAUDE.md', '.claude/CLAUDE.md', '.github/copilot-instructions.md']
+    .map(f => path.join(project.path, f)).find(f => fs.existsSync(f));
+  const context = contextFile ? fs.readFileSync(contextFile, 'utf8') : '';
+
+  const skillNames = [...new Set([...(project.skills || []), ...(agent.skills || [])])];
+  const skillsBlock = skills.listAllSkills()
+    .filter(s => skillNames.includes(s.name) && s.content?.trim())
+    .map(s => `\n\n# SKILL: ${s.name}\n${s.content.trim()}`).join('');
+  const systemPrompt = (agent.system || `Eres el agente "${agentName}".`) + skillsBlock;
+
+  const provider = cfg.aiProvider || 'cli';
+  const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+  const useNativeCLI = CLI_NATIVE.includes(provider)
+    || (cfg.customProviders || []).some(p => p.id === provider && p.type === 'cli');
+
+  const mcpServers = mcp.getServersForAgent(agent, project.id);
+  const mcpNames = Object.keys(mcpServers);
+  const start = Date.now();
+  try {
+    if (mcpNames.length) await mcp.acquireServers(mcpNames, project.id);
+    let result;
+    if (useNativeCLI) {
+      const prompt = `${systemPrompt}${context ? `\n\n# CONTEXTO DEL PROYECTO\n${context}` : ''}\n\n---\n\n${task}`;
+      const extraArgs = provider === 'cli' ? ['--dangerously-skip-permissions', '--max-turns', String(maxTurns)] : [];
+      const rich = await callAIRich(prompt, { timeout, extraArgs, cwd: project.path, mcpServers });
+      result = rich.text;
+    } else {
+      const r = await callAIWithSubsystemCLI(task, systemPrompt, {
+        projectPath: project.path, projectContext: context, provider, maxTurns, timeout,
+        mcpServers, projectId: project.id,
+      });
+      if (!r.success && r.error && !r.finalResponse?.trim()) throw new Error(r.error);
+      result = r.finalResponse || r.result || '';
+    }
+    res.json({ result, agent: agentName, provider, durationMs: Date.now() - start });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    if (mcpNames.length) mcp.releaseServers(mcpNames);
+  }
 });
 
 // ── Projects ──────────────────────────────────────────────────────────────────

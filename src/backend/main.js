@@ -173,12 +173,11 @@ ipcMain.handle('dialog:pickFile', async () => {
 });
 
 ipcMain.handle('shell:openVSCode', async (_, projectPath) => {
-  const { exec } = require('child_process');
+  const fail = { ok: false, error: 'VS Code no encontrado en PATH. Abre VS Code → Command Palette → "Shell Command: Install code command in PATH".' };
   return new Promise((resolve) => {
-    exec(`code "${projectPath}"`, (err) => {
-      if (err) resolve({ ok: false, error: 'VS Code no encontrado en PATH. Abre VS Code → Command Palette → "Shell Command: Install code command in PATH".' });
-      else     resolve({ ok: true });
-    });
+    require('cross-spawn')('code', [projectPath], { stdio: 'ignore', windowsHide: true })
+      .on('error', () => resolve(fail))
+      .on('close', (code) => resolve(code === 0 ? { ok: true } : fail));
   });
 });
 

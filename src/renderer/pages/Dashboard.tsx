@@ -235,7 +235,7 @@ export function Dashboard() {
       <div className="dash-state">
         <i className="ti ti-alert-circle" style={{ fontSize: 28, color: 'var(--coral)' }} />
         <p>Error al cargar el dashboard</p>
-        <button className="btn" onClick={load}><i className="ti ti-refresh" />Reintentar</button>
+        <button className="btn" onClick={() => load()}><i className="ti ti-refresh" />Reintentar</button>
       </div>
     </div>
   );

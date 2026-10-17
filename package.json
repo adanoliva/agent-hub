@@ -3,6 +3,9 @@
   "version": "2.4.0",
   "description": "Visual manager for IA agents and dev projects",
   "main": "src/backend/main.js",
+  "bin": {
+    "agent-hub": "bin/agent-hub.js"
+  },
   "scripts": {
     "start": "electron .",
     "predev": "node scripts/kill-dev-ports.js",
@@ -21,12 +24,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
     "cors": "^2.8.5",
+    "cross-spawn": "^7.0.6",
     "electron-updater": "^6.8.3",
     "express": "^4.18.2",
     "playwright": "^1.60.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.15.1",
     "zustand": "^5.0.13"
   },
   "devDependencies": {

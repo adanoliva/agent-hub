@@ -47,8 +47,13 @@ const FORBIDDEN_BASH_PATTERNS = [
   /\bwget\b/i,
   /\binvoke-expression\b/i,
   /\biex\s/i,
-  /[;&|`]/, // command chaining / injection
+  /[;&|`<>^%\r\n]/, // chaining, redirection, cmd escapes/env expansion, multi-line
+  /\$\(/,
+  /-(exec|execdir|ok|okdir|delete|fprint\w*)\b/i, // find side effects
 ];
+
+// Arguments that point outside the project: `..`, ~, drive letters, UNC/root-relative, /c/... style
+const OUTSIDE_PATH_ARG = /\.\.|^~|^\\|[a-z]:|^\/\/|^\/[^/\s]*\//i;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +108,17 @@ function validatePath(projectPath, filePath) {
     throw err;
   }
 
+  // Symlinks/junctions inside the project can point outside it
+  let probe = resolved;
+  while (!fs.existsSync(probe)) probe = path.dirname(probe);
+  const realProject = fs.realpathSync.native(resolvedProject);
+  const realProbe   = fs.realpathSync.native(probe);
+  if (realProbe !== realProject && !realProbe.startsWith(realProject + path.sep)) {
+    const err = new Error('Path is outside project directory');
+    err.code = 'PATH_OUT_OF_BOUNDS';
+    throw err;
+  }
+
   // Reject access to excluded directories
   const relative = path.relative(resolvedProject, resolved);
   for (const part of relative.split(path.sep)) {
@@ -120,8 +136,9 @@ function isBashCommandForbidden(command) {
   if (!command || typeof command !== 'string') return true;
   const trimmed = command.trim();
   if (FORBIDDEN_BASH_PATTERNS.some(p => p.test(trimmed))) return true;
-  const base = trimmed.split(/[\s/\\]+/)[0]?.toLowerCase() || '';
-  return !ALLOWED_BASH_COMMANDS.has(base);
+  const [base, ...args] = trimmed.split(/\s+/).map(t => t.replace(/^["']|["']$/g, ''));
+  if (!ALLOWED_BASH_COMMANDS.has(base.toLowerCase())) return true;
+  return args.some(a => OUTSIDE_PATH_ARG.test(a));
 }
 
 function ensureBackupDir(projectPath) {
@@ -269,27 +286,26 @@ function listFiles(projectPath, pattern) {
     if (depth > 5) return;
     try {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name.startsWith('.')) continue;
-        if (EXCLUDED_DIRS.has(entry.name)) continue;
+        if (EXCLUDED_DIRS.has(entry.name) || entry.name === '.agent-hub') continue;
+        if (entry.name.startsWith('.env')) continue; // keep secrets away from the AI provider
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) walk(full, depth + 1);
-        else results.push(path.relative(projectPath, full).replace(/\\/g, '/'));
+        else if (entry.isFile()) results.push(path.relative(projectPath, full).replace(/\\/g, '/'));
       }
     } catch {}
   }
 
   walk(projectPath);
 
-  if (pattern) {
-    const p = String(pattern);
-    const extMatch = p.match(/\*(\.\w+)$/);
-    if (extMatch) return results.filter(f => f.endsWith(extMatch[1]));
+  if (!pattern) return results.slice(0, 500);
 
-    const prefixMatch = p.match(/^([^*]+)\//);
-    if (prefixMatch) return results.filter(f => f.startsWith(prefixMatch[1]));
-  }
-
-  return results.slice(0, 500);
+  // `*.ts` matches at any depth; `src/**/*.ts` is a full glob; `src` / `src/` is a directory prefix
+  const p = String(pattern).replace(/\\/g, '/');
+  const dirPrefix = p.replace(/\/?$/, '/');
+  const matches = p.includes('/') || !/[*?[]/.test(p)
+    ? f => path.matchesGlob(f, p) || f.startsWith(dirPrefix)
+    : f => path.matchesGlob(path.posix.basename(f), p);
+  return results.filter(matches).slice(0, 500);
 }
 
 /**

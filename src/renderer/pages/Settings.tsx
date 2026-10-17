@@ -58,7 +58,7 @@ export function Settings() {
   // MCP
   const [mcpServers,        setMcpServers]        = useState<McpServerEntry[]>([]);
   const [mcpLoading,        setMcpLoading]        = useState(false);
-  const [mcpForm,           setMcpForm]           = useState<Partial<McpServerEntry & { argsRaw: string; envRaw: string; headersRaw: string }> | null>(null);
+  const [mcpForm,           setMcpForm]           = useState<Partial<McpServerEntry & { argsRaw: string; envRaw: string; headersRaw: string; description: string }> | null>(null);
   const [mcpTesting,        setMcpTesting]        = useState(false);
   const [mcpTestResult,     setMcpTestResult]     = useState<{ tools: { name: string; description?: string }[] } | null>(null);
   const [mcpProjectId,      setMcpProjectId]      = useState<string>('');
@@ -1327,7 +1327,7 @@ export function Settings() {
             const env     = Object.fromEntries((envRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
             const headers = Object.fromEntries((headersRaw || '').split('\n').filter(Boolean).map((l: string) => { const i = l.indexOf('='); return [l.slice(0,i), l.slice(i+1)]; }));
 
-            const description = (mcpForm as any).description?.trim() || undefined;
+            const description = mcpForm.description?.trim() || undefined;
             const finalConfig: McpServerConfig = cfg_.type === 'url'
               ? { type: 'url', url: cfg_.url, headers, ...(description ? { description } : {}) }
               : { type: 'stdio', command: cfg_.command, args, env, ...(description ? { description } : {}) };
@@ -1393,7 +1393,7 @@ export function Settings() {
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Descripción <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(opcional — aparece como tooltip)</span></label>
               <input
-                value={(mcpForm as any).description || ''}
+                value={mcpForm.description || ''}
                 placeholder="ej: Acceso a repositorios y PRs de GitHub"
                 onChange={e => setMcpForm({ ...mcpForm, description: e.target.value } as any)}
               />

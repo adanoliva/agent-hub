@@ -1,6 +1,6 @@
 # Guía de Estilos Visuales — Agent Hub
 
-> Esta guía define los estándares visuales, la paleta de colores y los componentes base de la interfaz de Agent Hub (v1.9.5).
+> Esta guía define los estándares visuales, la paleta de colores y los componentes base de la interfaz de Agent Hub (v2.4.0).
 
 ## 1. Identidad Visual
 

@@ -7,8 +7,9 @@ interface ModalProps {
   bodyClassName?: string;
   confirmLabel?: string;
   confirmClass?: string;
-  onConfirm: () => void | Promise<void>;
+  onConfirm?: () => void | Promise<void>;
   onClose: () => void;
+  hideFooter?: boolean;
   children: React.ReactNode;
 }
 
@@ -21,6 +22,7 @@ export function Modal({
   confirmClass = 'btn primary',
   onConfirm,
   onClose,
+  hideFooter,
   children,
 }: ModalProps) {
   const [loading, setLoading] = React.useState(false);
@@ -28,7 +30,7 @@ export function Modal({
   async function handleConfirm() {
     setLoading(true);
     try {
-      await onConfirm();
+      await onConfirm?.();
     } finally {
       setLoading(false);
     }
@@ -45,12 +47,14 @@ export function Modal({
           <button className="btn ghost sm" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
         <div className={`modal-body${bodyClassName ? ` ${bodyClassName}` : ''}`}>{children}</div>
-        <div className="modal-foot">
-          <button className="btn" onClick={onClose}>Cancelar</button>
-          <button className={confirmClass} onClick={handleConfirm} disabled={loading}>
-            {loading ? <i className="ti ti-loader-2" style={{ animation: 'spin 1s linear infinite' }} /> : confirmLabel}
-          </button>
-        </div>
+        {!hideFooter && (
+          <div className="modal-foot">
+            <button className="btn" onClick={onClose}>Cancelar</button>
+            <button className={confirmClass} onClick={handleConfirm} disabled={loading}>
+              {loading ? <i className="ti ti-loader-2" style={{ animation: 'spin 1s linear infinite' }} /> : confirmLabel}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
