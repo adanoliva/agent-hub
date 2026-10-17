@@ -55,7 +55,7 @@ const SCRIPTS_DIR  = path.join(APP_DIR, 'user-scripts');
 // ── Default config ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-  version: '2.4.0',
+  version: '2.5.0',
   aiProvider: 'cli',
 
   // Anthropic API

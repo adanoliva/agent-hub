@@ -201,6 +201,7 @@ app.whenReady().then(async () => {
   try {
     server = await startServer();
     console.log('[main] Server started');
+    require('./cli-install').refreshIfInstalled();
   } catch (err) {
     console.error('[main] Failed to start server:', err);
     app.quit();

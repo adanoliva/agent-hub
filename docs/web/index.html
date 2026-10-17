@@ -947,7 +947,7 @@
   <div class="hero-glow"></div>
 
   <div class="hero-left">
-    <div class="hero-tag">v2.4.0</div>
+    <div class="hero-tag">v2.5.0</div>
     <h1 class="hero-h1">
       Agentes IA<br>
       en cada<br>
@@ -985,7 +985,7 @@
           <div class="t-dot amber"></div>
           <div class="t-dot green"></div>
         </div>
-        <div class="t-title">agent-hub — bash</div>
+        <div class="t-title">agent-hub — terminal</div>
       </div>
       <div class="terminal-body" id="term-body">
         <!-- JS types here -->
@@ -1015,6 +1015,8 @@
     <span class="marquee-sep">·</span>
     <span class="marquee-item"><i class="ti ti-message-chatbot"></i> Chat multi-turno</span>
     <span class="marquee-sep">·</span>
+    <span class="marquee-item"><i class="ti ti-terminal-2"></i> CLI agent-hub</span>
+    <span class="marquee-sep">·</span>
     <!-- duplicate for seamless loop -->
     <span class="marquee-item"><i class="ti ti-cpu"></i> Claude CLI nativo</span>
     <span class="marquee-sep">·</span>
@@ -1033,6 +1035,8 @@
     <span class="marquee-item"><i class="ti ti-puzzle"></i> Skills de contexto inyectables</span>
     <span class="marquee-sep">·</span>
     <span class="marquee-item"><i class="ti ti-message-chatbot"></i> Chat multi-turno</span>
+    <span class="marquee-sep">·</span>
+    <span class="marquee-item"><i class="ti ti-terminal-2"></i> CLI agent-hub</span>
     <span class="marquee-sep">·</span>
   </div>
 </div>
@@ -1073,7 +1077,7 @@
     <div class="bento-card c6 reveal">
       <i class="ti ti-puzzle bento-icon"></i>
       <h3>Skills de contexto</h3>
-      <p>Bloques de conocimiento tecnológico que se inyectan en el system prompt al ejecutar. Define una vez, reutiliza en todos los agentes del proyecto.</p>
+      <p>Bloques de conocimiento tecnológico que se inyectan en el system prompt al ejecutar. Escríbelas o genéralas con IA en español o inglés, y reutilízalas en todos los agentes del proyecto.</p>
       <div class="skill-tags">
         <span class="skill-tag active">react</span>
         <span class="skill-tag active">typescript</span>
@@ -1137,6 +1141,20 @@
       <i class="ti ti-file-text bento-icon"></i>
       <h3>Contexto generado con IA</h3>
       <p>Genera y sincroniza <code style="font-family:var(--mono); font-size:11px; background:var(--bg3); padding:1px 5px;">CLAUDE.md</code> y equivalentes en todos los proveedores configurados.</p>
+    </div>
+
+    <!-- CLI — full width -->
+    <div class="bento-card c12 accent-card reveal">
+      <div style="display:flex; align-items:flex-start; gap:40px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:220px;">
+          <i class="ti ti-terminal-2 bento-icon"></i>
+          <h3>Agentes desde la terminal <span style="font-family:var(--mono); font-size:10px; color:var(--accent); border:1px solid rgba(124,106,247,.4); padding:1px 6px; margin-left:6px; vertical-align:middle;">NUEVO</span></h3>
+          <p>Lanza cualquier agente sobre un proyecto sin salir de tu terminal. Se instala con un clic desde Ajustes, sin Node ni permisos de administrador, y usa el mismo proveedor, skills y servidores MCP que la app (que debe estar abierta).</p>
+        </div>
+        <pre style="flex:1; min-width:260px; margin:0; align-self:center; font-family:var(--mono); font-size:11px; line-height:1.8; background:var(--bg1); border:1px solid var(--border); padding:14px 16px; overflow-x:auto; color:var(--text1);"><span style="color:var(--text3)">$</span> agent-hub projects
+<span style="color:var(--text3)">$</span> agent-hub agents -p api
+<span style="color:var(--text3)">$</span> agent-hub run -p api -a test-writer "cubre src/auth"</pre>
+      </div>
     </div>
   </div>
 </section>
@@ -1693,14 +1711,13 @@
 <script>
   // ── Terminal animation ───────────────────────
   const lines = [
-    { prompt: '$', text: 'agent-hub run -p backend-api -a refactor-expert "..."', color: '' },
-    { prompt: '>', text: 'Agente: refactor-expert (sonnet)', color: 'dim' },
-    { prompt: '>', text: 'Inyectando skills: typescript, postgresql', color: 'dim' },
-    { prompt: '>', text: 'Leyendo src/server.js · src/api.ts · 6 más...', color: 'dim' },
-    { prompt: '>', text: '✓ Refactoring aplicado — 3 archivos modificados', color: 'ok' },
-    { prompt: '>', text: 'git commit [agenthub]: paso 1/3 refactor-expert', color: 'info' },
-    { prompt: '>', text: 'HANDOFF → test-writer', color: 'accent' },
-    { prompt: '>', text: '1 347 tokens · $0.004', color: 'dim' },
+    { prompt: '$', text: 'agent-hub run -p backend-api -a refactor-expert "extrae la validación a un middleware"', color: '' },
+    { prompt: '>', text: 'Proyecto: backend-api', color: 'dim' },
+    { prompt: '>', text: 'Agente: refactor-expert', color: 'dim' },
+    { prompt: '>', text: 'Ejecutando…', color: 'dim' },
+    { prompt: ' ', text: 'Creado src/middleware/validate.ts', color: 'info' },
+    { prompt: ' ', text: 'Actualizados src/routes/users.ts · src/routes/orders.ts', color: 'info' },
+    { prompt: '✓', text: 'cli · 41.8s', color: 'ok' },
   ];
 
   const body = document.getElementById('term-body');

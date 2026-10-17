@@ -154,6 +154,25 @@ export function Settings() {
   // Fetch AI status once when tab is general
   React.useEffect(() => { if (tab === 'general') fetchAiStatus(); }, [tab]);
 
+  const [cliStatus, setCliStatus] = useState<{ supported: boolean; installed: boolean; dir: string | null } | null>(null);
+  const [cliBusy,   setCliBusy]   = useState(false);
+  React.useEffect(() => {
+    if (tab === 'general') req<typeof cliStatus>('GET', '/cli').then(setCliStatus).catch(() => {});
+  }, [tab]);
+
+  async function toggleCli() {
+    const installing = !cliStatus?.installed;
+    setCliBusy(true);
+    try {
+      setCliStatus(await req<typeof cliStatus>(installing ? 'POST' : 'DELETE', '/cli'));
+      toast(installing ? 'CLI instalado — abre una terminal nueva' : 'CLI desinstalado');
+    } catch (e: any) {
+      toast(e.message || 'Error', 'err');
+    } finally {
+      setCliBusy(false);
+    }
+  }
+
   React.useEffect(() => {
     if (tab !== 'mcp') return;
     setMcpLoading(true);
@@ -898,6 +917,29 @@ export function Settings() {
                 </div>
               )}
             </div>
+
+            {cliStatus?.supported && (
+              <div className="settings-section">
+                <div className="settings-head">CLI de terminal</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1, fontSize: 12, color: 'var(--text1)' }}>
+                    <div>
+                      Ejecuta agentes desde cualquier terminal: <code>agent-hub run -p &lt;proyecto&gt; -a &lt;agente&gt; "&lt;tarea&gt;"</code>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+                      {cliStatus.installed
+                        ? <>Instalado en <code>{cliStatus.dir}</code>. Requiere la app abierta.</>
+                        : 'Se añade al PATH de tu usuario (sin permisos de administrador). Las terminales ya abiertas no lo verán.'}
+                    </div>
+                  </div>
+                  {cliStatus.installed && <span className="badge green"><i className="ti ti-check" />Instalado</span>}
+                  <button className={`btn sm ${cliStatus.installed ? 'ghost danger' : 'primary'}`} onClick={toggleCli} disabled={cliBusy}>
+                    <i className={`ti ${cliBusy ? 'ti-loader-2 spin' : cliStatus.installed ? 'ti-trash' : 'ti-terminal-2'}`} />
+                    {cliStatus.installed ? 'Desinstalar' : 'Instalar CLI'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Row 2: Application (Compact: Close behavior + Updates + Wizard on the right) */}
             <div className="settings-section">

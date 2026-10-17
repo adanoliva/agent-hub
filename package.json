@@ -1,11 +1,8 @@
 {
   "name": "agent-hub",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Visual manager for IA agents and dev projects",
   "main": "src/backend/main.js",
-  "bin": {
-    "agent-hub": "bin/agent-hub.js"
-  },
   "scripts": {
     "start": "electron .",
     "predev": "node scripts/kill-dev-ports.js",

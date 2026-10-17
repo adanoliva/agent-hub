@@ -122,6 +122,18 @@ function whichCLI(bin) {
   });
 }
 
+// ── agent-hub terminal command (Windows) ──────────────────────────────────────
+const cliInstall = require('./cli-install');
+app.get('/api/cli', (req, res) => {
+  try { res.json(cliInstall.getStatus()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/cli', (req, res) => {
+  try { res.json(cliInstall.install()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete('/api/cli', (req, res) => {
+  try { res.json(cliInstall.uninstall()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/detect-cli', async (req, res) => {
   const [claude, gemini, codex, gh] = await Promise.all([
     whichCLI('claude'),

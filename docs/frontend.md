@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-06-09 · Versión: 2.4.0
+> Última actualización: 2026-10-17 · Versión: 2.5.0
 
 ---
 
@@ -484,6 +484,8 @@ Página de tres paneles (árbol / centro / editor). Gestiona dos modos: `agents`
 ### `Settings.tsx`
 
 Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
+
+**Tab General → CLI de terminal:** tarjeta visible solo si `GET /cli` devuelve `supported: true` (Windows). Botón *Instalar CLI* / *Desinstalar* → `POST` / `DELETE /cli`; muestra badge "Instalado" y la carpeta destino. Estado `cliStatus` + `cliBusy`, cargado al entrar en la tab. Ver backend §19.
 
 **Tab Categorías:** lista simple de categorías con nombre, icono y color. Sin gestión de tecnologías (eliminada). Solo permite crear y eliminar categorías.
 
