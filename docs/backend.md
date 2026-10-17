@@ -32,7 +32,7 @@
 16. [Plantillas de contexto (`templates.js`)](#16-plantillas-de-contexto-templatesjs)
 17. [Flujos clave end-to-end](#17-flujos-clave-end-to-end)
 18. [Dashboard y seguimiento de uso](#18-dashboard-y-seguimiento-de-uso)
-19. [CLI (`bin/agent-hub.js`)](#19-cli-binagent-hubjs)
+19. [CLI de terminal (`cli/agent-hub.ps1` + `cli-install.js`)](#19-cli-de-terminal-cliagent-hubps1--cli-installjs)
 
 ---
 
@@ -63,6 +63,7 @@ Electron main process (Node.js)
   ├── git-checkpointer.js ← commits automáticos tras cada paso (gitEnabled)
   ├── ops-ledger.js    ← registro append-only de operaciones atómicas por orquestación
   ├── mcp.js           ← cliente MCP universal: pool de procesos, CRUD, sync a CLIs
+  ├── cli-install.js   ← instala el comando `agent-hub` (cli/*.ps1|cmd) en el PATH de usuario
   ├── tray.js          ← icono en la bandeja del sistema
   ├── preload.js       ← contextBridge: window.api expuesto al renderer
   ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
@@ -449,7 +450,7 @@ El nivel `tech` fue eliminado. La especificidad tecnológica se delega al sistem
 - `deleteProjectAgent(projectPath, name, providers)` — elimina el fichero del proyecto.
 
 **Migración y sincronización:**
-- `migrateAgentFiles()` — detecta agentes en formato antiguo y los convierte.
+- `migrateAgentFiles()` — detecta agentes en formato antiguo y los convierte. Solo recorre las carpetas de nivel. Ignora `skills/` (tienen su propio formato), los directorios ocultos (`.git`), los ficheros sueltos en la raíz de `agents/` y cualquier `README.md`. `listAgentsInDir` también descarta los `README.md`.
 - `syncGlobalAgentsToClaudeDir()` — copia todos los agentes globales a `~/.claude/agents/`.
 
 ---
@@ -497,7 +498,7 @@ APP_DIR/agents/skills/
 
 | Función | Descripción |
 |---|---|
-| `listSkills()` | Lista todos los `.md` de `SKILLS_DIR`. Llama `migrateSkillsFromSubdirs()` antes |
+| `listSkills()` | Lista todos los `.md` de `SKILLS_DIR`. Llama `migrateSkillsFromSubdirs()` antes. El parser tolera BOM y CRLF |
 | `listAllSkills()` | Alias de `listSkills()` para compatibilidad |
 | `createSkill(skill)` | Escribe `{name}.md` en `SKILLS_DIR`; lanza error si ya existe |
 | `updateSkill(skill)` | Sobreescribe el fichero; lanza error si no existe |
@@ -537,6 +538,8 @@ function gitBlobSHA(content) {
 | Cualquier otra ruta (incluidas `tech-*`) | `agents/uncategorized/{name}.md` |
 
 Las rutas `tech-*` del repositorio remoto se redirigen a `uncategorized`. El repositorio externo ya no debe tener carpetas `tech-*`.
+
+Los `README.md`, en cualquier carpeta, no se descargan: no son agentes. Antes acababan en `uncategorized/` y aparecían como un agente llamado "README".
 
 ### Detección de conflictos
 
@@ -1285,11 +1288,11 @@ Fichero de persistencia: `cache/ai-usage.json`. Solo `cumulative` se persiste; `
 
 ---
 
-## 19. CLI (`bin/agent-hub.js`)
+## 19. CLI de terminal (`cli/agent-hub.ps1` + `cli-install.js`)
 
-Cliente de terminal sin dependencias (Node ≥ 18, `fetch` + `util.parseArgs`) sobre la API REST. **Requiere la app abierta** (o `npm run dev:backend`). URL configurable con `AGENT_HUB_URL` (default `http://localhost:3737`).
+Comando `agent-hub` para ejecutar agentes desde cualquier terminal. Es un cliente fino sobre la API REST: **requiere la app abierta** (o `npm run dev:backend`). URL configurable con `AGENT_HUB_URL` (default `http://localhost:3737`).
 
-Instalación local: `npm link` en la raíz del repo → comando `agent-hub` global.
+### Comandos
 
 | Comando | Descripción |
 |---|---|
@@ -1297,4 +1300,32 @@ Instalación local: `npm link` en la raíz del repo → comando `agent-hub` glob
 | `agent-hub agents -p <nombre\|id>` | Agentes del proyecto + aplicables (global/section) |
 | `agent-hub run -p <nombre\|id> -a <agente> "<tarea>" [--max-turns N]` | `POST /api/projects/:id/run`. Resultado por stdout, progreso por stderr |
 
-El proyecto se resuelve por id o por nombre (case-insensitive). Exit code `1` ante cualquier error.
+Flags largos equivalentes: `--project`, `--agent`, `--help`. El proyecto se resuelve por id o por nombre (case-insensitive). Exit code `1` ante cualquier error.
+
+### Implementación (Windows)
+
+- `src/backend/cli/agent-hub.ps1` — el CLI. PowerShell 5.1 (incluido en todo Windows) → **sin dependencias**, no requiere Node.
+- `src/backend/cli/agent-hub.cmd` — shim: `powershell -NoProfile -ExecutionPolicy Bypass -File agent-hub.ps1 %*`. Permite invocar `agent-hub` desde cmd y PowerShell (en Git Bash hay que escribir `agent-hub.cmd`).
+- `src/backend/cli-install.js` — instalación desde la UI (Ajustes → General → *CLI de terminal*):
+
+| Función | Descripción |
+|---|---|
+| `getStatus()` | `{ supported, installed, dir }`. `installed` = ficheros presentes **y** carpeta en el PATH de usuario |
+| `install()` | Copia los dos ficheros a `%LOCALAPPDATA%\AgentHub\bin\` y añade esa carpeta al PATH **de usuario** (sin admin) |
+| `uninstall()` | Quita la carpeta del PATH y la borra |
+| `refreshIfInstalled()` | Llamado en el arranque (`main.js`): si está instalado, recopia los ficheros para que el CLI siga a las actualizaciones de la app |
+
+Endpoints: `GET /api/cli` (estado) · `POST /api/cli` (instalar) · `DELETE /api/cli` (desinstalar).
+
+**Detalles no obvios:**
+- El PATH se modifica con `[Environment]::SetEnvironmentVariable(..., 'User')`, **no** con `setx` (que trunca a 1024 caracteres). Notifica `WM_SETTINGCHANGE`, pero las terminales ya abiertas no ven el cambio.
+- El `.ps1` se escribe con **BOM UTF-8** y el `.cmd` con CRLF: PowerShell 5.1 lee los ficheros sin BOM como ANSI y rompe los acentos.
+- En PS 5.1 `Invoke-RestMethod` emite un array JSON como un único objeto y `[]` como `$null`; `Req` asigna a variable antes de emitir y los llamantes filtran nulos.
+- No se puede reutilizar el Node de Electron: el `.exe` portable se descomprime en un directorio temporal que se borra al cerrar.
+
+### Ampliación futura a Linux / macOS
+
+`getStatus()` devuelve `supported: false` fuera de `win32` y la UI oculta la tarjeta. Para portarlo:
+1. Escribir `src/backend/cli/agent-hub.sh` (POSIX `sh` + `curl`; `jq` opcional o parseo con `node -e` si se quiere evitar dependencias). La lógica es la misma: 3 comandos sobre `/api/projects`, `/api/projects/:id/agents`, `/api/agents/applicable` y `/api/projects/:id/run`.
+2. En `cli-install.js`, rama no-Windows: copiar a `~/.local/bin/agent-hub` con `chmod +x` (ese directorio ya está en el PATH en la mayoría de distros y se puede añadir en macOS vía `~/.zprofile`). No hace falta tocar el PATH desde la app.
+3. `getStatus()` → `supported: true` y comprobar `~/.local/bin/agent-hub`.

@@ -232,12 +232,14 @@ function hashFile(filePath) {
 
 // ── Directory listing ─────────────────────────────────────────────────────────
 
+const isAgentFile = (f) => f.endsWith('.md') && f.toLowerCase() !== 'readme.md';
+
 function listAgentsInDir(dir) {
   if (!fs.existsSync(dir)) return [];
   let files = [];
   try {
     files = fs.readdirSync(dir)
-      .filter(f => f.endsWith('.md'))
+      .filter(isAgentFile)
       // Plain .md files take precedence over .agent.md when names collide
       .sort((a, b) => {
         const aAgent = a.endsWith('.agent.md');
@@ -433,8 +435,12 @@ function migrateAgentFiles() {
         return;
       }
 
-      if (stat.isDirectory()) { walk(p); return; }
-      if (!f.endsWith('.md')) return;
+      // Only level folders hold agents: skills have their own format, dot-dirs (.git) and root files aren't agents
+      if (stat.isDirectory()) {
+        if (!f.startsWith('.') && p !== path.join(AGENTS_DIR, 'skills')) walk(p);
+        return;
+      }
+      if (dir === AGENTS_DIR || !isAgentFile(f)) return;
 
       try {
         const agent      = parseAgentFile(p);

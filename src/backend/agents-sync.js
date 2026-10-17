@@ -110,7 +110,7 @@ async function fetchHeadSHA(owner, repo) {
 async function fetchTree(owner, repo, commitSHA) {
   const raw  = await httpsGet(`https://api.github.com/repos/${owner}/${repo}/git/trees/${commitSHA}?recursive=1`);
   const data = JSON.parse(raw);
-  return (data.tree || []).filter((item) => item.type === 'blob' && item.path.endsWith('.md'));
+  return (data.tree || []).filter((item) => item.type === 'blob' && item.path.endsWith('.md') && !/(^|\/)readme\.md$/i.test(item.path));
 }
 
 async function downloadRaw(owner, repo, remotePath) {

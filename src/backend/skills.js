@@ -11,7 +11,7 @@ const { SKILLS_DIR, ensureDir } = require('./config');
 // ── Parse / serialize ─────────────────────────────────────────────────────────
 
 function parseSkillFile(filePath) {
-  const raw   = fs.readFileSync(filePath, 'utf8');
+  const raw   = fs.readFileSync(filePath, 'utf8').replace(/^﻿/, '').replace(/\r\n/g, '\n');
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     return { name: path.basename(filePath, '.md'), description: '', content: raw.trim() };
