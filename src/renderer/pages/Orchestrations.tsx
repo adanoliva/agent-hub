@@ -5,6 +5,7 @@ import type { Project, Orchestration, OrchestrateNode, DataFlow, ContextExtra } 
 import { OrchestrationList } from '../components/orchestrations/OrchestrationList';
 import { OrchestrationEditor } from '../components/orchestrations/OrchestrationEditor';
 import { ExecutionPanel } from '../components/orchestrations/ExecutionPanel';
+import { EMBED } from '../embed';
 
 type SubView = 'list' | 'editor' | 'execution';
 
@@ -46,8 +47,8 @@ function CreateOrchestrationModal({ projectId, onCancel, onCreate }: CreateModal
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal" style={{ width: 440 }}>
+    <div className="overlay" onClick={onCancel}>
+      <div className="modal" style={{ width: 440 }} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <span>Nueva orquestación</span>
           <button className="btn ghost xs" onClick={onCancel}><i className="ti ti-x" /></button>
@@ -94,7 +95,7 @@ export function Orchestrations() {
   const addToast  = useStore(s => s.addToast);
   const projects  = useStore(s => s.projects);
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(EMBED?.project || '');
   const [orchestrations,    setOrchestrations]    = useState<Orchestration[]>([]);
   const [subView,           setSubView]           = useState<SubView>('list');
   const [selectedOrch,      setSelectedOrch]      = useState<Orchestration | null>(null);
@@ -110,17 +111,43 @@ export function Orchestrations() {
     }
   }, [activeProjects.length]);
 
+  const loadList = () => req<Orchestration[]>('GET', `/orchestrations?projectId=${selectedProjectId}`).then(setOrchestrations);
+
   // Load orchestrations when project changes
   useEffect(() => {
     if (!selectedProjectId) return;
     setLoading(true);
-    req<Orchestration[]>('GET', `/orchestrations?projectId=${selectedProjectId}`)
-      .then(data => setOrchestrations(data))
+    loadList()
+      .then(() => {
+        if (!EMBED || embedOpened.current) return;
+        embedOpened.current = true;
+        if (EMBED.mode === 'new') setShowCreate(true);
+      })
       .catch(() => setOrchestrations([]))
       .finally(() => setLoading(false));
     setSubView('list');
     setSelectedOrch(null);
   }, [selectedProjectId]);
+
+  // Embedded (VS Code): once the list is in, open the requested orchestration in the requested mode
+  const embedOpened = React.useRef(false);
+  const embedTarget = React.useRef(EMBED?.orch || null);
+  useEffect(() => {
+    const target = embedTarget.current;
+    if (!target) return;
+    const orch = orchestrations.find(o => o.id === target);
+    if (!orch) return;
+    embedTarget.current = null;
+    setSelectedOrch(orch);
+    setSubView(EMBED?.mode === 'execution' ? 'execution' : 'editor');
+  }, [orchestrations]);
+
+  // Executions can start or end elsewhere (VS Code, API): keep the list's "running" state current
+  useEffect(() => {
+    if (!selectedProjectId || subView !== 'list') return;
+    const t = setInterval(() => { loadList().catch(() => {}); }, 5000);
+    return () => clearInterval(t);
+  }, [selectedProjectId, subView]);
 
   const project = activeProjects.find(p => p.id === selectedProjectId);
 
@@ -174,7 +201,7 @@ export function Orchestrations() {
         <div className="topbar-right">
           {subView === 'list' && (
             <>
-              <select
+              {!EMBED && <select
                 className="input sm orch-project-select"
                 value={selectedProjectId}
                 onChange={e => setSelectedProjectId(e.target.value)}
@@ -185,7 +212,7 @@ export function Orchestrations() {
                 {activeProjects.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
-              </select>
+              </select>}
               {selectedProjectId && (
                 <button className="btn primary sm" style={{ marginLeft: 12 }} onClick={() => setShowCreate(true)}>
                   <i className="ti ti-plus" /> Nueva orquestación
@@ -198,6 +225,10 @@ export function Orchestrations() {
 
       {/* Content */}
       <div className="orch-content">
+        {selectedProjectId && !project && (
+          <div className="orch-loading"><i className="ti ti-loader-2 spin" /></div>
+        )}
+
         {!selectedProjectId && (
           <div className="orch-no-project">
             <i className="ti ti-layout-grid" />
@@ -205,7 +236,7 @@ export function Orchestrations() {
           </div>
         )}
 
-        {selectedProjectId && subView === 'list' && (
+        {project && subView === 'list' && (
           loading ? (
             <div className="orch-loading">
               <i className="ti ti-loader-2 spin" />
@@ -217,12 +248,13 @@ export function Orchestrations() {
               onSelect={handleSelect}
               onDelete={handleDelete}
               onExecute={handleExecute}
+              onRefresh={() => loadList().catch(() => {})}
               onNew={() => setShowCreate(true)}
             />
           )
         )}
 
-        {selectedProjectId && subView === 'editor' && selectedOrch && (
+        {project && subView === 'editor' && selectedOrch && (
           <OrchestrationEditor
             orchestration={selectedOrch}
             projectId={selectedProjectId}
@@ -232,7 +264,7 @@ export function Orchestrations() {
           />
         )}
 
-        {selectedProjectId && subView === 'execution' && selectedOrch && (
+        {project && subView === 'execution' && selectedOrch && (
           <ExecutionPanel
             orchestration={selectedOrch}
             projectId={selectedProjectId}
@@ -242,7 +274,7 @@ export function Orchestrations() {
       </div>
 
       {/* Create modal */}
-      {showCreate && selectedProjectId && (
+      {showCreate && project && (
         <CreateOrchestrationModal
           projectId={selectedProjectId}
           onCreate={handleCreate}

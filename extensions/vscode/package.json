@@ -2,14 +2,25 @@
   "name": "agent-hub-vscode",
   "displayName": "Agent Hub",
   "description": "Agentes y orquestaciones de Agent Hub sobre el proyecto abierto, sin salir del editor.",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "publisher": "adanoliva",
   "license": "UNLICENSED",
-  "repository": { "type": "git", "url": "https://github.com/adanoliva/agent-hub" },
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["AI", "Other"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adanoliva/agent-hub"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
   "main": "./out/extension.js",
-  "activationEvents": ["workspaceContains:.agent-hub", "onStartupFinished"],
+  "activationEvents": [
+    "workspaceContains:.agent-hub",
+    "onStartupFinished"
+  ],
   "contributes": {
     "configuration": {
       "title": "Agent Hub",
@@ -29,19 +40,32 @@
         "description": "Pregunta sobre este proyecto con el motor de Agent Hub (solo lectura)",
         "isSticky": true,
         "commands": [
-          { "name": "run",    "description": "Ejecuta un agente sobre el proyecto: /run <agente> <tarea>" },
-          { "name": "agents", "description": "Lista los agentes del proyecto" }
+          {
+            "name": "run",
+            "description": "Ejecuta un agente sobre el proyecto: /run <agente> <tarea>"
+          },
+          {
+            "name": "agents",
+            "description": "Lista los agentes del proyecto"
+          }
         ]
       }
     ],
     "viewsContainers": {
       "activitybar": [
-        { "id": "agentHub", "title": "Agent Hub", "icon": "media/agent-hub.svg" }
+        {
+          "id": "agentHub",
+          "title": "Agent Hub",
+          "icon": "media/agent-hub.svg"
+        }
       ]
     },
     "views": {
       "agentHub": [
-        { "id": "agentHub.project", "name": "Proyecto" }
+        {
+          "id": "agentHub.project",
+          "name": "Proyecto"
+        }
       ]
     },
     "viewsWelcome": [
@@ -62,40 +86,176 @@
       }
     ],
     "commands": [
-      { "command": "agentHub.refresh",              "title": "Actualizar",                          "category": "Agent Hub", "icon": "$(refresh)" },
-      { "command": "agentHub.runAgent",             "title": "Ejecutar agente…",                    "category": "Agent Hub", "icon": "$(play)" },
-      { "command": "agentHub.runAgentOnSelection",  "title": "Ejecutar agente sobre este fichero…", "category": "Agent Hub" },
-      { "command": "agentHub.runOrchestration",     "title": "Ejecutar orquestación…",              "category": "Agent Hub", "icon": "$(play)" },
-      { "command": "agentHub.newOrchestration",     "title": "Nueva orquestación…",                 "category": "Agent Hub", "icon": "$(add)" },
-      { "command": "agentHub.syncAgents",           "title": "Sincronizar agentes",                 "category": "Agent Hub", "icon": "$(sync)" },
-      { "command": "agentHub.openExecution",        "title": "Ver resultado de la ejecución",       "category": "Agent Hub" },
-      { "command": "agentHub.showOutput",           "title": "Mostrar salida",                      "category": "Agent Hub", "icon": "$(output)" }
+      {
+        "command": "agentHub.refresh",
+        "title": "Actualizar",
+        "category": "Agent Hub",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "agentHub.runAgent",
+        "title": "Ejecutar agente…",
+        "category": "Agent Hub",
+        "icon": "$(play)"
+      },
+      {
+        "command": "agentHub.runAgentOnSelection",
+        "title": "Ejecutar agente sobre este fichero…",
+        "category": "Agent Hub"
+      },
+      {
+        "command": "agentHub.runOrchestration",
+        "title": "Ejecutar orquestación…",
+        "category": "Agent Hub",
+        "icon": "$(play)"
+      },
+      {
+        "command": "agentHub.newOrchestration",
+        "title": "Nueva orquestación",
+        "category": "Agent Hub",
+        "icon": "$(add)"
+      },
+      {
+        "command": "agentHub.syncAgents",
+        "title": "Sincronizar agentes",
+        "category": "Agent Hub",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "agentHub.openExecution",
+        "title": "Ver resultado de la ejecución",
+        "category": "Agent Hub"
+      },
+      {
+        "command": "agentHub.showOutput",
+        "title": "Mostrar salida",
+        "category": "Agent Hub",
+        "icon": "$(output)"
+      },
+      {
+        "command": "agentHub.stopOrchestration",
+        "title": "Detener ejecución",
+        "category": "Agent Hub",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "agentHub.followExecution",
+        "title": "Ver ejecución en curso",
+        "category": "Agent Hub",
+        "icon": "$(output)"
+      },
+      {
+        "command": "agentHub.editOrchestration",
+        "title": "Abrir editor de la orquestación",
+        "category": "Agent Hub",
+        "icon": "$(edit)"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "agentHub.runAgent",         "when": "view == agentHub.project && agentHub.state == ready", "group": "navigation@1" },
-        { "command": "agentHub.newOrchestration", "when": "view == agentHub.project && agentHub.state == ready", "group": "navigation@2" },
-        { "command": "agentHub.refresh",          "when": "view == agentHub.project",                            "group": "navigation@3" },
-        { "command": "agentHub.showOutput",       "when": "view == agentHub.project" }
+        {
+          "command": "agentHub.runAgent",
+          "when": "view == agentHub.project && agentHub.state == ready",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentHub.newOrchestration",
+          "when": "view == agentHub.project && agentHub.state == ready",
+          "group": "navigation@2"
+        },
+        {
+          "command": "agentHub.refresh",
+          "when": "view == agentHub.project",
+          "group": "navigation@3"
+        },
+        {
+          "command": "agentHub.showOutput",
+          "when": "view == agentHub.project"
+        }
       ],
       "view/item/context": [
-        { "command": "agentHub.runAgent",         "when": "view == agentHub.project && viewItem == agent",         "group": "inline" },
-        { "command": "agentHub.runOrchestration", "when": "view == agentHub.project && viewItem == orchestration", "group": "inline" },
-        { "command": "agentHub.syncAgents",       "when": "view == agentHub.project && viewItem == pendingSync",   "group": "inline" }
+        {
+          "command": "agentHub.runAgent",
+          "when": "view == agentHub.project && viewItem == agent",
+          "group": "inline"
+        },
+        {
+          "command": "agentHub.runOrchestration",
+          "when": "view == agentHub.project && viewItem == orchestration",
+          "group": "inline"
+        },
+        {
+          "command": "agentHub.syncAgents",
+          "when": "view == agentHub.project && viewItem == pendingSync",
+          "group": "inline"
+        },
+        {
+          "command": "agentHub.followExecution",
+          "when": "view == agentHub.project && viewItem == runningOrchestration",
+          "group": "inline@1"
+        },
+        {
+          "command": "agentHub.stopOrchestration",
+          "when": "view == agentHub.project && viewItem == runningOrchestration",
+          "group": "inline@2"
+        },
+        {
+          "command": "agentHub.editOrchestration",
+          "when": "view == agentHub.project && viewItem == orchestration",
+          "group": "inline@0"
+        }
       ],
       "editor/context": [
-        { "command": "agentHub.runAgentOnSelection", "when": "agentHub.state == ready && resourceScheme == file", "group": "agentHub" }
+        {
+          "command": "agentHub.runAgentOnSelection",
+          "when": "agentHub.state == ready && resourceScheme == file",
+          "group": "agentHub"
+        }
       ],
       "explorer/context": [
-        { "command": "agentHub.runAgentOnSelection", "when": "agentHub.state == ready && !explorerResourceIsFolder", "group": "agentHub" }
+        {
+          "command": "agentHub.runAgentOnSelection",
+          "when": "agentHub.state == ready && !explorerResourceIsFolder",
+          "group": "agentHub"
+        }
       ],
       "commandPalette": [
-        { "command": "agentHub.openExecution", "when": "false" },
-        { "command": "agentHub.runAgent",            "when": "agentHub.state == ready" },
-        { "command": "agentHub.runAgentOnSelection", "when": "agentHub.state == ready && editorIsOpen" },
-        { "command": "agentHub.runOrchestration",    "when": "agentHub.state == ready" },
-        { "command": "agentHub.newOrchestration",    "when": "agentHub.state == ready" },
-        { "command": "agentHub.syncAgents",          "when": "agentHub.state == ready" }
+        {
+          "command": "agentHub.openExecution",
+          "when": "false"
+        },
+        {
+          "command": "agentHub.runAgent",
+          "when": "agentHub.state == ready"
+        },
+        {
+          "command": "agentHub.runAgentOnSelection",
+          "when": "agentHub.state == ready && editorIsOpen"
+        },
+        {
+          "command": "agentHub.runOrchestration",
+          "when": "agentHub.state == ready"
+        },
+        {
+          "command": "agentHub.newOrchestration",
+          "when": "agentHub.state == ready"
+        },
+        {
+          "command": "agentHub.syncAgents",
+          "when": "agentHub.state == ready"
+        },
+        {
+          "command": "agentHub.stopOrchestration",
+          "when": "false"
+        },
+        {
+          "command": "agentHub.followExecution",
+          "when": "false"
+        },
+        {
+          "command": "agentHub.editOrchestration",
+          "when": "agentHub.state == ready"
+        }
       ]
     }
   },

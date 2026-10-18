@@ -9,8 +9,8 @@ Trabaja con los agentes y las orquestaciones de [Agent Hub](https://github.com/a
 - **Vista lateral** (icono de Agent Hub en la barra de actividad): agentes del proyecto, orquestaciones y últimas ejecuciones, con aviso cuando hay agentes pendientes de sincronizar.
 - **Ejecutar agente** (`▶` junto al agente o `Agent Hub: Ejecutar agente…`): escribe la tarea y sigue en directo lo que hace en el panel de salida *Agent Hub*. Se puede cancelar.
 - **Ejecutar agente sobre este fichero**: clic derecho en el editor o en el explorador. Si hay texto seleccionado, el agente recibe el fragmento con sus líneas.
-- **Ejecutar orquestación**: pide los campos de entrada, muestra la estimación de coste y los timeouts antes de lanzarla, emite los logs en directo y te deja aprobar o pedir cambios en los gates de revisión.
-- **Nueva orquestación**: nombre, tarea y la cadena de agentes en orden. Para ramas paralelas, gates o scripts, edítala después en el canvas de la app.
+- **Orquestaciones con las pantallas de la app**: abrir una orquestación muestra su editor de canvas en una pestaña; ▶ abre el panel de ejecución (campos, estimación de coste, progreso, gates, resultado con diff); *Nueva orquestación* usa la creación de la app. Es la propia app incrustada, así que se ve y funciona igual.
+- **Ejecuciones en marcha**: aparecen arriba en la vista, se lancen desde VS Code, la app o la API. ⏹ las detiene y un clic sigue su log en directo.
 - **Resultados**: abre cualquier ejecución reciente como documento Markdown, con sus pasos, ficheros modificados, tokens, coste y, si el proyecto usa Git, el diff de cada paso.
 - **`@agenthub` en el chat**: pregunta sobre el proyecto en la vista de chat de VS Code. Lee ficheros, contexto y skills, y nunca modifica nada. Con `/run <agente> <tarea>` ejecuta un agente (este sí puede modificar el proyecto) y `/agents` lista los disponibles.
 

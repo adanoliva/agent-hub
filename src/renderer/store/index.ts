@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { req } from '../api';
 import type { Config, Project, Toast, ToastType, View, PendingAgentToEdit, PendingNewAgentDraft } from '../types';
+import { EMBED } from '../embed';
 
 interface AppState {
   // Core
@@ -48,11 +49,11 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  view: 'dashboard',
+  view: EMBED ? 'orchestrations' : 'dashboard',
   config: null,
   projects: [],
   appVersion: null,
-  showWizard: !localStorage.getItem('cdm-wizard-done'),
+  showWizard: !EMBED && !localStorage.getItem('cdm-wizard-done'),
   pendingAction: null,
   pendingAgentToEdit: null,
   pendingNewAgentDraft: null,

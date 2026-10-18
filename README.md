@@ -1,4 +1,4 @@
-# Agent Hub · v2.7.0
+# Agent Hub · v2.7.1
 
 Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
@@ -48,6 +48,12 @@ Para usar un directorio de datos distinto al raíz en dev:
 $env:CDM_DATA_DIR = "C:\MiCarpetaDatos"
 npm run dev
 ```
+
+## Novedades v2.7.1
+
+- **Extensión de VS Code más visual**: crear, editar y ejecutar orquestaciones abre en una pestaña las mismas pantallas de la app (canvas, panel de ejecución con estimación, gates y diff), con la app incrustada (`?embed=1`).
+- **Detener ejecuciones en marcha desde cualquier sitio**: la lista de orquestaciones de la app y la vista de la extensión muestran *En ejecución* con un botón para detenerla, se lanzara desde la app, VS Code o la API. Las que murieron con la app se muestran como *interrumpidas*.
+- Corregido: el modal de nueva orquestación salía descolocado.
 
 ## Novedades v2.7.0
 

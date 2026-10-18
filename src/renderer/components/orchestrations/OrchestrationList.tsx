@@ -11,6 +11,7 @@ interface Props {
   onDelete:       (orchId: string) => void;
   onExecute:      (orch: Orchestration) => void;
   onNew:          () => void;
+  onRefresh:      () => void;
 }
 
 const STATUS_META: Record<string, { icon: string; cls: string; label: string }> = {
@@ -19,12 +20,27 @@ const STATUS_META: Record<string, { icon: string; cls: string; label: string }> 
   failed:  { icon: 'ti-alert-circle',   cls: 'coral', label: 'Fallido'   },
 };
 
-export function OrchestrationList({ orchestrations, project, onSelect, onDelete, onExecute, onNew }: Props) {
+export function OrchestrationList({ orchestrations, project, onSelect, onDelete, onExecute, onNew, onRefresh }: Props) {
   const addToast   = useStore(s => s.addToast);
   const [deleting,        setDeleting]        = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const confirmOrch = orchestrations.find(o => o.id === confirmDeleteId);
+  const [stopping, setStopping] = useState<string | null>(null);
+
+  // Stops a running execution, wherever it was launched from (the panel, VS Code, the API)
+  const handleStop = async (orch: Orchestration) => {
+    setStopping(orch.id);
+    try {
+      await req('POST', `/orchestrations/${orch.id}/cancel?executionId=${orch.activeExecutionId}`);
+      addToast('Deteniendo la ejecución…', 'info');
+      onRefresh();
+    } catch (e: any) {
+      addToast(e.message || 'No se pudo detener', 'err');
+    } finally {
+      setStopping(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirmDeleteId) return;
@@ -64,16 +80,26 @@ export function OrchestrationList({ orchestrations, project, onSelect, onDelete,
               <div className="orch-card-title">
                 <i className="ti ti-topology-ring-2" />
                 <span>{orch.name}</span>
-                {statusMeta && (
+                {orch.activeExecutionId ? (
+                  <span className="badge amber" style={{ marginLeft: 4 }}>
+                    <i className="ti ti-loader-2 spin" /> En ejecución
+                  </span>
+                ) : statusMeta && (
                   <span className={`badge ${statusMeta.cls}`} style={{ marginLeft: 4 }}>
                     <i className={`ti ${statusMeta.icon}`} /> {statusMeta.label}
                   </span>
                 )}
               </div>
               <div className="orch-card-actions" onClick={e => e.stopPropagation()}>
-                <button className="btn ghost sm" title="Ejecutar" onClick={() => onExecute(orch)}>
-                  <i className="ti ti-player-play" />
-                </button>
+                {orch.activeExecutionId ? (
+                  <button className="btn ghost sm danger" title="Detener la ejecución" disabled={stopping === orch.id} onClick={() => handleStop(orch)}>
+                    <i className={`ti ${stopping === orch.id ? 'ti-loader-2 spin' : 'ti-player-stop'}`} />
+                  </button>
+                ) : (
+                  <button className="btn ghost sm" title="Ejecutar" onClick={() => onExecute(orch)}>
+                    <i className="ti ti-player-play" />
+                  </button>
+                )}
                 <button
                   className="btn ghost sm"
                   title="Eliminar"

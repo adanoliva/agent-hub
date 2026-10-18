@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { Api, Agent, CostEstimate, OrchNode, Orchestration } from './api';
+import { Api, Agent, Orchestration } from './api';
+import { AppPanels } from './panel';
 import { ProjectState } from './tree';
 
 const fmtCost = (usd: number) => `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`;
@@ -12,6 +13,7 @@ export class Commands {
     private readonly api: Api,
     private readonly s: ProjectState,
     private readonly out: vscode.OutputChannel,
+    private readonly panels: AppPanels,
   ) {}
 
   private get projectId(): string {
@@ -122,67 +124,33 @@ export class Commands {
     return pick?.o;
   }
 
-  /** Temporal fields the orchestration asks for before running (same keys as the app: `${nodeId}-${fieldId}`) */
-  private async askTemporal(orch: Orchestration): Promise<Record<string, string> | undefined> {
-    const values: Record<string, string> = {};
-    for (const node of orch.nodes) {
-      for (const f of node.contextExtra?.temporal || []) {
-        const key = `${node.id}-${f.id}`;
-        if (f.type === 'file') {
-          const [uri] = await vscode.window.showOpenDialog({ title: `${f.label} (${node.agentName})`, canSelectMany: false }) || [];
-          if (!uri) { if (f.required) return; continue; }
-          values[key] = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
-        } else {
-          const v = await vscode.window.showInputBox({
-            title: `${orch.name} · ${node.agentName}`, prompt: f.label, placeHolder: f.placeholder, ignoreFocusOut: true,
-            validateInput: x => f.required && !x.trim() ? 'Campo obligatorio' : null,
-          });
-          if (v === undefined) return;
-          if (v.trim()) values[key] = v;
-        }
-      }
-    }
-    return values;
-  }
-
-  private estimateText(e: CostEstimate): string {
-    const h = e.totals.history;
-    const lines = [h
-      ? `Media de ${h.runs} ejecución${h.runs !== 1 ? 'es' : ''} anterior${h.runs !== 1 ? 'es' : ''}: ${fmtTokens(h.input + h.output)} tokens${h.costUSD !== null ? ` · ~${fmtCost(h.costUSD)}` : ' · coste n/d'}`
-      : 'Primera ejecución: el coste real depende de cuántos turnos use cada agente.'];
-    lines.push(`Mínimo de entrada: ${fmtTokens(e.totals.inputTokens)} tokens${e.totals.minCostUSD !== null ? ` (~${fmtCost(e.totals.minCostUSD)})` : ' · coste n/d con este proveedor'}`);
-    if (e.nativeCLI) lines.push('El CLI añade su propio prompt y herramientas.');
-    return lines.join('\n');
-  }
-
+  /** The app's execution panel (fields, cost estimate, live progress, gates, result with diffs) in an editor tab */
   async runOrchestration(arg?: any): Promise<void> {
     this.projectId;   // fails early when not ready
     const orch: Orchestration | undefined = arg?.orch || await this.pickOrchestration();
-    if (!orch) return;
+    if (orch) await this.panels.show(this.s.project!.id, 'execution', orch);
+  }
+
+  /** The app's canvas editor in an editor tab */
+  async editOrchestration(arg?: any): Promise<void> {
+    this.projectId;
+    const orch: Orchestration | undefined = arg?.orch || arg || await this.pickOrchestration();
+    if (orch) await this.panels.show(this.s.project!.id, 'editor', orch);
+  }
+
+  /** Stops an orchestration's running execution, wherever it was launched from */
+  async stopOrchestration(arg?: any): Promise<void> {
+    const orch: Orchestration | undefined = arg?.orch;
+    if (!orch?.activeExecutionId) return;
+    await this.api.req('POST', `/orchestrations/${encodeURIComponent(orch.id)}/cancel?executionId=${encodeURIComponent(orch.activeExecutionId)}`);
+    this.log(`━━ «${orch.name}»: cancelación solicitada ━━`);
+    vscode.window.setStatusBarMessage(`Agent Hub: deteniendo «${orch.name}»…`, 4000);
+    setTimeout(() => this.s.load(), 1500);
+  }
+
+  /** Live log, gates and final summary of an execution: just launched, or already running (clicked in the view) */
+  async followExecution(orch: Orchestration, executionId: string): Promise<void> {
     const id = encodeURIComponent(orch.id);
-
-    const temporal = await this.askTemporal(orch);
-    if (!temporal) return;
-
-    const estimate = await this.api.req<CostEstimate>('GET', `/orchestrations/${id}/estimate`).catch(() => null);
-    const ec = orch.executionConfig || {};
-    const detail = [
-      `${orch.nodes.length} pasos: ${orch.nodes.map(n => n.agentName).join(' → ')}`,
-      `Timeout: ${Math.round((ec.timeout || 1_800_000) / 60_000)} min total · ${Math.round((ec.stepTimeout || 600_000) / 60_000)} min por paso`
-        + (ec.maxBudgetUSD ? ` · presupuesto máx. ${fmtCost(ec.maxBudgetUSD)}${estimate && !estimate.priced ? ' (sin efecto con este proveedor)' : ''}` : ''),
-      estimate ? '\n' + this.estimateText(estimate) : '',
-    ].join('\n');
-    const go = await vscode.window.showInformationMessage(`¿Ejecutar «${orch.name}»?`, { modal: true, detail }, 'Ejecutar');
-    if (go !== 'Ejecutar') return;
-
-    let executionId: string;
-    try {
-      ({ executionId } = await this.api.req<{ executionId: string }>('POST', `/orchestrations/${id}/execute`, { temporalContexts: temporal }));
-    } catch (e: any) {
-      vscode.window.showErrorMessage(`No se pudo lanzar «${orch.name}»: ${e.message}`);
-      return;
-    }
-
     this.out.show(true);
     this.log(`━━ Orquestación «${orch.name}» · ${new Date().toLocaleTimeString()} ━━`);
     const ac = new AbortController();
@@ -257,52 +225,10 @@ export class Commands {
     this.log(`  ▶ ${action === 'approve' ? 'Aprobado' : action === 'revise' ? 'Revisión: ' + feedbackText : 'Cancelada'}`);
   }
 
-  /** A linear chain of agents. Parallel branches, gates and scripts are edited in the app's canvas. */
+  /** The app's own creation flow: name, then the canvas editor */
   async newOrchestration(): Promise<void> {
-    this.projectId;   // fails early when not ready
-    const projectId = this.s.project!.id;
-    const name = await vscode.window.showInputBox({ title: 'Nueva orquestación (1/3)', prompt: 'Nombre', ignoreFocusOut: true, validateInput: v => v.trim() ? null : 'Obligatorio' });
-    if (!name) return;
-    const task = await vscode.window.showInputBox({ title: 'Nueva orquestación (2/3)', prompt: 'Descripción de la tarea (lo que recibe el primer agente)', ignoreFocusOut: true });
-    if (task === undefined) return;
-
-    const chain: string[] = [];
-    for (;;) {
-      const done = { label: '$(check) Terminar', description: chain.length ? `${chain.length} paso${chain.length !== 1 ? 's' : ''}` : '', done: true };
-      const items = this.s.agents
-        .filter(a => !chain.includes(a.name))   // the canvas allows each agent once
-        .map(a => ({ label: a.name, description: [a.level, a.model].filter(Boolean).join(' · '), detail: a.description, done: false }));
-      const pick = await vscode.window.showQuickPick(chain.length ? [done, ...items] : items, {
-        title: `Nueva orquestación (3/3) · paso ${chain.length + 1}`,
-        placeHolder: chain.length ? chain.join(' → ') + ' → …' : 'Primer agente',
-        ignoreFocusOut: true, matchOnDetail: true,
-      });
-      if (!pick) return;
-      if (pick.done) break;
-      chain.push(pick.label);
-    }
-
-    // Same geometry as the app's auto-layout (NODE_W 244, first level at y=200, 160 px per level)
-    const stamp = Date.now().toString(36);
-    const nodes: OrchNode[] = chain.map((agentName, i) => ({
-      id: `node-${stamp}-${i}`,
-      agentName,
-      dependsOn: i ? [`node-${stamp}-${i - 1}`] : [],
-      ...(i === 0 && { isRoot: true }),
-      x: 278, y: 200 + i * 160,
-      dataFlow: { agentOutput: true, filesModified: true, projectContext: i === 0 },
-      contextExtra: { fixed: { freeText: i === 0 ? task.trim() : '', files: [] }, temporal: [] },
-    }));
-
-    try {
-      const orch = await this.api.req<Orchestration>('POST', '/orchestrations', { projectId, name: name.trim(), description: '', nodes });
-      await this.s.load();
-      const next = await vscode.window.showInformationMessage(
-        `Orquestación «${orch.name}» creada (${chain.join(' → ')}). Para ramas paralelas, gates o scripts, edítala en Agent Hub.`, 'Ejecutar ahora');
-      if (next) await this.runOrchestration({ orch });
-    } catch (e: any) {
-      vscode.window.showErrorMessage(`No se pudo crear la orquestación: ${e.message}`);
-    }
+    this.projectId;
+    await this.panels.show(this.s.project!.id, 'new');
   }
 
   async openExecution(orchId: string, executionId: string): Promise<void> {

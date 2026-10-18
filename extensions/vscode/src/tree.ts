@@ -57,7 +57,7 @@ export class ProjectState {
     this.agents = [...own.map(a => ({ ...a, level: 'project' })), ...applicable]
       .filter(a => !seen.has(a.name) && seen.add(a.name))
       .sort((a, b) => a.name.localeCompare(b.name));
-    this.orchestrations = orchs;
+    this.orchestrations = [...orchs].sort((a, b) => Number(!!b.activeExecutionId) - Number(!!a.activeExecutionId));
     this.provider = status.provider;
 
     const perOrch = await Promise.all(orchs.map(o =>
@@ -83,7 +83,8 @@ const STATUS_ICON: Record<string, [string, string]> = {
   success: ['pass',    'testing.iconPassed'],
   partial: ['warning', 'list.warningForeground'],
   failed:  ['error',   'testing.iconFailed'],
-  running: ['loading~spin', ''],
+  running:     ['loading~spin', ''],
+  interrupted: ['debug-disconnect', 'list.warningForeground'],   // "running" on disk, but the app closed
 };
 
 export function timeAgo(iso?: string): string {
@@ -162,11 +163,20 @@ export class ProjectTree implements vscode.TreeDataProvider<Node> {
       case 'orchestration': {
         const o = node.orch;
         const it = new vscode.TreeItem(o.name);
-        it.iconPath = new vscode.ThemeIcon('type-hierarchy-sub');
         const steps = o.nodes.length;
-        it.description = `${steps} paso${steps !== 1 ? 's' : ''}${o.lastExecutedAt ? ' · ' + timeAgo(o.lastExecutedAt) : ''}`;
         it.tooltip = [o.description, o.nodes.map(n => n.agentName).join(' → ')].filter(Boolean).join('\n');
-        it.contextValue = 'orchestration';
+        if (o.activeExecutionId) {
+          // Running (from here, the app or the API): stop it inline, click to follow its live log
+          it.iconPath = new vscode.ThemeIcon('loading~spin');
+          it.description = 'en ejecución';
+          it.contextValue = 'runningOrchestration';
+          it.command = { command: 'agentHub.followExecution', title: 'Ver ejecución', arguments: [o] };
+        } else {
+          it.iconPath = new vscode.ThemeIcon('type-hierarchy-sub');
+          it.command = { command: 'agentHub.editOrchestration', title: 'Abrir', arguments: [o] };
+          it.description = `${steps} paso${steps !== 1 ? 's' : ''}${o.lastExecutedAt ? ' · ' + timeAgo(o.lastExecutedAt) : ''}`;
+          it.contextValue = 'orchestration';
+        }
         return it;
       }
       case 'execution': {

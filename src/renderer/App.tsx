@@ -7,6 +7,7 @@ import { ToastContainer } from './components/ui/Toast';
 import { Wizard } from './components/ui/Wizard';
 import { CloseDialog } from './components/ui/CloseDialog';
 import type { Config, Project } from './types';
+import { EMBED } from './embed';
 
 const Dashboard      = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Projects       = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
@@ -72,8 +73,8 @@ function AppInner() {
   }, []);
 
   return (
-    <div id="app">
-      <Sidebar />
+    <div id="app" className={EMBED ? 'embed' : undefined}>
+      {!EMBED && <Sidebar />}
       <div className="main">
         <Suspense fallback={null}>
           {view === 'dashboard'      && <Dashboard />}
@@ -83,7 +84,7 @@ function AppInner() {
           {view === 'settings'       && <Settings />}
           {view === 'orchestrations' && <Orchestrations />}
         </Suspense>
-        <Statusbar />
+        {!EMBED && <Statusbar />}
       </div>
       <ToastContainer />
       {showWizard && <Wizard onDone={() => setShowWizard(false)} />}

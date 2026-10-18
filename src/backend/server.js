@@ -1697,7 +1697,7 @@ app.post('/api-fs/projects/:id/grep', (req, res) => {
 // ── Orchestrations ────────────────────────────────────────────────────────────
 
 const workflows                         = require('./workflows');
-const { OrchestrationExecutor, registerExecutor, getExecutor, resolveGate } = require('./orchestrator');
+const { OrchestrationExecutor, registerExecutor, getExecutor, activeExecutionId, resolveGate } = require('./orchestrator');
 const scriptsRegistry                   = require('./scripts-registry');
 const skills                            = require('./skills');
 const opsLedger                         = require('./ops-ledger');
@@ -1725,7 +1725,7 @@ app.get('/api/orchestrations', (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
   if (!project.path || !fs.existsSync(project.path)) return res.json([]);
   try {
-    res.json(workflows.list(project.path));
+    res.json(workflows.list(project.path).map(o => ({ ...o, activeExecutionId: activeExecutionId(o.id) })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1836,7 +1836,9 @@ app.post('/api/orchestrations/:id/execute', async (req, res) => {
     })
     .catch(err => {
       console.error('[orchestrator] Background execution error:', err.message);
-    });
+    })
+    // Early exits and thrown errors leave it 'running': it would look active (and cancellable) forever
+    .finally(() => { if (executor.state === 'running') executor.state = 'completed'; });
 });
 
 // GET /api/orchestrations/:id/execute/stream?executionId=...
@@ -1951,7 +1953,12 @@ app.get('/api/orchestrations/:id/executions', (req, res) => {
   const project = resolveOrchProject(req.params.id);
   if (!project) return res.status(404).json({ error: 'Orchestration not found' });
   try {
-    res.json(workflows.getExecutions(req.params.id, project.path));
+    // `active`: running right now in this process (whoever launched it: app, extension, API), so it can be
+    // followed and cancelled. A "running" on disk with no executor behind it died with the app: 'interrupted'.
+    res.json(workflows.getExecutions(req.params.id, project.path).map(m => {
+      const active = getExecutor(m.executionId)?.state === 'running';
+      return { ...m, active, ...(m.status === 'running' && !active && { status: 'interrupted' }) };
+    }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2103,7 +2110,8 @@ app.post('/api/orchestrations/:id/executions/:execId/resume', async (req, res) =
   executor._executionState = savedState;
 
   registerExecutor(executor);
-  executor.execute().catch(e => console.error('Resume error:', e.message));
+  executor.execute().catch(e => console.error('Resume error:', e.message))
+    .finally(() => { if (executor.state === 'running') executor.state = 'completed'; });
 
   res.json({ executionId: executor.executionId, status: 'resumed' });
 });

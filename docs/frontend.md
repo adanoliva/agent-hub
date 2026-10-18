@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-10-18 · Versión: 2.7.0
+> Última actualización: 2026-10-18 · Versión: 2.7.1
 
 ---
 
@@ -529,6 +529,10 @@ Tres sub-vistas: `list` / `editor` / `execution`. La paleta del editor carga age
 
 El sistema de orquestaciones usa un modelo **DAG** (grafo dirigido acíclico) donde cada nodo declara sus dependencias explícitamente mediante `dependsOn: string[]`. Los nodos sin dependencias son raíces y pueden ejecutarse en paralelo.
 
+### `OrchestrationList.tsx`
+
+Si la orquestación tiene `activeExecutionId` (en marcha, lanzada desde la app, VS Code o la API), la tarjeta muestra el badge *En ejecución* y el botón ▶ pasa a ser ⏹ *Detener la ejecución* (`POST /orchestrations/:id/cancel?executionId=`). La página refresca la lista cada 5 s mientras está en la vista de lista, para reflejar ejecuciones que empiezan o acaban fuera. El modal de creación usa `.overlay` (antes `modal-backdrop`, una clase sin estilos que lo dejaba descolocado).
+
 ### `OrchestrationEditor.tsx`
 
 Layout tres paneles: paleta (agentes y scripts arrastrables) | lienzo (`NodeCanvas`) | configurador de conexión (`ConnectionConfigurator`).
@@ -660,6 +664,10 @@ Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL / browser 
 - `fake-claude.js` sustituye a `claude` delante en el PATH del backend (puerto 3799, así no choca con la app abierta). Responde en el formato JSON de Claude según la marca del agente, escribe ficheros en modo agente (hay diff de verdad) y espera lo que diga `fake-delay.txt`, que el script sube a 9 s para capturar el nivel paralelo en marcha.
 - Recorre la app con Playwright y el Chrome instalado (`SCREENSHOT_BROWSER=msedge` para Edge): wizard, dashboard, proyectos, agentes y editores, orquestaciones, canvas con una conexión seleccionada, formulario con estimación, ejecución paralela, resultado con diff, chat y ajustes. Antes de cada captura sustituye en la página las rutas locales y el nombre de usuario por genéricos.
 - Requiere `dist/renderer` (`npm run build:renderer`). `npm run screenshots -- 03-agents 10-chat` rehace solo esas; `SCREENSHOT_OUT=<carpeta>` las deja en otra carpeta para revisarlas sin tocar las de la documentación. `12-syncro-conflicts` (conflictos del directorio) no se genera.
+
+## Modo incrustado (`embed.ts`)
+
+`?embed=1&project=<id>&orch=<id>&mode=editor|execution|new` muestra solo las orquestaciones de un proyecto, para la extensión de VS Code (backend §20). `EMBED` se lee una vez: el store arranca en `orchestrations` sin wizard, `App` no pinta `Sidebar` ni `Statusbar`, y `Orchestrations` fija el proyecto, oculta su selector y, tras la primera carga de la lista, abre la orquestación en `editor` o `execution` (o el modal de creación con `new`). El contenido espera a que el proyecto esté cargado: en modo incrustado el id llega antes que la lista de proyectos.
 
 ## Patrones recurrentes
 

@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-10-18 · Versión: 2.7.0
+> Última actualización: 2026-10-18 · Versión: 2.7.1
 
 ---
 
@@ -365,7 +365,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/orchestrations?projectId=` | Lista todas las orquestaciones de un proyecto |
+| GET | `/api/orchestrations?projectId=` | Lista todas las orquestaciones de un proyecto. Cada una lleva `activeExecutionId`: la ejecución en marcha ahora mismo, se lanzara desde la app, la extensión de VS Code o la API (`activeExecutionId()` del orquestador) |
 | POST | `/api/orchestrations` | Crea una orquestación |
 | GET | `/api/orchestrations/:id` | Lee una orquestación por id (requiere `?projectId=`) |
 | PUT | `/api/orchestrations/:id` | Actualiza la orquestación |
@@ -374,7 +374,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/orchestrations/:id/estimate` | Estimación antes de ejecutar: tokens de entrada mínimos por paso y media de las últimas 5 ejecuciones (`CostEstimate`) |
 | POST | `/api/orchestrations/:id/execute` | Lanza la ejecución. Devuelve `{ executionId, status: 'started' }` |
 | GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso |
-| GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones |
+| GET | `/api/orchestrations/:id/executions` | Historial de ejecuciones. Cada una lleva `active` (sigue corriendo en este proceso). Las que figuran `running` en disco sin ejecutor detrás murieron con la app y se devuelven como `interrupted`, sin reescribir sus ficheros |
 | GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución |
 | GET | `/api/orchestrations/:id/executions/:executionId/steps/:stepIndex/diff` | Diff del commit de checkpoint del paso (`git show --stat --patch`, sin `.agent-hub/`, máx. 200 000 caracteres) → `{ sha, diff, truncated }`. 404 si el paso no tiene commit (Git desactivado) |
 | POST | `/api/orchestrations/:id/executions/:execId/resume` | Reanuda una ejecución interrumpida |
@@ -984,6 +984,8 @@ Tras completar cada paso IA, el orquestador ejecuta el script `quality-score` y 
 ### Cancelación
 
 `POST /orchestrations/:id/cancel` llama a `cancel()`, que además de marcar la ejecución aborta `this._abort`: el agente que está corriendo se detiene en el acto (su CLI muere con todo su árbol de procesos o la llamada a la API se corta) en lugar de seguir modificando ficheros hasta terminar su paso.
+Cualquier ejecución en marcha se puede parar desde fuera del panel que la lanzó: la lista de orquestaciones de la app y la vista de la extensión muestran *En ejecución* con un botón de detener (`POST /orchestrations/:id/cancel?executionId=`). Cuando `execute()` termina por cualquier vía, también por error o salida temprana, el servidor deja `state` en `completed`, para que no figure como activa para siempre.
+
 
 ### Gates HITL (`gateAfter`)
 
@@ -1462,13 +1464,26 @@ Mini Agent Hub dentro del IDE, limitado al **proyecto abierto**. Es un cliente d
 | Estados sin proyecto | *viewsWelcome* según el contexto `agentHub.state`: `offline` (la app no responde a `/health`), `unregistered` (la carpeta no está en `GET /projects`), `noFolder` |
 | *Ejecutar agente…* | QuickPick de agente + tarea → `POST /projects/:id/run?stream=1`. Progreso en una notificación cancelable y en el canal de salida *Agent Hub*; al terminar, tokens, coste y el resultado en un documento Markdown |
 | *Ejecutar agente sobre este fichero…* | Menú contextual del editor y del explorador. Añade a la tarea la ruta relativa y, si hay selección, el fragmento con sus líneas |
-| *Ejecutar orquestación…* | Pide los campos temporales (claves `${nodeId}-${fieldId}`, como la app; los de tipo `file` se leen del disco), muestra `GET /orchestrations/:id/estimate` y los timeouts en un diálogo modal, lanza `POST /execute` y sigue el SSE `/execute/stream`. Los gates HITL se resuelven en un modal (*Aprobar / Revisar… / Cancelar*) → `POST /executions/:execId/gate`. Cancelar la notificación llama a `POST /cancel` |
-| *Nueva orquestación…* | Asistente de 3 pasos: nombre, tarea del primer agente y cadena de agentes en orden. Crea una orquestación **lineal** (`dependsOn` encadenado, primer nodo `isRoot` con `projectContext`) con la misma geometría que el auto-layout del canvas → `POST /orchestrations`. Ramas paralelas, gates y scripts se editan en la app |
+| *Ejecutar orquestación…* / ▶ | Abre en una pestaña del editor el **panel de ejecución de la app** (campos, estimación de coste, progreso, gates, resultado con diff). Ver *Paneles visuales* |
+| *Nueva orquestación* / clic en una orquestación | Abren en una pestaña la creación y el **editor de canvas de la app** (mismo DAG, paleta, configurador de conexiones y botón *Ejecución*) |
+| Ejecución en marcha | La orquestación aparece arriba con icono girando y "en ejecución", lanzada desde donde sea. ⏹ la detiene; clic (o el icono de salida) sigue su log en directo en el canal *Agent Hub*, con los gates como diálogo |
 | Resultado de una ejecución | Documento Markdown con estado, tokens, coste y, por paso, error, ficheros modificados, respuesta y el diff de su checkpoint en un bloque `diff` (`GET /orchestrations/:id/executions/:executionId` + `…/steps/:stepIndex/diff`) |
 | Barra de estado | Proveedor activo o estado de desconexión; clic abre la vista |
 | Participante de chat `@agenthub` (`src/chat.ts`) | En la vista de chat de VS Code. Sin comando, es el chat de proyecto de la app (`POST /chat` con `projectId`: lee ficheros, contexto y skills, nunca modifica nada), con la conversación previa de `@agenthub` como historial. `/run <agente> <tarea>` ejecuta un agente con `/run?stream=1` y muestra las herramientas como progreso del chat y el resultado con tokens y coste. `/agents` lista los agentes. Cancelar en el chat aborta la petición, y con ella el CLI. Si el editor no tiene API de chat, simplemente no se registra |
 
 La vista se refresca al recuperar el foco de la ventana, al cambiar las carpetas del workspace y cuando cambian ficheros en `.agent-hub/{orchestrations,executions}/` (lo que guarda la app o trae un `git pull`).
+
+### Paneles visuales (modo incrustado)
+
+Para que crear, editar y ejecutar orquestaciones se vea igual que en la app, la extensión no reimplementa el canvas: `src/panel.ts` (`AppPanels`) abre un webview con la propia app servida por la API local en un iframe, en **modo incrustado**:
+
+```
+http://localhost:3737/?embed=1&project=<id>&orch=<id>&mode=editor|execution|new
+```
+
+- `src/renderer/embed.ts` lee esos parámetros (`EMBED`). Con ellos la app no muestra la barra lateral, la barra de estado ni el wizard, arranca en Orquestaciones con el proyecto fijado (sin selector) y, al cargar la lista, abre la orquestación en el modo pedido (`new` abre el modal de creación, que lleva al canvas).
+- Un panel por orquestación y modo (si ya existe, se enfoca). `retainContextWhenHidden` mantiene viva una ejecución en una pestaña oculta. La URL pasa por `asExternalUri`, así funciona también con VS Code remoto. CSP del webview: solo `frame-src` al origen de la API.
+- Lo que se guarda en el panel llega a la vista lateral por el vigilante de `.agent-hub/orchestrations/`.
 
 ### `/run` en streaming
 

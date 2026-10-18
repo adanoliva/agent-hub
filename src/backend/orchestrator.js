@@ -1323,12 +1323,21 @@ function getExecutor(executionId) {
   return _activeExecutors.get(executionId) || null;
 }
 
+/** The execution of this orchestration running right now, if any (launched from the app, the extension or the API) */
+function activeExecutionId(orchestrationId) {
+  for (const ex of _activeExecutors.values()) {
+    if (ex.orchestration.id === orchestrationId && ex.state === 'running') return ex.executionId;
+  }
+  return null;
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
   OrchestrationExecutor,
   registerExecutor,
   getExecutor,
+  activeExecutionId,
   resolveGate,
   extractHandoff,
   stripHandoff,

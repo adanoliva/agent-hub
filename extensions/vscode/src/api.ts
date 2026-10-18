@@ -15,6 +15,7 @@ export interface OrchNode {
 export interface Orchestration {
   id: string; name: string; description?: string; nodes: OrchNode[];
   executionCount?: number; lastExecutionStatus?: string; lastExecutedAt?: string;
+  activeExecutionId?: string | null;   // running right now (launched from anywhere)
   executionConfig?: { maxTurns?: number; timeout?: number; stepTimeout?: number; maxBudgetUSD?: number };
 }
 export interface ExecutionMeta { executionId: string; orchestrationId: string; status: string; startedAt: string; completedAt?: string; stepsCompleted?: number; totalSteps?: number }

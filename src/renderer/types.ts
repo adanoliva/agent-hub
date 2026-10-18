@@ -295,6 +295,7 @@ export interface Orchestration {
   updatedAt:            string;
   lastExecutedAt?:      string;
   lastExecutionStatus?: 'success' | 'partial' | 'failed';
+  activeExecutionId?:   string | null;   // running right now, launched from anywhere (app, VS Code, API)
   executionCount:       number;
   lastExecutionCost?:         number;
   lastExecutionCostIsApprox?: boolean;

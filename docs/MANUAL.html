@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Hub — Manual de uso v2.7.0</title>
+<title>Agent Hub — Manual de uso v2.7.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -215,7 +215,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 <nav class="nav">
   <div class="nav-logo">
     <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Agent Hub</div>
-    <div class="nav-logo-sub">Manual de uso · v2.7.0</div>
+    <div class="nav-logo-sub">Manual de uso · v2.7.1</div>
   </div>
 
   <div class="nav-section">Primeros pasos</div>
@@ -270,7 +270,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- Hero                   -->
   <!-- ══════════════════════ -->
   <div class="hero" id="inicio">
-    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.7.0</div>
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.7.1</div>
     <h1 class="hero-title">Agent <span>Hub</span></h1>
     <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Incluye orquestaciones DAG con ejecución paralela, scripts determinísticos, gates HITL, skills por agente, servidores MCP y mucho más. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
     <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
@@ -2725,7 +2725,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="step-num">4</div>
         <div class="step-body">
           <div class="step-title">Ejecutar y crear orquestaciones</div>
-          <div class="step-desc">Al ejecutar, la extensión pide los campos de entrada y muestra la estimación de coste y los timeouts antes de confirmar. Los gates de revisión aparecen como un diálogo con <em>Aprobar</em>, <em>Revisar…</em> (con feedback) y <em>Cancelar</em>, para que revises el diff en el control de código fuente. <em>Nueva orquestación…</em> crea una cadena lineal de agentes en tres pasos; las ramas paralelas, los gates y los scripts se editan después en el canvas de la app. Cualquier ejecución reciente se abre como informe con sus pasos, ficheros, tokens, coste y el diff de cada paso.</div>
+          <div class="step-desc">Las orquestaciones se abren en pestañas del editor <strong>con las mismas pantallas de la app</strong>: clic en una orquestación abre su editor de canvas (paleta, conexiones, botón <em>Ejecución</em>); ▶ abre el panel de ejecución con los campos, la estimación de coste, el progreso en directo, los gates y el resultado con el diff de cada paso; <em>Nueva orquestación</em> usa la creación de la app. Las ejecuciones en marcha (lanzadas desde VS Code, la app o la API) aparecen arriba en la vista con un botón ⏹ para detenerlas, y un clic sigue su log en directo. Cualquier ejecución reciente se abre como informe con sus pasos, ficheros, tokens, coste y el diff de cada paso.</div>
         </div>
       </div>
       <div class="step">

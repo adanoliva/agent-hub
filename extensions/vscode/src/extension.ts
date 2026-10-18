@@ -3,12 +3,13 @@ import { Api } from './api';
 import { ProjectState, ProjectTree } from './tree';
 import { Commands } from './commands';
 import { registerChat } from './chat';
+import { AppPanels } from './panel';
 
 export function activate(ctx: vscode.ExtensionContext): void {
   const api   = new Api();
   const state = new ProjectState(api);
   const out   = vscode.window.createOutputChannel('Agent Hub');
-  const cmds  = new Commands(api, state, out);
+  const cmds  = new Commands(api, state, out, new AppPanels(api, ctx.extensionUri));
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   status.command = 'workbench.view.extension.agentHub';
@@ -41,7 +42,10 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('agentHub.runAgent',            run((a?) => cmds.runAgent(a))),
     vscode.commands.registerCommand('agentHub.runAgentOnSelection', run((a?) => cmds.runAgent(a, true))),
     vscode.commands.registerCommand('agentHub.runOrchestration',    run((a?) => cmds.runOrchestration(a))),
+    vscode.commands.registerCommand('agentHub.editOrchestration',   run((a?) => cmds.editOrchestration(a))),
     vscode.commands.registerCommand('agentHub.newOrchestration',    run(() => cmds.newOrchestration())),
+    vscode.commands.registerCommand('agentHub.stopOrchestration',   run((a?) => cmds.stopOrchestration(a))),
+    vscode.commands.registerCommand('agentHub.followExecution',     run((o) => cmds.followExecution(o, o.activeExecutionId))),
     vscode.commands.registerCommand('agentHub.openExecution',       run((o: string, e: string) => cmds.openExecution(o, e))),
     vscode.commands.registerCommand('agentHub.syncAgents',          run(() => cmds.syncAgents())),
     vscode.commands.registerCommand('agentHub.showOutput',          run(async () => out.show())),
