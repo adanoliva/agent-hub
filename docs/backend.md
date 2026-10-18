@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-10-18 · Versión: 2.6.0
+> Última actualización: 2026-10-18 · Versión: 2.7.0
 
 ---
 
@@ -34,6 +34,7 @@
 17. [Flujos clave end-to-end](#17-flujos-clave-end-to-end)
 18. [Dashboard y seguimiento de uso](#18-dashboard-y-seguimiento-de-uso)
 19. [CLI de terminal (`cli/agent-hub.ps1` + `cli-install.js`)](#19-cli-de-terminal-cliagent-hubps1--cli-installjs)
+20. [Extensión de VS Code (`extensions/vscode/` + `vscode-install.js`)](#20-extensión-de-vs-code-extensionsvscode--vscode-installjs)
 
 ---
 
@@ -66,6 +67,7 @@ Electron main process (Node.js)
   ├── ops-ledger.js    ← registro append-only de operaciones atómicas por orquestación
   ├── mcp.js           ← cliente MCP universal: pool de procesos, CRUD, sync a CLIs
   ├── cli-install.js   ← instala el comando `agent-hub` (cli/*.ps1|cmd) en el PATH de usuario
+  ├── vscode-install.js ← instala la extensión de VS Code incluida (vscode/agent-hub.vsix) con `code`
   ├── tray.js          ← icono en la bandeja del sistema
   ├── preload.js       ← contextBridge: window.api expuesto al renderer
   ├── defaults.js      ← vacío (agentes ahora vienen del directorio externo)
@@ -319,7 +321,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/projects/:id/context?type=auto` | Detecta proveedor y devuelve `ProjectContextInfo` completo |
 | PUT | `/api/projects/:id/context` | Guarda el fichero de contexto |
 | POST | `/api/projects/:id/generate-context?type=` | Genera con IA analizando el directorio del proyecto |
-| POST | `/api/projects/:id/run` | Ejecuta un agente sobre el proyecto `{ agent, task, maxTurns?, timeout? }` → `{ result, agent, provider, durationMs }`. Inyecta skills del proyecto y del agente + MCP. Lo usa el CLI (§19) |
+| POST | `/api/projects/:id/run` | Ejecuta un agente sobre el proyecto `{ agent, task, maxTurns?, timeout? }` → `{ result, agent, provider, inputTokens, outputTokens, costUSD, costUnavailable, durationMs }`. Inyecta skills del proyecto y del agente + MCP. Lo usa el CLI (§19). Con `?stream=1` responde NDJSON con el progreso en directo (ver §20) |
 
 #### Dashboard
 
@@ -374,6 +376,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso |
 | GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones |
 | GET | `/api/orchestrations/:id/executions/:executionId` | Lee el resultado completo de una ejecución |
+| GET | `/api/orchestrations/:id/executions/:executionId/steps/:stepIndex/diff` | Diff del commit de checkpoint del paso (`git show --stat --patch`, sin `.agent-hub/`, máx. 200 000 caracteres) → `{ sha, diff, truncated }`. 404 si el paso no tiene commit (Git desactivado) |
 | POST | `/api/orchestrations/:id/executions/:execId/resume` | Reanuda una ejecución interrumpida |
 | POST | `/api/orchestrations/:id/executions/:execId/gate` | Resuelve un gate HITL: `{ action: 'approve'\|'revise'\|'cancel', feedbackText?, stepIndex }` |
 | GET | `/api/scripts` | Lista los scripts disponibles (built-in + externos). Devuelve `{ scripts, warnings }` |
@@ -748,6 +751,8 @@ Solo hay precio conocido para Claude CLI (lo informa) y la API de Anthropic. El 
 
 Un modelo sin entrada en la tabla se cobra al precio de `MODEL`. Haiku 4.5 figuraba a $0.25/$1.25 (el precio de Haiku 3) e infravaloraba su coste cuatro veces.
 
+**Caché de prompts (API de Anthropic):** el subsistema CLI reenvía en cada turno el system prompt y la conversación entera. `withPromptCache` marca con `cache_control: ephemeral` el final del system prompt y el del último mensaje, así cada turno lee de caché el prefijo del anterior. `calcAnthropicCost(model, input, output, cacheWrite, cacheRead)` cobra la escritura a 1,25× y la lectura a 0,1× del precio de entrada. `inputTokens` incluye los tokens de caché, para que totales y estimaciones sigan siendo comparables. El subsistema suma el `costUSD` de cada turno y `runInProject` lo usa tal cual. Los prefijos por debajo del mínimo del modelo (entre ~1k y 4k tokens) no se cachean, sin error.
+
 ---
 
 ## 8b. Prompts centralizados (`prompts.js`)
@@ -782,6 +787,7 @@ El parámetro `language` acepta `'es'` o `'en'`. Los skills de código se genera
 - **API**: Subsistema CLI (§10) con el contexto de `readProjectContext` en el system prompt (hasta 20 000 caracteres).
 - **`mode: 'read'`**: el CLI usa sus flags de solo lectura, y el subsistema rechaza `write` y limita `bash` a comandos de lectura. Un CLI sin `readOnly` en su adaptador (Antigravity, CLIs personalizados) va por el subsistema: Agent Hub ejecuta las herramientas de lectura y el CLI solo responde, desde la carpeta neutra.
 - **MCP**: con un CLI que no lo soporta, avisa por `log` y devuelve los nombres en `mcpIgnored`.
+- **`onEvent`**: progreso en directo. Claude CLI pasa a `--output-format stream-json --verbose` y cada mensaje se traduce a `{ type: 'text', text }` o `{ type: 'tool', name, detail }` (`claudeStreamEvent`); el resultado final sigue siendo la línea `type: "result"`. Con API, el subsistema emite un `tool` por cada herramienta. Copilot y Antigravity no informan hasta terminar. Solo se activa si alguien escucha: sin `onEvent`, Claude sigue con `--output-format json`.
 - **Devuelve** `{ text, inputTokens, outputTokens, costUSD, costUnavailable, mcpIgnored, filesModified }`. `filesModified` es `null` con CLIs: el orquestador compara el disco.
 
 ---
@@ -955,6 +961,10 @@ HANDOFF: {"done":"...","changed":["ruta"],"issues":["..."],"next":"..."}
 
 Hay dos relojes en `executionConfig`. `timeout` (defecto 30 min) cubre **toda la orquestación**; `stepTimeout` (defecto 10 min) limita **cada nodo**, para que un agente colgado no se coma el tiempo de los demás. Cada paso recibe el menor de los dos: su `stepTimeout` o lo que quede del global. **El tiempo de espera en gates HITL no descuenta del reloj global** — el `startTime` se incrementa con la duración de la pausa. Ambos se editan desde el editor de la orquestación (botón *Ejecución*).
 
+### Presupuesto (`maxBudgetUSD`)
+
+`executionConfig.maxBudgetUSD` (opcional, editable en el botón *Ejecución* del editor) detiene la orquestación cuando el coste acumulado de los pasos lo supera. Se comprueba al terminar cada nivel, así que los nodos que corrían en paralelo terminan antes de parar. Emite `cancelled` con `reason: 'budget_exceeded'` y `data: { spent, limit, isEstimated }`, el mismo evento que el script `budget-guard`, que sigue disponible para límites a mitad del grafo. Solo tiene efecto con Claude (CLI o API): con otros proveedores el log avisa de que no se aplica.
+
 ### Scripts determinísticos
 
 Si `agentName` comienza por `__script:`, el paso se delega a `scripts-registry.js` en lugar de llamar a la IA. Los scripts son sincrónicos, no consumen tokens y siempre producen un `StepResult` con `tokensUsed: { input: 0, output: 0 }`. Ver §12b.
@@ -1072,18 +1082,23 @@ Todas las rutas son relativas a `projectPath`. Las rutas con `..` que escapan de
 
 Realiza commits automáticos tras cada paso completado cuando `project.gitEnabled === true` y el directorio es un repositorio git.
 
+Todos los comandos se lanzan con `execFile`, sin shell. Antes el mensaje del commit, con los nombres de la orquestación y del agente, pasaba por `cmd.exe`, y un `&` o un `|` en el nombre se ejecutaba como comando.
+
 ### Funciones exportadas
 
 | Función | Descripción |
 |---|---|
 | `isGitRepo(projectPath)` | `true` si existe `.git/` en el directorio |
-| `checkpoint(projectPath, message)` | `git add -A` + `git commit --author="AgentHub <agenthub@local>"`. Devuelve el SHA del commit o `null` si no había cambios. |
+| `checkpoint(projectPath, message)` | `git add -A` + `git commit --author="AgentHub <agenthub@local>"`, **excluyendo `.agent-hub/`**: los logs, resultados y backups de Agent Hub no son trabajo del paso, no ensucian su diff y un rollback no los toca. Si `git diff --cached --quiet` dice que no hay cambios, devuelve `null` sin depender del idioma de git. Devuelve el SHA del commit. |
 | `rollbackToSha(projectPath, sha)` | `git reset --hard {sha}` — restaura el estado exacto de ese commit |
+| `stepDiff(projectPath, sha)` | `git show --stat --patch` del commit, también sin `.agent-hub/` (filtra los checkpoints anteriores a 2.7). Valida que `sha` sea hexadecimal. → `{ sha, diff, truncated }` |
 
 ### Integración en el orquestador
 
 - Tras cada paso exitoso: `checkpoint(project.path, "[orchName] paso N/M: agentName")` → el SHA se guarda en `stepResult.gitCommitSha`.
 - En rollback: si `stepResult.gitCommitSha` existe, se usa `rollbackToSha` en lugar del snapshot JSON.
+- El diff de cada paso se ve en la tarjeta del resultado (*Cambios del paso (diff)*) y en el informe de la extensión de VS Code (`GET …/steps/:stepIndex/diff`).
+- Ojo: el primer checkpoint incluye también los cambios que hubiera sin commitear en el proyecto antes de ejecutar.
 
 ---
 
@@ -1368,7 +1383,7 @@ POST /api/chat { messages, systemPrompt, projectId? }
 - **Optimization**: prompt no optimizado con IA.
 
 **Para cada proyecto activo:**
-- **Critical**: sin `CLAUDE.md` o `copilot-instructions.md`.
+- **Critical**: sin contexto para alguno de sus proveedores: ni su fichero (`CLAUDE.md`, `copilot-instructions.md`…) ni `AGENTS.md`, que leen todos los motores (`existingContextFile`). Antes de 2.7 se exigía el fichero de cada proveedor y un proyecto con solo `AGENTS.md` salía como crítico.
 - **Optimization**: fichero de contexto < 80 caracteres.
 - **Optimization**: agentes pendientes de sync.
 
@@ -1432,3 +1447,48 @@ Endpoints: `GET /api/cli` (estado) · `POST /api/cli` (instalar) · `DELETE /api
 1. Escribir `src/backend/cli/agent-hub.sh` (POSIX `sh` + `curl`; `jq` opcional o parseo con `node -e` si se quiere evitar dependencias). La lógica es la misma: 3 comandos sobre `/api/projects`, `/api/projects/:id/agents`, `/api/agents/applicable` y `/api/projects/:id/run`.
 2. En `cli-install.js`, rama no-Windows: copiar a `~/.local/bin/agent-hub` con `chmod +x` (ese directorio ya está en el PATH en la mayoría de distros y se puede añadir en macOS vía `~/.zprofile`). No hace falta tocar el PATH desde la app.
 3. `getStatus()` → `supported: true` y comprobar `~/.local/bin/agent-hub`.
+
+---
+
+## 20. Extensión de VS Code (`extensions/vscode/` + `vscode-install.js`)
+
+Mini Agent Hub dentro del IDE, limitado al **proyecto abierto**. Es un cliente de la API local, igual que el CLI: **requiere la app abierta** y reutiliza todo el motor (proveedores, skills, contexto, MCP, timeouts, reintentos, cancelación, estimación). URL configurable con el ajuste `agentHub.url` (defecto `http://localhost:3737`).
+
+### Qué ofrece
+
+| Pieza | Detalle |
+|---|---|
+| Vista lateral *Agent Hub → Proyecto* | Cabecera con el proyecto y el proveedor, aviso de agentes pendientes de sync (clic = `POST /projects/:id/sync`), agentes aplicables (los del proyecto ganan a los globales), orquestaciones y las 10 ejecuciones más recientes |
+| Estados sin proyecto | *viewsWelcome* según el contexto `agentHub.state`: `offline` (la app no responde a `/health`), `unregistered` (la carpeta no está en `GET /projects`), `noFolder` |
+| *Ejecutar agente…* | QuickPick de agente + tarea → `POST /projects/:id/run?stream=1`. Progreso en una notificación cancelable y en el canal de salida *Agent Hub*; al terminar, tokens, coste y el resultado en un documento Markdown |
+| *Ejecutar agente sobre este fichero…* | Menú contextual del editor y del explorador. Añade a la tarea la ruta relativa y, si hay selección, el fragmento con sus líneas |
+| *Ejecutar orquestación…* | Pide los campos temporales (claves `${nodeId}-${fieldId}`, como la app; los de tipo `file` se leen del disco), muestra `GET /orchestrations/:id/estimate` y los timeouts en un diálogo modal, lanza `POST /execute` y sigue el SSE `/execute/stream`. Los gates HITL se resuelven en un modal (*Aprobar / Revisar… / Cancelar*) → `POST /executions/:execId/gate`. Cancelar la notificación llama a `POST /cancel` |
+| *Nueva orquestación…* | Asistente de 3 pasos: nombre, tarea del primer agente y cadena de agentes en orden. Crea una orquestación **lineal** (`dependsOn` encadenado, primer nodo `isRoot` con `projectContext`) con la misma geometría que el auto-layout del canvas → `POST /orchestrations`. Ramas paralelas, gates y scripts se editan en la app |
+| Resultado de una ejecución | Documento Markdown con estado, tokens, coste y, por paso, error, ficheros modificados, respuesta y el diff de su checkpoint en un bloque `diff` (`GET /orchestrations/:id/executions/:executionId` + `…/steps/:stepIndex/diff`) |
+| Barra de estado | Proveedor activo o estado de desconexión; clic abre la vista |
+| Participante de chat `@agenthub` (`src/chat.ts`) | En la vista de chat de VS Code. Sin comando, es el chat de proyecto de la app (`POST /chat` con `projectId`: lee ficheros, contexto y skills, nunca modifica nada), con la conversación previa de `@agenthub` como historial. `/run <agente> <tarea>` ejecuta un agente con `/run?stream=1` y muestra las herramientas como progreso del chat y el resultado con tokens y coste. `/agents` lista los agentes. Cancelar en el chat aborta la petición, y con ella el CLI. Si el editor no tiene API de chat, simplemente no se registra |
+
+La vista se refresca al recuperar el foco de la ventana, al cambiar las carpetas del workspace y cuando cambian ficheros en `.agent-hub/{orchestrations,executions}/` (lo que guarda la app o trae un `git pull`).
+
+### `/run` en streaming
+
+`POST /api/projects/:id/run?stream=1` responde `application/x-ndjson`, una línea JSON por evento:
+
+```
+{"type":"start","agent":"lector","provider":"cli","skills":["typescript"]}
+{"type":"tool","name":"Read","detail":"src/a.ts"}
+{"type":"text","text":"…"}
+{"type":"warn","text":"… — reintento 1 en 3s"}
+{"type":"result","result":"…","durationMs":6546,"inputTokens":4,"outputTokens":254,"costUSD":0.0045,…}
+```
+
+Termina siempre con una línea `result` o `error`. Los errores previos (proyecto o agente inexistente) responden JSON con su código HTTP, como sin `stream`. Cerrar la conexión aborta la ejecución (`abortOnDisconnect`). Sin `?stream=1`, la respuesta es la de siempre: el CLI `agent-hub` no cambia.
+
+### Código, build e instalación
+
+- `extensions/vscode/`: TypeScript sin dependencias de runtime (`fetch` de Node). `src/api.ts` (cliente REST + lectores NDJSON y SSE sobre `fetch`), `src/tree.ts` (`ProjectState` + `ProjectTree`), `src/commands.ts`, `src/extension.ts`. `npm run compile` / `npm run package` (→ `agent-hub.vsix`).
+- `scripts/build-vscode.js` (`npm run build:vscode`, incluido en `prepare:build`): pone en la extensión la versión de la app, la empaqueta y copia el `.vsix` a `src/backend/vscode/` (ignorado por git), que electron-builder incluye en la app.
+- `vscode-install.js`: `getStatus()` → `{ supported, codeFound, installed, version, outdated }` (`supported` = el `.vsix` está incluido; `outdated` = la versión instalada no es la de la app). `install()` copia el `.vsix` fuera de `app.asar` (VS Code no puede leerlo dentro) y ejecuta `code --install-extension <tmp> --force`. `uninstall()` → `code --uninstall-extension adanoliva.agent-hub-vscode`.
+- Endpoints: `GET /api/vscode` · `POST /api/vscode` (instalar / actualizar) · `DELETE /api/vscode`.
+
+En desarrollo (`npm run dev`) la tarjeta de Ajustes solo aparece tras `npm run build:vscode`. Para depurar la extensión: abrir `extensions/vscode/` en VS Code y F5 (*Extension Development Host*).

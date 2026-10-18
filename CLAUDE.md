@@ -1,6 +1,6 @@
 # Agent Hub — Contexto del proyecto
 
-> Versión actual: **2.6.0** · Actualizar este campo en cada release.
+> Versión actual: **2.7.0** · Actualizar este campo en cada release.
 
 @docs/backend.md
 @docs/frontend.md
@@ -39,6 +39,7 @@ La documentación técnica completa está en [`docs/backend.md`](docs/backend.md
 npm run dev      # Electron + Vite dev server (DevTools abiertos)
 npm run build    # Portable .exe en dist/
 npm run release  # Build + publish a GitHub Releases
+npm run screenshots  # Regenera docs/screenshots y docs/web/screenshots (requiere dist/renderer y Chrome)
 ```
 
 Para usar un directorio de datos distinto al raíz en dev:

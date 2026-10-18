@@ -1,4 +1,4 @@
-# Agent Hub · v2.6.0
+# Agent Hub · v2.7.0
 
 Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
@@ -11,6 +11,7 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 - **Agnóstico del proveedor**: agentes, skills, contexto y orquestaciones funcionan igual con un CLI nativo (se lanza dentro del proyecto) o con una API (Agent Hub le da herramientas de fichero y shell). *Prueba real* en Ajustes verifica de punta a punta que el proveedor lee un proyecto.
 - **Chat**: conversación multi-turno con `@mention` de agentes e historial por proyecto. Con un proyecto seleccionado lee sus ficheros, contexto y skills en **solo lectura**, con cualquier proveedor.
 - **CLI `agent-hub`**: ejecuta agentes sobre un proyecto desde cualquier terminal; se instala desde Ajustes.
+- **Extensión de VS Code**: vista lateral del proyecto abierto, ejecutar agentes (también sobre el fichero o la selección), ejecutar y crear orquestaciones con logs en directo, estimación de coste y gates de revisión. Se instala desde Ajustes; requiere la app abierta ([detalles](extensions/vscode/README.md)).
 - **Orquestaciones DAG**: flujos multiagente en grafo dirigido acíclico. Los nodos sin dependencias entre sí se ejecutan **en paralelo** por niveles topológicos. Incluye canvas 2D interactivo, **scripts determinísticos** (sin IA), **gates HITL**, **quality score** automático, **git checkpointing**, **ops ledger**, reanudación de ejecuciones interrumpidas, **timeout por paso**, reintentos ante errores transitorios, **cancelación inmediata** y **estimación de coste** antes de ejecutar.
 - **Directorio de agentes**: sincronización automática (agentes + skills) desde un repositorio GitHub externo con resolución de conflictos.
 - **Búsqueda**: búsqueda global de agentes y skills por nombre y descripción con debounce y badges de origen.
@@ -38,6 +39,7 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 npm install
 npm run dev        # Electron + Vite dev server
 npm run build      # Portable .exe en dist/
+npm run screenshots  # Capturas de docs y web con datos de demostración
 ```
 
 Para usar un directorio de datos distinto al raíz en dev:
@@ -46,6 +48,15 @@ Para usar un directorio de datos distinto al raíz en dev:
 $env:CDM_DATA_DIR = "C:\MiCarpetaDatos"
 npm run dev
 ```
+
+## Novedades v2.7.0
+
+- **Extensión de VS Code** (`extensions/vscode/`): mini Agent Hub para el proyecto abierto. Vista lateral con agentes, orquestaciones y ejecuciones recientes; ejecutar agentes sobre una tarea o sobre el fichero/selección actual; ejecutar orquestaciones con estimación de coste, logs en directo y gates de revisión; crear orquestaciones lineales. Se instala y actualiza desde Ajustes → General; la extensión lleva la misma versión que la app.
+- **`@agenthub` en el chat de VS Code**: el chat de proyecto (solo lectura) dentro de la vista de chat del editor, más `/run <agente> <tarea>` y `/agents`.
+- **Progreso en directo en `/run`** (`?stream=1`, NDJSON): herramientas y texto del agente a medida que trabaja con Claude CLI y con las APIs.
+- **Presupuesto máximo por orquestación** (botón *Ejecución* del editor): se detiene al superar el límite, sin añadir un nodo `budget-guard`.
+- **Diff de cada paso**: con Git activado, la tarjeta de cada paso (y el informe de la extensión) muestra lo que cambió el agente. Los checkpoints ya no incluyen `.agent-hub/` y se hacen sin shell.
+- **Caché de prompts con la API de Anthropic**: el system prompt y la conversación del subsistema se leen de caché en cada turno (lectura a 0,1× del precio de entrada), y el coste se calcula con esas tarifas.
 
 ## Novedades v2.6.0
 

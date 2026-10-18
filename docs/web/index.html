@@ -756,6 +756,83 @@
     .collab-ben strong { display: block; font-size: 14px; font-weight: 700; color: var(--text0); margin-bottom: 5px; }
     .collab-ben p { font-size: 13px; color: var(--text2); line-height: 1.6; }
 
+    /* ── 06 VS Code ─────────────────────────────── */
+    .vsc-section {
+      background: var(--bg1);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .vsc-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 100px 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .vsc-mock {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      background: var(--bg0);
+      border: 1px solid rgba(124,106,247,.2);
+      font-family: var(--mono);
+      font-size: 11px;
+      overflow: hidden;
+    }
+    .vsc-activity {
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      padding: 14px 0;
+      color: var(--text3);
+      font-size: 18px;
+    }
+    .vsc-activity .on { color: var(--text0); border-left: 2px solid var(--accent); padding-left: 10px; margin-left: -12px; }
+    .vsc-side { padding: 10px 0 14px; min-width: 0; }
+    .vsc-title {
+      padding: 0 14px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text3);
+      display: flex;
+      justify-content: space-between;
+    }
+    .vsc-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 14px;
+      color: var(--text1);
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .vsc-row .ti { font-size: 13px; color: var(--text2); flex-shrink: 0; }
+    .vsc-row.l1 { padding-left: 30px; }
+    .vsc-row.head { color: var(--text0); font-weight: 700; }
+    .vsc-row.sel { background: rgba(124,106,247,.12); }
+    .vsc-row .d { color: var(--text3); font-size: 10px; margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+    .vsc-row .play { color: var(--green); margin-left: 6px; }
+    .vsc-row.warn, .vsc-row.warn .ti { color: var(--amber); }
+    .vsc-out {
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border);
+      background: var(--bg1);
+      padding: 10px 14px 12px;
+      line-height: 1.75;
+      color: var(--text2);
+    }
+    .vsc-out .ok { color: var(--green); }
+    .vsc-out .t  { color: var(--blue); }
+    @media (max-width: 900px) {
+      .vsc-inner { grid-template-columns: 1fr; gap: 48px; padding: 72px 24px; }
+    }
+
     /* ── Compat strip ───────────────────────────── */
     .compat-strip {
       border-top: 1px solid var(--border);
@@ -937,6 +1014,7 @@
     <a href="#features"        class="nav-link">Funciones</a>
     <a href="#orchestrations"  class="nav-link">Orquestaciones</a>
     <a href="#mcp"             class="nav-link">MCP</a>
+    <a href="#vscode"          class="nav-link">VS Code</a>
     <a href="#closing"         class="nav-link">Filosofía</a>
   </div>
 </nav>
@@ -947,7 +1025,7 @@
   <div class="hero-glow"></div>
 
   <div class="hero-left">
-    <div class="hero-tag">v2.6.0</div>
+    <div class="hero-tag">v2.7.0</div>
     <h1 class="hero-h1">
       Agentes IA<br>
       en cada<br>
@@ -1017,6 +1095,8 @@
     <span class="marquee-sep">·</span>
     <span class="marquee-item"><i class="ti ti-message-chatbot"></i> Chat que lee tu proyecto</span>
     <span class="marquee-sep">·</span>
+    <span class="marquee-item"><i class="ti ti-brand-vscode"></i> Extensión de VS Code</span>
+    <span class="marquee-sep">·</span>
     <span class="marquee-item"><i class="ti ti-terminal"></i> CLI agent-hub</span>
     <span class="marquee-sep">·</span>
     <!-- duplicate for seamless loop -->
@@ -1039,6 +1119,8 @@
     <span class="marquee-item"><i class="ti ti-puzzle"></i> Skills detectadas por stack</span>
     <span class="marquee-sep">·</span>
     <span class="marquee-item"><i class="ti ti-message-chatbot"></i> Chat que lee tu proyecto</span>
+    <span class="marquee-sep">·</span>
+    <span class="marquee-item"><i class="ti ti-brand-vscode"></i> Extensión de VS Code</span>
     <span class="marquee-sep">·</span>
     <span class="marquee-item"><i class="ti ti-terminal"></i> CLI agent-hub</span>
     <span class="marquee-sep">·</span>
@@ -1238,6 +1320,13 @@
           <div>
             <strong>Timeouts por paso, reintentos y cancelación</strong>
             <p>Un agente colgado ya no bloquea el pipeline: tiempo límite por paso y total, reintentos ante errores pasajeros y parada inmediata al cancelar.</p>
+          </div>
+        </div>
+        <div class="orch-feat">
+          <div class="orch-feat-icon amber"><i class="ti ti-git-compare"></i></div>
+          <div>
+            <strong>Presupuesto máximo y diff de cada paso</strong>
+            <p>Fija cuánto puede gastar una orquestación y se detiene al superarlo. Con Git activado, cada paso muestra exactamente lo que cambió el agente.</p>
           </div>
         </div>
       </div>
@@ -1531,6 +1620,91 @@
   </div>
 </section>
 
+<!-- ── 06 VS Code ──────────────────────────────── -->
+<section id="vscode" class="vsc-section">
+  <div class="vsc-inner">
+
+    <!-- Left: mock of the extension's sidebar + output -->
+    <div class="vsc-mock reveal" role="img" aria-label="Vista lateral de Agent Hub en VS Code">
+      <div class="vsc-activity">
+        <i class="ti ti-files"></i>
+        <i class="ti ti-search"></i>
+        <i class="ti ti-git-branch"></i>
+        <i class="ti ti-topology-ring-2 on"></i>
+      </div>
+      <div class="vsc-side">
+        <div class="vsc-title"><span>Agent Hub · Proyecto</span><span><i class="ti ti-player-play"></i> <i class="ti ti-plus"></i> <i class="ti ti-refresh"></i></span></div>
+        <div class="vsc-row head"><i class="ti ti-folders"></i> backend-api <span class="d">cli</span></div>
+        <div class="vsc-row warn"><i class="ti ti-alert-triangle"></i> 2 agentes pendientes de sincronizar</div>
+        <div class="vsc-row"><i class="ti ti-chevron-down"></i><i class="ti ti-robot"></i> Agentes <span class="d">5</span></div>
+        <div class="vsc-row l1 sel"><i class="ti ti-user"></i> refactor-expert <span class="d">project · sonnet</span><i class="ti ti-player-play play"></i></div>
+        <div class="vsc-row l1"><i class="ti ti-robot"></i> test-writer <span class="d">global · haiku</span></div>
+        <div class="vsc-row l1"><i class="ti ti-robot"></i> code-reviewer <span class="d">global · sonnet</span></div>
+        <div class="vsc-row"><i class="ti ti-chevron-down"></i><i class="ti ti-topology-ring-2"></i> Orquestaciones <span class="d">2</span></div>
+        <div class="vsc-row l1"><i class="ti ti-hierarchy-2"></i> refactor + tests <span class="d">3 pasos · hace 2 h</span><i class="ti ti-player-play play"></i></div>
+        <div class="vsc-row"><i class="ti ti-chevron-right"></i><i class="ti ti-history"></i> Ejecuciones recientes <span class="d">6</span></div>
+      </div>
+      <div class="vsc-out">
+        ━━ refactor-expert · 12:41 ━━<br>
+        &gt; extrae la validación a un middleware (+ selección)<br>
+        &nbsp;&nbsp;proveedor: cli · skills: nodejs, typescript<br>
+        &nbsp;&nbsp;<span class="t">· Read src/routes/users.ts</span><br>
+        &nbsp;&nbsp;<span class="t">· Write src/middleware/validate.ts</span><br>
+        &nbsp;&nbsp;<span class="ok">✓ 38.2s · 21.940 tokens · ~$0.09</span>
+      </div>
+    </div>
+
+    <!-- Right: text -->
+    <div class="reveal">
+      <div class="section-eyebrow" style="margin-bottom:24px;">
+        <span class="s-num">06</span>
+      </div>
+      <div class="s-title" style="margin-bottom:16px;">Agent Hub,<br>dentro de VS Code. <span style="font-family:var(--mono); font-size:11px; font-weight:700; color:var(--accent); border:1px solid rgba(124,106,247,.4); padding:2px 7px; vertical-align:middle; letter-spacing:0;">NUEVO EN 2.7</span></div>
+      <p class="s-sub" style="margin-bottom:32px;">
+        Una extensión ligera para el proyecto que tienes abierto. Usa el mismo motor que la app: tu proveedor, tus skills, tu contexto y tus servidores MCP. Se instala con un clic desde Ajustes.
+      </p>
+      <div class="orch-feats" style="margin-top:0;">
+        <div class="orch-feat">
+          <div class="orch-feat-icon accent"><i class="ti ti-player-play"></i></div>
+          <div>
+            <strong>Agentes sobre tu código</strong>
+            <p>Lanza un agente sobre una tarea o, con clic derecho, sobre el fichero o la selección actual. Ves en directo qué lee y qué escribe, y puedes cancelarlo.</p>
+          </div>
+        </div>
+        <div class="orch-feat">
+          <div class="orch-feat-icon green"><i class="ti ti-topology-ring-2"></i></div>
+          <div>
+            <strong>Orquestaciones sin cambiar de ventana</strong>
+            <p>Estimación de coste antes de lanzar, logs en directo y gates de revisión para aprobar o pedir cambios mientras miras el diff en el editor.</p>
+          </div>
+        </div>
+        <div class="orch-feat">
+          <div class="orch-feat-icon blue"><i class="ti ti-plus"></i></div>
+          <div>
+            <strong>Crea orquestaciones en segundos</strong>
+            <p>Nombre, tarea y la cadena de agentes en orden. Las ramas paralelas, los gates y los scripts se editan después en el canvas de la app.</p>
+          </div>
+        </div>
+        <div class="orch-feat">
+          <div class="orch-feat-icon amber"><i class="ti ti-plug-connected"></i></div>
+          <div>
+            <strong>@agenthub en el chat del editor</strong>
+            <p>Pregunta sobre tu proyecto desde el chat de VS Code: lee el código, el contexto y las skills sin tocar nada. Con <code style="font-family:var(--mono); font-size:10px;">/run</code> lanza un agente sin salir de la conversación.</p>
+          </div>
+        </div>
+        <div class="orch-feat">
+          <div class="orch-feat-icon accent"><i class="ti ti-refresh"></i></div>
+          <div>
+            <strong>Siempre sincronizada</strong>
+            <p>Se actualiza sola cuando la app guarda cambios en <code style="font-family:var(--mono); font-size:10px;">.agent-hub/</code>, y avisa si Agent Hub no está abierto o la carpeta no es un proyecto.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
 <!-- ── Screenshots ────────────────────────────── -->
 <section id="screenshots" style="padding:80px 0 64px;background:var(--bg1);border-top:1px solid var(--border);border-bottom:1px solid var(--border);overflow:hidden">
   <div style="text-align:center;margin-bottom:40px;padding:0 24px;">
@@ -1584,6 +1758,14 @@
       <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
         <img src="screenshots/09-execution-panel.png" alt="Panel de ejecución" data-lightbox style="width:100%;border-radius:8px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
         <p style="text-align:center;font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:10px">Ejecución paralela — dos agentes corriendo simultáneamente</p>
+      </div>
+      <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+        <img src="screenshots/13-execution-estimate.png" alt="Estimación de coste" data-lightbox style="width:100%;border-radius:8px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+        <p style="text-align:center;font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:10px">Antes de ejecutar — estimación de coste, timeouts y presupuesto</p>
+      </div>
+      <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
+        <img src="screenshots/14-execution-result.png" alt="Resultado con diff por paso" data-lightbox style="width:100%;border-radius:8px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">
+        <p style="text-align:center;font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:10px">Resultado — ficheros, tokens, coste y el diff de cada paso</p>
       </div>
       <div class="carousel-slide" style="flex:0 0 480px;scroll-snap-align:center">
         <img src="screenshots/10-chat.png" alt="Chat" data-lightbox style="width:100%;border-radius:8px;border:1px solid rgba(255,255,255,.08);display:block;cursor:zoom-in">

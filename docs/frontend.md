@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-10-18 · Versión: 2.6.0
+> Última actualización: 2026-10-18 · Versión: 2.7.0
 
 ---
 
@@ -494,6 +494,8 @@ Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 
 **Tab General → CLI de terminal:** tarjeta visible solo si `GET /cli` devuelve `supported: true` (Windows). Botón *Instalar CLI* / *Desinstalar* → `POST` / `DELETE /cli`; muestra badge "Instalado" y la carpeta destino. Estado `cliStatus` + `cliBusy`, cargado al entrar en la tab. Ver backend §19.
 
+**Tab General → Extensión de VS Code:** tarjeta visible si `GET /vscode` devuelve `supported: true` (el `.vsix` va incluido en la app). Estados: sin comando `code` (explica cómo instalarlo desde VS Code), no instalada (*Instalar extensión*), instalada (badge *Instalada* + *Desinstalar*) y desactualizada respecto a la app (*Actualizar*). Estado `vscodeStatus` + `vscodeBusy`. Ver backend §20.
+
 **GitHub Models (tab General):** al seleccionar el proveedor `github`, el selector de modelo se rellena dinámicamente con `POST /api/ai/models`. Usa primero el token introducido en el formulario (sin necesidad de guardar) y, si está vacío, el backend intenta `gh auth token`. Si la detección falla, usa una lista fallback local y muestra el error en línea.
 
 **Tab Categorías:** lista simple de categorías con nombre, icono y color. Sin gestión de tecnologías (eliminada). Solo permite crear y eliminar categorías.
@@ -546,7 +548,7 @@ Los agentes del proyecto tienen prioridad (aparecen primero). Los agentes exclui
 
 **Purga del canvas:** al cargar, si un agente del canvas ya no existe en disco, se elimina automáticamente. Sus conexiones (`dependsOn`) también se limpian.
 
-**Ajustes de ejecución:** el botón *Ejecución* (`ti-adjustments-horizontal`) de la cabecera despliega una barra con el timeout total y el timeout por paso (en minutos), los turnos máximos por paso (1–100) y *Detener ante el primer error*. Estado `execConfig`, con los mismos valores por defecto que el backend (30 min, 10 min, 10 turnos) para las orquestaciones guardadas antes de que existieran esos campos. Se guarda con *Guardar* y *Validar* (`executionConfig` en `PUT /orchestrations/:id`). Si el timeout por paso supera al total se avisa en ámbar: cada paso recibe como mucho lo que queda del total.
+**Ajustes de ejecución:** el botón *Ejecución* (`ti-adjustments-horizontal`) de la cabecera despliega una barra con el timeout total y el timeout por paso (en minutos), los turnos máximos por paso (1–100), el **presupuesto máximo** en dólares (vacío = sin límite; solo con Claude) y *Detener ante el primer error*. Estado `execConfig`, con los mismos valores por defecto que el backend (30 min, 10 min, 10 turnos) para las orquestaciones guardadas antes de que existieran esos campos. Se guarda con *Guardar* y *Validar* (`executionConfig` en `PUT /orchestrations/:id`). Si el timeout por paso supera al total se avisa en ámbar: cada paso recibe como mucho lo que queda del total.
 
 **Estado:** `dagNodes: OrchestrationNode[]` — único estado del canvas. `selectedEdge: SelectedEdge | null` — arista o nodo raíz seleccionado (controla qué muestra `ConnectionConfigurator`).
 
@@ -638,6 +640,10 @@ Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL / browser 
 
 **Estimación de coste:** en el formulario previo, `GET /orchestrations/:id/estimate` muestra la media de las ejecuciones anteriores (o, la primera vez, que depende de los turnos), el mínimo de tokens de entrada con su coste y un desglose por paso plegable (`<details>`). Sin precio conocido muestra "coste n/d".
 
+**Diff por paso:** si el paso tiene `gitCommitSha` (proyecto con Git activado), su tarjeta incluye *Cambios del paso (diff)*. El componente `StepDiff` carga `GET /orchestrations/:id/executions/:execId/steps/:stepIndex/diff` al abrirse y colorea las líneas añadidas, eliminadas y de cabecera de hunk (`.orch-step-diff .add/.del/.hunk`).
+
+**Presupuesto:** con `maxBudgetUSD`, el formulario previo muestra el límite (y "sin efecto con este proveedor" si no hay precio) y avisa en ámbar si la media de las ejecuciones anteriores ya lo supera. Al agotarse, se muestra el mismo banner que con `budget-guard`.
+
 **Quality Score:** componente `QualityBadge` por paso. Click expande los checks individuales.
 
 **Ops Ledger:** dos tabs en el resultado — `steps` y `ops`. Ops muestra cada operación con icono según `kind` (`add` / `remove` / `modify`), path, agente, estado y botón revertir.
@@ -645,6 +651,15 @@ Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL / browser 
 **Banner de presupuesto agotado:** cuando el SSE emite `cancelled` con `reason: 'budget_exceeded'`, `cancelReason` captura `{ type, spent, limit }`. Se muestra `.orch-budget-exceeded-banner` en coral en la vista de resultado. Se resetea al ejecutar de nuevo.
 
 ---
+
+## Capturas de pantalla (`npm run screenshots`)
+
+`scripts/screenshots/capture.js` regenera las capturas de `docs/screenshots/` y `docs/web/screenshots/` (1920×1080) con la interfaz real, sin datos del usuario ni gasto de tokens:
+
+- `seed.js` crea en `%TEMP%/agent-hub-screenshots` un directorio de datos de demostración (`CDM_DATA_DIR`): 5 proyectos inventados con su stack real (para que se detecten las skills), agentes en los tres niveles con una marca `[rol:…]` en el prompt, el catálogo de skills del repo, servidores MCP, historial de chat y uso acumulado.
+- `fake-claude.js` sustituye a `claude` delante en el PATH del backend (puerto 3799, así no choca con la app abierta). Responde en el formato JSON de Claude según la marca del agente, escribe ficheros en modo agente (hay diff de verdad) y espera lo que diga `fake-delay.txt`, que el script sube a 9 s para capturar el nivel paralelo en marcha.
+- Recorre la app con Playwright y el Chrome instalado (`SCREENSHOT_BROWSER=msedge` para Edge): wizard, dashboard, proyectos, agentes y editores, orquestaciones, canvas con una conexión seleccionada, formulario con estimación, ejecución paralela, resultado con diff, chat y ajustes. Antes de cada captura sustituye en la página las rutas locales y el nombre de usuario por genéricos.
+- Requiere `dist/renderer` (`npm run build:renderer`). `npm run screenshots -- 03-agents 10-chat` rehace solo esas; `SCREENSHOT_OUT=<carpeta>` las deja en otra carpeta para revisarlas sin tocar las de la documentación. `12-syncro-conflicts` (conflictos del directorio) no se genera.
 
 ## Patrones recurrentes
 
