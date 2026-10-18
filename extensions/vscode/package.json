@@ -1,0 +1,113 @@
+{
+  "name": "agent-hub-vscode",
+  "displayName": "Agent Hub",
+  "description": "Agentes y orquestaciones de Agent Hub sobre el proyecto abierto, sin salir del editor.",
+  "version": "2.7.0",
+  "publisher": "adanoliva",
+  "license": "UNLICENSED",
+  "repository": { "type": "git", "url": "https://github.com/adanoliva/agent-hub" },
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["AI", "Other"],
+  "main": "./out/extension.js",
+  "activationEvents": ["workspaceContains:.agent-hub", "onStartupFinished"],
+  "contributes": {
+    "configuration": {
+      "title": "Agent Hub",
+      "properties": {
+        "agentHub.url": {
+          "type": "string",
+          "default": "http://localhost:3737",
+          "description": "Dirección de la API local de Agent Hub (la app debe estar abierta)."
+        }
+      }
+    },
+    "chatParticipants": [
+      {
+        "id": "agentHub.chat",
+        "name": "agenthub",
+        "fullName": "Agent Hub",
+        "description": "Pregunta sobre este proyecto con el motor de Agent Hub (solo lectura)",
+        "isSticky": true,
+        "commands": [
+          { "name": "run",    "description": "Ejecuta un agente sobre el proyecto: /run <agente> <tarea>" },
+          { "name": "agents", "description": "Lista los agentes del proyecto" }
+        ]
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "agentHub", "title": "Agent Hub", "icon": "media/agent-hub.svg" }
+      ]
+    },
+    "views": {
+      "agentHub": [
+        { "id": "agentHub.project", "name": "Proyecto" }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "agentHub.project",
+        "contents": "Agent Hub no está abierto.\nAbre la aplicación para ejecutar agentes y orquestaciones sobre este proyecto.\n[Reintentar](command:agentHub.refresh)",
+        "when": "agentHub.state == offline"
+      },
+      {
+        "view": "agentHub.project",
+        "contents": "Esta carpeta no es un proyecto de Agent Hub.\nAñádela desde la app (Proyectos → Importar) y vuelve aquí.\n[Reintentar](command:agentHub.refresh)",
+        "when": "agentHub.state == unregistered"
+      },
+      {
+        "view": "agentHub.project",
+        "contents": "Abre la carpeta de un proyecto para trabajar con Agent Hub.",
+        "when": "agentHub.state == noFolder"
+      }
+    ],
+    "commands": [
+      { "command": "agentHub.refresh",              "title": "Actualizar",                          "category": "Agent Hub", "icon": "$(refresh)" },
+      { "command": "agentHub.runAgent",             "title": "Ejecutar agente…",                    "category": "Agent Hub", "icon": "$(play)" },
+      { "command": "agentHub.runAgentOnSelection",  "title": "Ejecutar agente sobre este fichero…", "category": "Agent Hub" },
+      { "command": "agentHub.runOrchestration",     "title": "Ejecutar orquestación…",              "category": "Agent Hub", "icon": "$(play)" },
+      { "command": "agentHub.newOrchestration",     "title": "Nueva orquestación…",                 "category": "Agent Hub", "icon": "$(add)" },
+      { "command": "agentHub.syncAgents",           "title": "Sincronizar agentes",                 "category": "Agent Hub", "icon": "$(sync)" },
+      { "command": "agentHub.openExecution",        "title": "Ver resultado de la ejecución",       "category": "Agent Hub" },
+      { "command": "agentHub.showOutput",           "title": "Mostrar salida",                      "category": "Agent Hub", "icon": "$(output)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "agentHub.runAgent",         "when": "view == agentHub.project && agentHub.state == ready", "group": "navigation@1" },
+        { "command": "agentHub.newOrchestration", "when": "view == agentHub.project && agentHub.state == ready", "group": "navigation@2" },
+        { "command": "agentHub.refresh",          "when": "view == agentHub.project",                            "group": "navigation@3" },
+        { "command": "agentHub.showOutput",       "when": "view == agentHub.project" }
+      ],
+      "view/item/context": [
+        { "command": "agentHub.runAgent",         "when": "view == agentHub.project && viewItem == agent",         "group": "inline" },
+        { "command": "agentHub.runOrchestration", "when": "view == agentHub.project && viewItem == orchestration", "group": "inline" },
+        { "command": "agentHub.syncAgents",       "when": "view == agentHub.project && viewItem == pendingSync",   "group": "inline" }
+      ],
+      "editor/context": [
+        { "command": "agentHub.runAgentOnSelection", "when": "agentHub.state == ready && resourceScheme == file", "group": "agentHub" }
+      ],
+      "explorer/context": [
+        { "command": "agentHub.runAgentOnSelection", "when": "agentHub.state == ready && !explorerResourceIsFolder", "group": "agentHub" }
+      ],
+      "commandPalette": [
+        { "command": "agentHub.openExecution", "when": "false" },
+        { "command": "agentHub.runAgent",            "when": "agentHub.state == ready" },
+        { "command": "agentHub.runAgentOnSelection", "when": "agentHub.state == ready && editorIsOpen" },
+        { "command": "agentHub.runOrchestration",    "when": "agentHub.state == ready" },
+        { "command": "agentHub.newOrchestration",    "when": "agentHub.state == ready" },
+        { "command": "agentHub.syncAgents",          "when": "agentHub.state == ready" }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository -o agent-hub.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.6.0"
+  }
+}

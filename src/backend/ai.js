@@ -91,9 +91,28 @@ const ANTHROPIC_PRICING = {
   'claude-haiku-4-5':            { input: 1.00,  output: 5.00   },
 };
 
-function calcAnthropicCost(model, inputTokens, outputTokens) {
+// Prompt cache: writes cost 1.25× the input price, reads 0.1×
+function calcAnthropicCost(model, inputTokens, outputTokens, cacheWriteTokens = 0, cacheReadTokens = 0) {
   const pricing = ANTHROPIC_PRICING[model] || ANTHROPIC_PRICING[MODEL];
-  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+  const input = inputTokens + cacheWriteTokens * 1.25 + cacheReadTokens * 0.1;
+  return (input * pricing.input + outputTokens * pricing.output) / 1_000_000;
+}
+
+// The Subsystem CLI resends the system prompt and the whole conversation every turn. Two cache breakpoints
+// (end of the system prompt, end of the latest message) let each turn read the previous turn's prefix from
+// cache. Prefixes under the model's minimum (~1–4k tokens) just aren't cached.
+function withPromptCache(params) {
+  const cache = { type: 'ephemeral' };
+  if (params.system) params.system = [{ type: 'text', text: params.system, cache_control: cache }];
+  const last = params.messages[params.messages.length - 1];
+  const blocks = !last ? [] : typeof last.content === 'string'
+    ? (last.content ? [{ type: 'text', text: last.content }] : [])
+    : [...last.content];
+  if (blocks.length) {
+    blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: cache };
+    params.messages = [...params.messages.slice(0, -1), { ...last, content: blocks }];
+  }
+  return params;
 }
 
 // ── Provider detection ────────────────────────────────────────────────────────
@@ -326,7 +345,7 @@ async function withRetry(fn, { retries = 2, baseMs = 3000, onRetry, signal } = {
 }
 
 /** Spawns a CLI and resolves its stdout. Rejects on non-zero exit, timeout or missing binary. */
-function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS, signal } = {}) {
+function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS, signal, onLine } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(cancelledError());
     const child = spawn(bin, args, {
@@ -341,7 +360,15 @@ function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS, signal } = {
     });
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', d => { stdout += d.toString(); });
+    let pending = '';
+    child.stdout.on('data', d => {
+      const chunk = d.toString();
+      stdout += chunk;
+      if (!onLine) return;
+      const lines = (pending + chunk).split('\n');
+      pending = lines.pop();
+      for (const l of lines) if (l.trim()) onLine(l);
+    });
     child.stderr.on('data', d => { stderr += d.toString(); });
     child.stdin.end(stdin ?? '', 'utf8');
 
@@ -374,16 +401,33 @@ async function withMcpFile(provider, servers, fn) {
 }
 
 // Prompt via stdin: through the npm .cmd shim, cmd.exe would cut an argument at the first newline
+// stream-json events → { type: 'text' | 'tool', ... } for live progress
+function claudeStreamEvent(line, onEvent) {
+  let ev;
+  try { ev = JSON.parse(line); } catch { return; }
+  if (ev.type !== 'assistant') return;
+  for (const b of ev.message?.content || []) {
+    if (b.type === 'text' && b.text?.trim()) onEvent({ type: 'text', text: b.text.trim() });
+    if (b.type === 'tool_use') {
+      const i = b.input || {};
+      onEvent({ type: 'tool', name: b.name, detail: i.file_path || i.path || i.command || i.pattern || i.url || '' });
+    }
+  }
+}
+
 function callClaudeCLI(prompt, o) {
-  const args = ['--print', '--output-format', 'json'];
+  // Only stream when someone listens: stream-json needs --verbose and prints every turn
+  const args = ['--print', ...(o.onEvent ? ['--output-format', 'stream-json', '--verbose'] : ['--output-format', 'json'])];
   if (o.mode === 'agent') args.push('--dangerously-skip-permissions', '--max-turns', String(o.maxTurns || 10));
   else args.push('--tools', o.mode === 'read' ? 'Read,Grep,Glob' : '');
   if (o.model) args.push('--model', o.model);
   return withMcpFile('cli', o.mcpServers, async (mcpFile) => {
     if (mcpFile) args.push('--mcp-config', mcpFile);
-    const raw = (await runCLI('claude', args, { ...o, stdin: prompt })).trim();
-    // Multi-turn runs may print several JSON lines: the result is the last one
-    const parsed = raw.split('\n').reverse().map(l => { try { return JSON.parse(l); } catch { return null; } }).find(Boolean);
+    const onLine = o.onEvent && ((l) => claudeStreamEvent(l, o.onEvent));
+    const raw = (await runCLI('claude', args, { ...o, stdin: prompt, onLine })).trim();
+    // stream-json (and multi-turn runs) print several JSON lines: the result is the last 'result' one
+    const lines  = raw.split('\n').reverse().map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    const parsed = lines.find(l => l.type === 'result') || lines[0];
     if (!parsed) return { text: raw, inputTokens: 0, outputTokens: 0, costUSD: 0 };
     if (parsed.is_error) throw new Error(`Claude CLI: ${parsed.result || parsed.subtype || 'error'}`);
     return {
@@ -1228,6 +1272,7 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
       messages,
     };
     if (systemPrompt) params.system = systemPrompt;
+    withPromptCache(params);
 
     // Apply timeout via AbortController (Anthropic SDK supports signal)
     const timeoutMs    = opts.timeout || CALL_TIMEOUT_MS;
@@ -1243,17 +1288,19 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     }
 
     const usage        = result.usage || {};
-    const inputTokens  = usage.input_tokens  || 0;
+    const cacheWrite   = usage.cache_creation_input_tokens || 0;
+    const cacheRead    = usage.cache_read_input_tokens     || 0;
+    // Reported input counts every prompt token, cached or not, so totals stay comparable across runs
+    const inputTokens  = (usage.input_tokens || 0) + cacheWrite + cacheRead;
     const outputTokens = usage.output_tokens || 0;
-    trackUsage({
-      inputTokens,
-      outputTokens,
-      costUSD: calcAnthropicCost(result.model || MODEL, inputTokens, outputTokens),
-    });
+    const costUSD      = calcAnthropicCost(result.model || MODEL, usage.input_tokens || 0, outputTokens, cacheWrite, cacheRead);
+    trackUsage({ inputTokens, outputTokens, costUSD });
     return {
       text: result.content.filter(b => b.type === 'text').map(b => b.text).join(''),
       inputTokens,
       outputTokens,
+      costUSD,
+      cacheReadTokens: cacheRead,
       truncated: result.stop_reason === 'max_tokens',
     };
   }
@@ -1320,6 +1367,7 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     projectId:      opts.projectId      || null,
     readOnly:       opts.readOnly       || false,
     signal:         opts.signal,
+    onEvent:        opts.onEvent,
     callAIRaw: (messages, systemPrompt, callOpts = {}) => withRetry(
       () => callAIChatWithTokens(messages, systemPrompt, { provider, model: opts.model || null, timeout: callOpts.timeout, signal: opts.signal }),
       { onRetry: opts.onRetry, signal: opts.signal },
@@ -1450,6 +1498,8 @@ module.exports = {
   isNativeCLI,
   isTransientError,
   runCLI,
+  claudeStreamEvent,
+  withPromptCache,
   withRetry,
   GITHUB_GROUP_PROVIDERS,
   callAI,

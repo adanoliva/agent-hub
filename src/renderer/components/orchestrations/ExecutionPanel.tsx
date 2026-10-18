@@ -45,7 +45,35 @@ function fmtDuration(ms: number): string {
 }
 
 function fmtCost(usd: number): string {
-  return `${usd.toFixed(usd < 0.01 ? 4 : 2)}`;
+  return `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`;
+}
+
+// What the step's git checkpoint commit changed; loaded when the section is opened
+function StepDiff({ orchId, executionId, stepIndex }: { orchId: string; executionId: string; stepIndex: number }) {
+  const [diff,  setDiff]  = useState<{ diff: string; truncated: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = (e: React.SyntheticEvent<HTMLDetailsElement>) => {
+    if (!e.currentTarget.open || diff || error) return;
+    req<{ diff: string; truncated: boolean }>('GET', `/orchestrations/${orchId}/executions/${executionId}/steps/${stepIndex}/diff`)
+      .then(setDiff).catch((err: any) => setError(err.message || 'No se pudo cargar el diff'));
+  };
+  const lineClass = (l: string) =>
+    l.startsWith('+') && !l.startsWith('+++') ? 'add'
+    : l.startsWith('-') && !l.startsWith('---') ? 'del'
+    : l.startsWith('@@') ? 'hunk' : undefined;
+  return (
+    <details className="orch-step-details" onToggle={load}>
+      <summary>Cambios del paso (diff)</summary>
+      {error ? <div className="orch-step-diff-msg">{error}</div>
+        : !diff ? <div className="orch-step-diff-msg"><i className="ti ti-loader-2 spin" /> Cargando…</div>
+        : (
+          <pre className="orch-step-diff">
+            {diff.diff.split('\n').map((l, i) => <span key={i} className={lineClass(l)}>{l}{'\n'}</span>)}
+            {diff.truncated && <span className="hunk">[diff truncado: ábrelo con git show]</span>}
+          </pre>
+        )}
+    </details>
+  );
 }
 
 function fmtTime(iso: string): string {
@@ -533,6 +561,12 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
               <i className="ti ti-clock" />
               <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 1_800_000) / 60_000)} min total · {Math.round((orchestration.executionConfig?.stepTimeout || 600_000) / 60_000)} min por paso</span>
             </div>
+            {!!orchestration.executionConfig?.maxBudgetUSD && (
+              <div className="orch-exec-info-item">
+                <i className="ti ti-coin" />
+                <span>Presupuesto máx.: ${orchestration.executionConfig.maxBudgetUSD.toFixed(2)}{estimate && !estimate.priced ? ' · sin efecto con este proveedor' : ''}</span>
+              </div>
+            )}
             {orchestration.executionConfig?.stopOnError && (
               <div className="orch-exec-info-item">
                 <i className="ti ti-alert-triangle" />
@@ -557,6 +591,12 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                 <div className="orch-exec-info-item">
                   <i className="ti ti-info-circle" />
                   <span>Primera ejecución: el coste real depende de cuántos turnos use cada agente (hasta {orchestration.executionConfig?.maxTurns || 10} por paso).</span>
+                </div>
+              )}
+              {!!orchestration.executionConfig?.maxBudgetUSD && (estimate.totals.history?.costUSD ?? 0) > orchestration.executionConfig.maxBudgetUSD && (
+                <div className="orch-exec-info-item" style={{ color: 'var(--amber)' }}>
+                  <i className="ti ti-alert-triangle" />
+                  <span>La media de las ejecuciones anteriores supera el presupuesto máximo: probablemente se detendrá antes de terminar.</span>
                 </div>
               )}
               <div className="orch-exec-info-item">
@@ -1113,6 +1153,10 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                       </div>
                     )}
                   </div>
+                )}
+
+                {step.gitCommitSha && result.executionId && (
+                  <StepDiff orchId={orchestration.id} executionId={result.executionId} stepIndex={step.stepIndex} />
                 )}
 
                 {step.filesModified.length > 0 && (

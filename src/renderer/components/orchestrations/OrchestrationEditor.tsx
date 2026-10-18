@@ -315,6 +315,13 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
             <input type="number" className="input" min={1} max={100} value={execConfig.maxTurns}
               onChange={e => setExecConfig(c => ({ ...c, maxTurns: Math.min(100, Math.max(1, Number(e.target.value) || 1)) }))} />
           </label>
+          <label title="Se comprueba al terminar cada nivel. Solo con Claude (CLI o API): el resto de proveedores no informa del coste">
+            <span>Presupuesto máx.</span>
+            <span className="orch-exec-config-unit">$</span>
+            <input type="number" className="input" min={0} step={0.5} placeholder="sin límite"
+              value={execConfig.maxBudgetUSD || ''}
+              onChange={e => setExecConfig(c => ({ ...c, maxBudgetUSD: Math.max(0, Number(e.target.value) || 0) || undefined }))} />
+          </label>
           <label className="orch-exec-config-check">
             <input type="checkbox" checked={execConfig.stopOnError} onChange={e => setExecConfig(c => ({ ...c, stopOnError: e.target.checked }))} />
             <span>Detener ante el primer error</span>

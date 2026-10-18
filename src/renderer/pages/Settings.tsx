@@ -176,6 +176,24 @@ export function Settings() {
     }
   }
 
+  const [vscodeStatus, setVscodeStatus] = useState<{ supported: boolean; codeFound: boolean; installed: boolean; version: string | null; outdated: boolean } | null>(null);
+  const [vscodeBusy,   setVscodeBusy]   = useState(false);
+  React.useEffect(() => {
+    if (tab === 'general') req<typeof vscodeStatus>('GET', '/vscode').then(setVscodeStatus).catch(() => {});
+  }, [tab]);
+
+  async function vscodeAction(method: 'POST' | 'DELETE') {
+    setVscodeBusy(true);
+    try {
+      setVscodeStatus(await req<typeof vscodeStatus>(method, '/vscode'));
+      toast(method === 'POST' ? 'Extensión instalada — recarga las ventanas de VS Code abiertas' : 'Extensión desinstalada');
+    } catch (e: any) {
+      toast(e.message || 'Error', 'err');
+    } finally {
+      setVscodeBusy(false);
+    }
+  }
+
   React.useEffect(() => {
     if (tab !== 'mcp') return;
     setMcpLoading(true);
@@ -951,6 +969,36 @@ export function Settings() {
                     <i className={`ti ${cliBusy ? 'ti-loader-2 spin' : cliStatus.installed ? 'ti-trash' : 'ti-terminal-2'}`} />
                     {cliStatus.installed ? 'Desinstalar' : 'Instalar CLI'}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {vscodeStatus?.supported && (
+              <div className="settings-section">
+                <div className="settings-head">Extensión de VS Code</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1, fontSize: 12, color: 'var(--text1)' }}>
+                    <div>Agentes y orquestaciones del proyecto abierto, sin salir del editor: vista lateral, ejecutar sobre el fichero o la selección, logs en directo y gates de revisión.</div>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+                      {!vscodeStatus.codeFound
+                        ? <>No se encuentra el comando <code>code</code>. En VS Code: <code>Ctrl+Shift+P</code> → "Shell Command: Install 'code' command in PATH".</>
+                        : vscodeStatus.installed
+                          ? <>Versión {vscodeStatus.version}{vscodeStatus.outdated && <> · <span style={{ color: 'var(--amber)' }}>hay una versión nueva con esta app</span></>}. Requiere la app abierta.</>
+                          : 'Se instala en tu VS Code con el comando code. Requiere la app abierta para ejecutar.'}
+                    </div>
+                  </div>
+                  {vscodeStatus.installed && !vscodeStatus.outdated && <span className="badge green"><i className="ti ti-check" />Instalada</span>}
+                  {vscodeStatus.codeFound && (!vscodeStatus.installed || vscodeStatus.outdated) && (
+                    <button className="btn sm primary" onClick={() => vscodeAction('POST')} disabled={vscodeBusy}>
+                      <i className={`ti ${vscodeBusy ? 'ti-loader-2 spin' : 'ti-brand-vscode'}`} />
+                      {vscodeStatus.outdated ? 'Actualizar' : 'Instalar extensión'}
+                    </button>
+                  )}
+                  {vscodeStatus.installed && (
+                    <button className="btn sm ghost danger" onClick={() => vscodeAction('DELETE')} disabled={vscodeBusy}>
+                      <i className={`ti ${vscodeBusy ? 'ti-loader-2 spin' : 'ti-trash'}`} /> Desinstalar
+                    </button>
+                  )}
                 </div>
               </div>
             )}

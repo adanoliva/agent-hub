@@ -149,6 +149,18 @@ app.delete('/api/cli', (req, res) => {
   try { res.json(cliInstall.uninstall()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── VS Code extension (bundled .vsix, installed with `code`) ─────────────────
+const vscodeInstall = require('./vscode-install');
+app.get('/api/vscode', async (req, res) => {
+  try { res.json(await vscodeInstall.getStatus()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/vscode', async (req, res) => {
+  try { res.json(await vscodeInstall.install()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete('/api/vscode', async (req, res) => {
+  try { res.json(await vscodeInstall.uninstall()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/detect-cli', async (req, res) => {
   const { CLI_ADAPTERS } = require('./ai');
   const providers = Object.keys(CLI_ADAPTERS);
@@ -435,6 +447,15 @@ app.post('/api/projects/:id/run', async (req, res) => {
 
   const runSkills = skills.resolveSkills(project, agent);
   const start = Date.now();
+  // ?stream=1 → NDJSON: progress events as they happen, then one { type: 'result' | 'error' } line
+  const stream = req.query.stream === '1';
+  const emit   = (ev) => res.write(JSON.stringify(ev) + '\n');
+  if (stream) {
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.flushHeaders();
+    emit({ type: 'start', agent: agentName, provider: cfg.aiProvider || 'cli', skills: runSkills.map(s => s.name) });
+  }
   try {
     const r = await runInProject(project, {
       systemPrompt: (agent.system || `Eres el agente "${agentName}".`) + skills.skillsPromptBlock(runSkills),
@@ -443,13 +464,18 @@ app.post('/api/projects/:id/run', async (req, res) => {
       model:      agent.model,
       mcpServers: mcp.getServersForAgent(agent, project.id),
       signal:     abortOnDisconnect(res),
+      ...(stream && { onEvent: emit, log: (level, text) => emit({ type: level === 'warn' ? 'warn' : 'info', text }) }),
     });
-    res.json({
+    const result = {
       result: r.text, agent: agentName, provider: cfg.aiProvider || 'cli',
       skills: runSkills.map(s => s.name), mcpIgnored: r.mcpIgnored, durationMs: Date.now() - start,
-    });
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens, costUSD: r.costUSD, costUnavailable: r.costUnavailable,
+    };
+    if (stream) { emit({ type: 'result', ...result }); res.end(); }
+    else res.json(result);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    if (stream) { emit({ type: 'error', error: e.message }); res.end(); }
+    else res.status(500).json({ error: e.message });
   }
 });
 
@@ -731,6 +757,14 @@ function buildOrchestrationStats(projects) {
   return { total, success, failed, partial, neverRun: total - success - failed - partial, totalCost, totalCostIsApprox };
 }
 
+// Every engine also reads AGENTS.md, the common context since 2.5: it covers a provider without its own file
+function existingContextFile(project, provider) {
+  const own = getContextFilePath(project, provider);
+  if (fs.existsSync(own)) return own;
+  const common = path.join(project.path, 'AGENTS.md');
+  return fs.existsSync(common) ? common : null;
+}
+
 function buildDashboardNotifications(allAgents, projects, categories = []) {
     console.log(`🔨 buildDashboardNotifications called with ${allAgents.length} agents`);
     const readmeAgent = allAgents.find(a => a.name === 'readme');
@@ -789,15 +823,15 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
     for (const p of providers) {
       const config = PROJECT_PROVIDERS[p];
       if (!config) continue;
-      const filePath = getContextFilePath(project, p);
-      if (!fs.existsSync(filePath)) {
+      const filePath = existingContextFile(project, p);
+      if (!filePath) {
         notifications.push({
           id:         `project-no-ctx-${project.id}-${p}`,
           type:       'critical',
           target:     'project',
           targetName: project.name,
           targetId:   project.id,
-          message:    `Sin ${config.contextFile}`,
+          message:    `Sin contexto (${config.contextFile} o AGENTS.md)`,
           action:     'generate-context',
         });
       } else {
@@ -809,7 +843,7 @@ function buildDashboardNotifications(allAgents, projects, categories = []) {
             target:     'project',
             targetName: project.name,
             targetId:   project.id,
-            message:    `${config.contextFile} sin contexto`,
+            message:    `${path.basename(filePath)} sin contexto`,
             action:     'generate-context',
           });
         }
@@ -957,16 +991,16 @@ function buildProjectHealth(projects) {
       for (const p of providers) {
         const config = PROJECT_PROVIDERS[p];
         if (!config) continue;
-        const filePath = getContextFilePath(project, p);
-        if (!fs.existsSync(filePath)) {
+        const filePath = existingContextFile(project, p);
+        if (!filePath) {
           contextState = 'missing';
-          issues.push(`${config.contextFile} ausente`);
+          issues.push(`Sin contexto (${config.contextFile} o AGENTS.md)`);
           continue;
         }
         const content = fs.readFileSync(filePath, 'utf8').trim();
         if (content.length < 80 && contextState !== 'missing') {
           contextState = 'thin';
-          issues.push(`${config.contextFile} con poco contexto`);
+          issues.push(`${path.basename(filePath)} con poco contexto`);
         }
       }
     }
@@ -1930,6 +1964,21 @@ app.get('/api/orchestrations/:id/executions/:executionId', (req, res) => {
   const execution = workflows.getExecution(req.params.executionId, project.path);
   if (!execution) return res.status(404).json({ error: 'Execution not found' });
   res.json(execution);
+});
+
+// GET /api/orchestrations/:id/executions/:executionId/steps/:stepIndex/diff — the step's git checkpoint commit
+app.get('/api/orchestrations/:id/executions/:executionId/steps/:stepIndex/diff', async (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const execution = workflows.getExecution(req.params.executionId, project.path);
+  const step = execution?.results?.find(r => String(r.stepIndex) === req.params.stepIndex);
+  if (!step) return res.status(404).json({ error: 'Paso no encontrado' });
+  if (!step.gitCommitSha) return res.status(404).json({ error: 'Este paso no tiene commit: activa Git en el proyecto para ver sus cambios' });
+  try {
+    res.json(await require('./git-checkpointer').stepDiff(project.path, step.gitCommitSha));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/orchestrations/:id/executions/:executionId/rollback

@@ -278,7 +278,6 @@ export function Dashboard() {
               <div className="dash-subs">
                 <span><i className="ti ti-circle-filled" style={{ color: 'var(--accent)', fontSize: 7 }} /> Global: {data.agents.global}</span>
                 <span><i className="ti ti-circle-filled" style={{ color: 'var(--blue)', fontSize: 7 }} /> Categoría: {data.agents.section}</span>
-                <span><i className="ti ti-circle-filled" style={{ color: 'var(--green)', fontSize: 7 }} /> Tecnología: {data.agents.tech}</span>
                 {data.agents.uncategorized > 0 && (
                   <span><i className="ti ti-circle-filled" style={{ color: 'var(--text2)', fontSize: 7 }} /> Sin categoría: {data.agents.uncategorized}</span>
                 )}

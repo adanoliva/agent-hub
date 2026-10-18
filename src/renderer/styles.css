@@ -716,6 +716,11 @@ select option{background:var(--bg2)}
 .orch-exec-info-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
 .orch-exec-section{display:flex;flex-direction:column;gap:10px}
 .orch-exec-section h4{margin:0;font-size:12px;font-weight:700;color:var(--text1)}
+.orch-step-diff{margin:6px 0 0;max-height:420px;overflow:auto;padding:8px 10px;background:var(--bg0);border:1px solid var(--border);border-radius:6px;font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--text2);white-space:pre}
+.orch-step-diff .add{color:var(--green)}
+.orch-step-diff .del{color:var(--coral)}
+.orch-step-diff .hunk{color:var(--blue)}
+.orch-step-diff-msg{font-size:11px;color:var(--text2);padding:6px 0}
 .orch-estimate-steps{font-size:11px;color:var(--text2)}
 .orch-estimate-steps summary{cursor:pointer;color:var(--text2)}
 .orch-estimate-step{display:flex;justify-content:space-between;gap:12px;padding:3px 0 3px 14px;font-family:var(--mono);font-size:10px;border-bottom:1px solid var(--border)}

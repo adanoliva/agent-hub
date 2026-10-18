@@ -1071,6 +1071,12 @@ class OrchestrationExecutor extends EventEmitter {
     this._log('info', `Proveedor: ${provider} | Nodos: ${nodes.length} | Niveles: ${levels.length} | Max paralelo: ${Math.max(0, ...levels.map(l => l.length))}`);
 
     const orchTimeout  = orchestration.executionConfig?.timeout || 1_800_000;
+    const maxBudget    = orchestration.executionConfig?.maxBudgetUSD || 0;
+    if (maxBudget > 0) {
+      this._log(provider === 'cli' || provider === 'api' ? 'info' : 'warn', provider === 'cli' || provider === 'api'
+        ? `Presupuesto máximo: $${maxBudget.toFixed(maxBudget < 0.01 ? 4 : 2)}`
+        : `Presupuesto de $${maxBudget.toFixed(maxBudget < 0.01 ? 4 : 2)} sin efecto: el proveedor "${provider}" no informa del coste`);
+    }
     let   startTime    = Date.now();
     const agentOutputs = {};
     let   stepsCompleted = 0;
@@ -1152,6 +1158,16 @@ class OrchestrationExecutor extends EventEmitter {
         if (stepResult.status !== 'error') stepsCompleted++;
         if (agentOutput) agentOutputs[stepResult.nodeId] = agentOutput;
         if (budgetError) budgetExceededError = budgetError;
+      }
+
+      // executionConfig.maxBudgetUSD: checked once the level settles (siblings running in parallel finish first)
+      const spent = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
+      if (!budgetExceededError && maxBudget > 0 && spent > maxBudget) {
+        const data = { spent, limit: maxBudget, isEstimated: this.results.some(r => r.costIsEstimated) };
+        this._log('error', `Presupuesto agotado: $${spent.toFixed(4)} gastado de $${maxBudget.toFixed(4)} permitidos`);
+        budgetExceededError = Object.assign(new Error('Presupuesto agotado'), { category: 'budget_exceeded', data });
+        this._cancelledData = { executionId: this.executionId, reason: 'budget_exceeded', data };
+        this.emit('cancelled', this._cancelledData);
       }
 
       if (budgetExceededError) break;

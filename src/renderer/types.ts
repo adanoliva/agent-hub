@@ -278,6 +278,7 @@ export interface ExecutionConfig {
   maxTurns:              number;
   timeout:               number;
   stepTimeout?:          number;  // per node (default 600 000 ms)
+  maxBudgetUSD?:         number;  // stops after the level that goes over it; only Claude reports cost
   maxContextChars?:      number;  // max chars for user message per step (default 12 000)
   requiresBrowser?:      boolean;
 }

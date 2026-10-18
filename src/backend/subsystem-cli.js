@@ -658,6 +658,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     projectId      = null,
     readOnly       = false,  // chat: reads the project, never writes
     signal,
+    onEvent,                 // live progress: { type: 'tool', name, detail } per tool call
   } = config;
 
   if (!projectPath) throw new Error('projectPath is required for Subsystem CLI');
@@ -689,6 +690,7 @@ async function execute(prompt, agentSystemPrompt, config) {
   const startTime        = Date.now();
   let   totalInput       = 0;
   let   totalOutput      = 0;
+  let   totalCost        = 0;   // only providers that price their calls (Anthropic API) report it
   let   turn             = 0;
   let   finalResponse    = '';
   let   completedNormally = false;
@@ -718,6 +720,7 @@ async function execute(prompt, agentSystemPrompt, config) {
           text:         aiResult.text + more.text,
           inputTokens:  (aiResult.inputTokens  || 0) + (more.inputTokens  || 0),
           outputTokens: (aiResult.outputTokens || 0) + (more.outputTokens || 0),
+          costUSD:      (aiResult.costUSD      || 0) + (more.costUSD      || 0),
           warnings:     [...(aiResult.warnings || []), ...(more.warnings || [])],
         };
       }
@@ -730,6 +733,7 @@ async function execute(prompt, agentSystemPrompt, config) {
         results:       allResults,
         errors:        allErrors,
         tokens:        { input: totalInput, output: totalOutput, total: totalInput + totalOutput },
+        costUSD:       totalCost,
         duration:      Date.now() - startTime,
         filesModified: [...filesModified],
         backups:       allBackups,
@@ -742,6 +746,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     finalResponse  = aiResult.text;
     totalInput    += aiResult.inputTokens  || 0;
     totalOutput   += aiResult.outputTokens || 0;
+    totalCost     += aiResult.costUSD      || 0;
     if (Array.isArray(aiResult.warnings) && aiResult.warnings.length > 0) {
       warnings.push(...aiResult.warnings);
     }
@@ -770,6 +775,8 @@ async function execute(prompt, agentSystemPrompt, config) {
     // 4. Execute each tool call
     const turnResults = [];
     for (const toolCall of parsed.toolCalls) {
+      const a = toolCall.args || {};
+      onEvent?.({ type: 'tool', name: toolCall.tool, detail: a.path || a.command || a.pattern || a.url || '' });
       const result = toolCall.tool === 'mcp'
         ? await executeMcpToolCall(toolCall, projectId)
         : await executeToolCall(toolCall, projectPath, { readOnly });
@@ -823,6 +830,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     results:       allResults,
     errors:        allErrors,
     tokens:        { input: totalInput, output: totalOutput, total: totalInput + totalOutput },
+    costUSD:       totalCost,
     duration:      Date.now() - startTime,
     filesModified: [...filesModified],
     backups:       allBackups,

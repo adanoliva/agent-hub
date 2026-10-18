@@ -40,12 +40,14 @@ function contextForPrompt(project, provider) {
  * @param {boolean} [p.useBrowser]
  * @param {Function} [p.log]           — (level, message)
  * @param {AbortSignal} [p.signal]     — aborting kills the running CLI / stops the API loop
+ * @param {Function} [p.onEvent]       — live progress { type: 'text'|'tool', ... }; only Claude CLI and the
+ *                                       API path report it, other CLIs print nothing until they finish
  * @returns {Promise<{ text, inputTokens, outputTokens, costUSD, costUnavailable, mcpIgnored, filesModified }>}
  *          filesModified is null for native CLIs (callers diff the filesystem)
  */
 async function runInProject(project, {
   userMessage, systemPrompt = '', mode = 'agent', includeContext = true,
-  maxTurns = 10, timeout = 1_800_000, model, mcpServers = {}, useBrowser = false, log = () => {}, signal,
+  maxTurns = 10, timeout = 1_800_000, model, mcpServers = {}, useBrowser = false, log = () => {}, signal, onEvent,
 }) {
   const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
@@ -66,13 +68,13 @@ async function runInProject(project, {
     const r = await ai.withRetry(() => ai.callAIRich(prompt, {
       mode, cwd: project.path, timeout: Math.max(10_000, deadline - Date.now()), maxTurns,
       model: provider === 'cli' ? model : undefined,
-      mcpServers: mcpIgnored.length ? {} : mcpServers, signal,
+      mcpServers: mcpIgnored.length ? {} : mcpServers, signal, onEvent,
     }), { onRetry, signal });
     return { ...r, costUnavailable: provider !== 'cli', mcpIgnored, filesModified: null };
   }
 
   const r = await ai.callAIWithSubsystemCLI(userMessage, systemPrompt, {
-    onRetry, signal,
+    onRetry, signal, onEvent,
     projectPath: project.path, projectContext: context, provider, maxTurns, timeout,
     useBrowser, mcpServers, projectId: project.id, readOnly: mode !== 'agent',
     // GitHub Models falls back to config.githubModel when the agent's model is unknown
@@ -86,8 +88,8 @@ async function runInProject(project, {
   }
   const inputTokens  = r.tokens?.input  || 0;
   const outputTokens = r.tokens?.output || 0;
-  // Only the Anthropic API has a known price list here
-  const costUSD = provider === 'api' ? ai.calcAnthropicCost(cfg.apiModel || ai.MODEL, inputTokens, outputTokens) : 0;
+  // Only the Anthropic API has a known price list here; the subsystem sums each turn's cost (cache-aware)
+  const costUSD = provider === 'api' ? r.costUSD || 0 : 0;
   return { text, inputTokens, outputTokens, costUSD, costUnavailable: provider !== 'api', mcpIgnored, filesModified: r.filesModified || [] };
 }
 

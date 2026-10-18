@@ -8,3 +8,4 @@ cache/
 Thumbs.db
 out/
 .agents/
+*.vsix
