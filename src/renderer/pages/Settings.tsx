@@ -52,7 +52,7 @@ export function Settings() {
   const [pendingProvider, setPendingProvider] = useState<AIProvider>(config?.aiProvider ?? 'cli');
   const [saving,      setSaving]      = useState(false);
   const [testing,     setTesting]     = useState(false);
-  const [testResult,  setTestResult]  = useState<{ ok: boolean; error?: string; latencyMs?: number } | null>(null);
+  const [testResult,  setTestResult]  = useState<{ ok: boolean; message: string } | null>(null);
   const [updateMsg,   setUpdateMsg]   = useState('');
   const [importUrl,   setImportUrl]   = useState('');
   const [importBusy,  setImportBusy]  = useState(false);
@@ -262,24 +262,29 @@ export function Settings() {
 
   // ── provider actions ─────────────────────────────────────────────────────────
 
+  // Both tests run against the saved config, so the form is persisted first
+  async function persistPending() {
+    await req('PUT', '/config', {
+      aiProvider: pendingProvider,
+      apiKey, apiModel,
+      openaiKey, openaiModel,
+      githubToken: ghToken, githubModel: ghModel,
+      geminiApiKey, geminiApiModel,
+      mistralKey, mistralModel,
+      grokKey, grokModel,
+      deepseekKey, deepseekModel,
+      groqKey, groqModel,
+      openrouterKey, openrouterModel,
+      perplexityKey, perplexityModel,
+    });
+    await refreshConfig();
+  }
+
   async function saveAll() {
     setSaving(true);
     setTestResult(null);
     try {
-      await req('PUT', '/config', {
-        aiProvider: pendingProvider,
-        apiKey, apiModel,
-        openaiKey, openaiModel,
-        githubToken: ghToken, githubModel: ghModel,
-        geminiApiKey, geminiApiModel,
-        mistralKey, mistralModel,
-        grokKey, grokModel,
-        deepseekKey, deepseekModel,
-        groqKey, groqModel,
-        openrouterKey, openrouterModel,
-        perplexityKey, perplexityModel,
-      });
-      await refreshConfig();
+      await persistPending();
       await fetchAiStatus();
       toast('Guardado');
     } catch { toast('Error al guardar', 'err'); }
@@ -290,27 +295,29 @@ export function Settings() {
     setTesting(true);
     setTestResult(null);
     try {
-      await req('PUT', '/config', {
-        aiProvider: pendingProvider,
-        apiKey, apiModel,
-        openaiKey, openaiModel,
-        githubToken: ghToken, githubModel: ghModel,
-        geminiApiKey, geminiApiModel,
-        mistralKey, mistralModel,
-        grokKey, grokModel,
-        deepseekKey, deepseekModel,
-        groqKey, groqModel,
-        openrouterKey, openrouterModel,
-        perplexityKey, perplexityModel,
-      });
-      await refreshConfig();
+      await persistPending();
       const r = await req<{ ok: boolean; error?: string; latencyMs?: number }>('POST', '/ai/test-connection');
-      setTestResult(r);
+      setTestResult({ ok: r.ok, message: r.ok ? `Conexión OK (${r.latencyMs}ms)` : r.error || 'Error' });
       if (r.ok) toast(`Conexión OK (${r.latencyMs}ms)`);
       else toast('Error: ' + r.error, 'err');
     } catch (e: any) {
-      setTestResult({ ok: false, error: e.message });
+      setTestResult({ ok: false, message: e.message });
       toast('Error al probar conexión', 'err');
+    }
+    setTesting(false);
+  }
+
+  // End-to-end: the provider must read a file inside a throwaway project, like the project chat does
+  async function runSmokeTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      await persistPending();
+      const r = await req<{ ok: boolean; error?: string; durationMs: number }>('POST', '/ai/smoke-test');
+      const secs = (r.durationMs / 1000).toFixed(1);
+      setTestResult({ ok: r.ok, message: r.ok ? `Lee el proyecto correctamente (${secs}s)` : `${r.error} (${secs}s)` });
+    } catch (e: any) {
+      setTestResult({ ok: false, message: e.message });
     }
     setTesting(false);
   }
@@ -840,7 +847,7 @@ export function Settings() {
                   {testResult && (
                     <span style={{ fontSize: 11, color: testResult.ok ? 'var(--green)' : 'var(--coral)', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <i className={`ti ${testResult.ok ? 'ti-circle-check' : 'ti-alert-circle'}`} />
-                      {testResult.ok ? `Conexión OK (${testResult.latencyMs}ms)` : testResult.error}
+                      {testResult.message}
                     </span>
                   )}
 
@@ -849,6 +856,11 @@ export function Settings() {
                       {testing ? <><i className="ti ti-loader-2" /> Probando…</> : <><i className="ti ti-plug" /> Probar conexión</>}
                     </button>
                   ) : null}
+
+                  <button className="btn sm ghost" onClick={runSmokeTest} disabled={testing || saving}
+                    title="Guarda y pide al proveedor que lea un fichero de un proyecto de prueba (hasta 2 min)">
+                    {testing ? <><i className="ti ti-loader-2" /> Probando…</> : <><i className="ti ti-flask" /> Prueba real</>}
+                  </button>
 
                   <button className="btn primary sm" onClick={saveAll} disabled={saving || testing}>
                     {saving ? <><i className="ti ti-loader-2" /> Guardando…</> : <><i className="ti ti-device-floppy" /> Guardar</>}

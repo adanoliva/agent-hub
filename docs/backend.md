@@ -1,7 +1,7 @@
 # Documentación técnica — Backend (`src/backend/`)
 
 > Stack: Electron main process + Express 4 en `localhost:3737`
-> Última actualización: 2026-10-17 · Versión: 2.5.0
+> Última actualización: 2026-10-18 · Versión: 2.6.0
 
 ---
 
@@ -336,6 +336,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/ai/status` | `{ provider, ready: bool }` |
+| POST | `/api/ai/smoke-test` | Prueba real del proveedor guardado: en un proyecto temporal debe leer `check.txt` y devolver su código aleatorio, por `runInProject` en solo lectura (el mismo camino que el chat de proyecto). Devuelve `{ ok, provider, durationMs, reply?, error? }`. Hasta 2 min |
 | POST | `/api/ai/models` | Lista modelos disponibles por proveedor. Soporta `github` con body `{ provider, token? }` y devuelve `{ models: string[] }`. Si `token` no llega, usa `config.githubToken` y luego fallback a `gh auth token`. |
 | GET | `/api/ai/usage` | `AIUsage`: `{ cumulative, session }` con tokens y coste estimado |
 | POST | `/api/ai/usage/reset` | Reinicia contadores de sesión |
@@ -368,6 +369,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | PUT | `/api/orchestrations/:id` | Actualiza la orquestación |
 | DELETE | `/api/orchestrations/:id` | Elimina la orquestación y su JSON del disco |
 | POST | `/api/orchestrations/:id/validate` | Valida sin ejecutar. Devuelve `{ valid, errors[] }` |
+| GET | `/api/orchestrations/:id/estimate` | Estimación antes de ejecutar: tokens de entrada mínimos por paso y media de las últimas 5 ejecuciones (`CostEstimate`) |
 | POST | `/api/orchestrations/:id/execute` | Lanza la ejecución. Devuelve `{ executionId, status: 'started' }` |
 | GET | `/api/orchestrations/:id/execute/stream?executionId=` | SSE stream de progreso |
 | GET | `/api/orchestrations/:id/executions` | Lista el historial de ejecuciones |
@@ -700,6 +702,12 @@ Modo por defecto: `read` si hay `cwd`, `text` si no. `contextFiles` de cada adap
 
 Todos los procesos externos (CLIs de IA, servidores MCP stdio, `code`) se lanzan con **`cross-spawn`**, nunca con `shell: true`: un prompt con `&`, `|` o `"` no se interpreta como comando.
 
+Al vencer el timeout, `runCLI` mata el **árbol** de procesos (`taskkill /T /F` en Windows): con el shim `.cmd` de npm, `kill()` solo cerraba `cmd.exe` y el CLI real seguía editando ficheros.
+
+**Reintentos:** `withRetry` repite hasta 2 veces, con espera exponencial (3 s y 6 s), los errores transitorios (`isTransientError`): 429, 5xx, `overloaded`, `ECONNRESET`, `fetch failed`… Un timeout, una credencial inválida o un 4xx no se reintentan. Se aplica a cada ejecución de CLI nativo en `runInProject` (los reintentos gastan del mismo presupuesto de tiempo) y a cada turno del subsistema CLI con API, que no repite la conversación entera.
+
+**Cancelación:** `runCLI`, `callAIChatWithTokens` y el subsistema CLI aceptan un `AbortSignal` (`signal`). Al abortarlo se mata el árbol del CLI, se cancela la petición HTTP y el bucle del subsistema no empieza otro turno; el error lleva `cancelled: true` y `withRetry` no lo reintenta. Lo abortan `cancel()` del orquestador, y en `/run`, el chat de proyecto y `/ai/smoke-test` el cierre de la conexión (`abortOnDisconnect`): Ctrl+C en `agent-hub run` detiene el CLI en vez de dejarlo terminar.
+
 ### `callAI(prompt, opts?)`
 
 Punto de entrada único. Lee `config.aiProvider` y delega: `callNativeCLI(provider, prompt, opts)` para los CLIs o la API correspondiente. `opts`: `mode`, `cwd`, `timeout`, `maxTurns`, `model`, `mcpServers`. `callAIRich` devuelve además `{ inputTokens, outputTokens, costUSD }`. `callAIChat` / `callAIChatWithTokens` pasan la conversación a los CLIs como transcripción (`flattenChat`) en modo `text`.
@@ -725,13 +733,20 @@ getSessionUsage()  // → { cumulative, session }
 
 Solo hay precio conocido para Claude CLI (lo informa) y la API de Anthropic. El resto (Copilot, Antigravity, APIs no Anthropic, custom) cuenta tokens pero **no se le asigna coste**: el paso lleva `costUnavailable: true`, la UI muestra "coste n/d" y `budget-guard` marca el total como aproximado (los infravalora).
 
-**Coste estimado** (solo para `api`):
+**Coste estimado** (Claude CLI y API de Anthropic; precios de la API oficial, revisados 2026-10, en `ANTHROPIC_PRICING`):
 
 | Modelo | Input $/1M | Output $/1M |
 |---|---|---|
-| claude-sonnet-4-20250514 | $3 | $15 |
-| claude-haiku-4-5-20251001 | $0.25 | $1.25 |
+| claude-fable-5-1 | $10 | $50 |
+| claude-opus-5-5 | $4 | $20 |
+| claude-opus-5 / claude-opus-4-8 | $5 | $25 |
+| claude-sonnet-5-5 / claude-sonnet-5 | $2 | $10 |
+| claude-sonnet-4-6 / claude-sonnet-4-20250514 | $3 | $15 |
+| claude-haiku-5-5 | $0.10 | $0.50 |
+| claude-haiku-4-5(-20251001) | $1 | $5 |
 | claude-opus-4-20250514 | $15 | $75 |
+
+Un modelo sin entrada en la tabla se cobra al precio de `MODEL`. Haiku 4.5 figuraba a $0.25/$1.25 (el precio de Haiku 3) e infravaloraba su coste cuatro veces.
 
 ---
 
@@ -846,6 +861,8 @@ execute(prompt, systemPrompt, config)
   └── RETORNAR SubsystemCLIResult
 ```
 
+**Respuestas cortadas por el límite de salida:** con la API de Anthropic cada turno admite 16 384 tokens de salida (antes 4 096, que cortaba un `TOOL: write` de un fichero grande). Los proveedores compatibles OpenAI siguen en 4 096 porque varios modelos no aceptan más. Si la respuesta llega cortada (`stop_reason: max_tokens` / `finish_reason: length` → `truncated`), se pide al modelo que continúe desde el último carácter y se concatena, hasta 3 veces por turno (`MAX_CONTINUATIONS`). Si aun así sigue cortada, el último bloque se descarta con un aviso (nunca se escribe un fichero a medias) y se pide al modelo que lo divida.
+
 ---
 
 ## 11. Orquestaciones — CRUD (`workflows.js`)
@@ -934,17 +951,29 @@ HANDOFF: {"done":"...","changed":["ruta"],"issues":["..."],"next":"..."}
 - **Rechazo de tarea**: si el mensaje trae una tarea concreta (`## Solicitud ejecutable`…) y el agente responde que falta la tarea (`looksLikeTaskRefusal`), se reintenta una vez con una corrección obligatoria; los tokens de ambos intentos se suman.
 - **Límite**: `maxContextChars` (defecto 4 000) trunca el mensaje de usuario si supera el límite.
 
-### Timeout global
+### Timeouts
 
-El `timeout` de `executionConfig` aplica a **toda la orquestación**. El tiempo restante se pasa a cada paso. **El tiempo de espera en gates HITL no descuenta del reloj global** — el `startTime` se incrementa con la duración de la pausa.
+Hay dos relojes en `executionConfig`. `timeout` (defecto 30 min) cubre **toda la orquestación**; `stepTimeout` (defecto 10 min) limita **cada nodo**, para que un agente colgado no se coma el tiempo de los demás. Cada paso recibe el menor de los dos: su `stepTimeout` o lo que quede del global. **El tiempo de espera en gates HITL no descuenta del reloj global** — el `startTime` se incrementa con la duración de la pausa. Ambos se editan desde el editor de la orquestación (botón *Ejecución*).
 
 ### Scripts determinísticos
 
 Si `agentName` comienza por `__script:`, el paso se delega a `scripts-registry.js` en lugar de llamar a la IA. Los scripts son sincrónicos, no consumen tokens y siempre producen un `StepResult` con `tokensUsed: { input: 0, output: 0 }`. Ver §12b.
 
+### Estimación de coste (`estimate()`)
+
+Antes de ejecutar, `GET /orchestrations/:id/estimate` devuelve dos cifras por paso y en total:
+- **Mínimo de entrada:** el system prompt, las skills y el mensaje que Agent Hub construye para cada nodo (los mismos `_buildSystemPrompt` / `_buildUserMessage` de la ejecución), más el contexto del proyecto si el nodo lo recibe, a 4 caracteres por token. Es un suelo: no cuenta la salida, los turnos extra ni el prompt y las herramientas que añade el propio CLI.
+- **Media histórica:** tokens y coste medios de las últimas 5 ejecuciones `success`/`partial` de la orquestación, por `nodeId` y en total. A partir de la segunda ejecución es la cifra fiable.
+
+El coste solo se calcula con `cli` (precio del modelo del agente) y `api` (`apiModel`); con el resto de proveedores se devuelven los tokens y `priced: false`.
+
 ### Quality Score automático
 
 Tras completar cada paso IA, el orquestador ejecuta el script `quality-score` y adjunta el resultado a `stepResult.qualityScore`. No es bloqueante — un error al calcularlo no falla el paso.
+
+### Cancelación
+
+`POST /orchestrations/:id/cancel` llama a `cancel()`, que además de marcar la ejecución aborta `this._abort`: el agente que está corriendo se detiene en el acto (su CLI muere con todo su árbol de procesos o la llamada a la API se corta) en lugar de seguir modificando ficheros hasta terminar su paso.
 
 ### Gates HITL (`gateAfter`)
 

@@ -442,6 +442,7 @@ app.post('/api/projects/:id/run', async (req, res) => {
       maxTurns, timeout,
       model:      agent.model,
       mcpServers: mcp.getServersForAgent(agent, project.id),
+      signal:     abortOnDisconnect(res),
     });
     res.json({
       result: r.text, agent: agentName, provider: cfg.aiProvider || 'cli',
@@ -1240,6 +1241,33 @@ app.get('/api/ai/status', async (req, res) => {
   }
 });
 
+// POST /api/ai/smoke-test — real end-to-end check of the active provider: it has to read a file inside a
+// throwaway project through the same path as the project chat (runInProject, read-only)
+app.post('/api/ai/smoke-test', async (req, res) => {
+  const dir   = fs.mkdtempSync(path.join(require('os').tmpdir(), 'agent-hub-smoke-'));
+  const token = require('crypto').randomBytes(4).toString('hex');
+  fs.writeFileSync(path.join(dir, 'check.txt'), `codigo: ${token}
+`);
+  const start = Date.now();
+  try {
+    const r = await runInProject({ id: 'smoke-test', name: 'smoke-test', path: dir }, {
+      userMessage: 'Lee el fichero check.txt del proyecto y responde únicamente con el código que contiene.',
+      mode: 'read', includeContext: false, maxTurns: 3, timeout: 120_000,
+      signal: abortOnDisconnect(res),
+    });
+    const ok = r.text.includes(token);
+    res.json({
+      ok, provider: readConfig().aiProvider || 'cli', durationMs: Date.now() - start,
+      reply: r.text.slice(0, 300),
+      ...(!ok && { error: 'El proveedor respondió, pero no leyó el fichero del proyecto' }),
+    });
+  } catch (e) {
+    res.json({ ok: false, provider: readConfig().aiProvider || 'cli', durationMs: Date.now() - start, error: e.message });
+  } finally {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}   // a just-killed CLI may still hold it
+  }
+});
+
 // POST /api/ai/models — list available models for a provider
 app.post('/api/ai/models', async (req, res) => {
   const provider = String(req.body?.provider || 'github');
@@ -1458,6 +1486,13 @@ app.delete('/api/ai/suggestions/cache', (req, res) => {
   res.json({ ok: true });
 });
 
+// The client went away (Ctrl+C in `agent-hub run`, chat closed): stop the CLI instead of letting it finish
+function abortOnDisconnect(res) {
+  const ac = new AbortController();
+  res.on('close', () => { if (!res.writableFinished) ac.abort(); });
+  return ac.signal;
+}
+
 // POST /api/chat — multi-turn chat with the configured AI provider
 app.post('/api/chat', async (req, res) => {
   const { messages, systemPrompt, projectId } = req.body;
@@ -1474,6 +1509,7 @@ app.post('/api/chat', async (req, res) => {
       userMessage:  flattenChat(messages),
       mode:         'read',
       timeout:      300_000,
+      signal:       abortOnDisconnect(res),
     });
     res.json({ reply: r.text });
   } catch (e) {
@@ -1712,6 +1748,19 @@ app.post('/api/orchestrations/:id/validate', async (req, res) => {
     const executor = new OrchestrationExecutor(orch, project, {});
     const result   = await executor.validate();
     res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/orchestrations/:id/estimate — tokens/cost before running (prompt floor + past runs average)
+app.get('/api/orchestrations/:id/estimate', (req, res) => {
+  const project = resolveOrchProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Orchestration not found' });
+  const orch = workflows.read(req.params.id, project.path);
+  if (!orch) return res.status(404).json({ error: 'Orchestration not found' });
+  try {
+    res.json(new OrchestrationExecutor(orch, project, {}).estimate());
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

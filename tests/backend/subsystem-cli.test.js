@@ -328,3 +328,40 @@ test('execute: el agente que termina en el último turno no es TIMEOUT', async (
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('execute: une las continuaciones de una respuesta cortada y escribe el fichero completo', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subcli-exec-'));
+  try {
+    const replies = [
+      { text: 'TOOL: write\nPATH: a.txt\nCONTENT:\nprimera ', truncated: true, inputTokens: 1, outputTokens: 1 },
+      { text: 'mitad\n---\n', truncated: false, inputTokens: 1, outputTokens: 1 },
+      { text: 'Hecho.', inputTokens: 1, outputTokens: 1 },
+    ];
+    const result = await execute('escribe a.txt', '', {
+      projectPath: tmpDir, maxTurns: 5, timeout: 30_000,
+      callAIRaw: async () => replies.shift(),
+    });
+    assert.equal(result.success, true);
+    assert.match(fs.readFileSync(path.join(tmpDir, 'a.txt'), 'utf8'), /primera mitad/);
+    assert.equal(result.tokens.output, 3);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('execute: si sigue cortada tras las continuaciones, no escribe el fichero a medias', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subcli-exec-'));
+  try {
+    let calls = 0;
+    const result = await execute('escribe a.txt', '', {
+      projectPath: tmpDir, maxTurns: 2, timeout: 30_000,
+      callAIRaw: async () => (++calls <= 4
+        ? { text: calls === 1 ? 'TOOL: write\nPATH: a.txt\nCONTENT:\nmucho ' : 'más ', truncated: true }
+        : { text: 'Lo dejo aquí.' }),
+    });
+    assert.equal(fs.existsSync(path.join(tmpDir, 'a.txt')), false);
+    assert.ok(result.warnings.some(w => /cortada/.test(w.message)));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

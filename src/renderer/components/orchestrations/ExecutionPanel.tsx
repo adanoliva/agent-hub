@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { req, API_BASE } from '../../api';
-import type { Agent, BrowserStatus, Orchestration, OrchestrationNode, ExecutionLog, ExecutionResult, StepResult, QualityScore, AtomicOp, OpsLedger } from '../../types';
+import type { Agent, BrowserStatus, CostEstimate, Orchestration, OrchestrationNode, ExecutionLog, ExecutionResult, StepResult, QualityScore, AtomicOp, OpsLedger } from '../../types';
 import { useStore } from '../../store';
 import { NATIVE_CLI_PROVIDERS } from '../../constants/projects';
 
@@ -42,6 +42,10 @@ interface StepInput {
 function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function fmtCost(usd: number): string {
+  return `${usd.toFixed(usd < 0.01 ? 4 : 2)}`;
 }
 
 function fmtTime(iso: string): string {
@@ -183,6 +187,12 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
       setAgentsLoading(false);
     });
   }, [orchestration.id, orchestration.nodes.map(n => n.agentName).join(','), projectId]);
+
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
+  useEffect(() => {
+    req<CostEstimate>('GET', `/orchestrations/${encodeURIComponent(orchestration.id)}/estimate`)
+      .then(setEstimate).catch(() => setEstimate(null));
+  }, [orchestration.id]);
 
   const needsBrowser = useMemo(
     () => agentObjects.some(a => a.tools?.some(t => t.startsWith('browser_'))),
@@ -521,7 +531,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
             </div>
             <div className="orch-exec-info-item">
               <i className="ti ti-clock" />
-              <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 1_800_000) / 1000)}s total</span>
+              <span>Timeout: {Math.round((orchestration.executionConfig?.timeout || 1_800_000) / 60_000)} min total · {Math.round((orchestration.executionConfig?.stepTimeout || 600_000) / 60_000)} min por paso</span>
             </div>
             {orchestration.executionConfig?.stopOnError && (
               <div className="orch-exec-info-item">
@@ -530,6 +540,49 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
               </div>
             )}
           </div>
+
+          {estimate && (
+            <section className="orch-exec-section orch-estimate">
+              <h4><i className="ti ti-calculator" /> Estimación de coste</h4>
+              {estimate.totals.history ? (
+                <div className="orch-exec-info-item">
+                  <i className="ti ti-history" />
+                  <span>
+                    Media de {estimate.totals.history.runs} ejecución{estimate.totals.history.runs !== 1 ? 'es' : ''} anterior{estimate.totals.history.runs !== 1 ? 'es' : ''}:{' '}
+                    <strong>{(estimate.totals.history.input + estimate.totals.history.output).toLocaleString()} tokens</strong>
+                    {estimate.totals.history.costUSD !== null ? <> · <strong>~{fmtCost(estimate.totals.history.costUSD)}</strong></> : ' · coste n/d'}
+                  </span>
+                </div>
+              ) : (
+                <div className="orch-exec-info-item">
+                  <i className="ti ti-info-circle" />
+                  <span>Primera ejecución: el coste real depende de cuántos turnos use cada agente (hasta {orchestration.executionConfig?.maxTurns || 10} por paso).</span>
+                </div>
+              )}
+              <div className="orch-exec-info-item">
+                <i className="ti ti-arrow-bar-to-up" />
+                <span>
+                  Mínimo de entrada: {estimate.totals.inputTokens.toLocaleString()} tokens
+                  {estimate.totals.minCostUSD !== null ? ` (~${fmtCost(estimate.totals.minCostUSD)})` : ' · coste n/d con este proveedor'}
+                  {estimate.nativeCLI && ' · el CLI añade su propio prompt y herramientas'}
+                </span>
+              </div>
+              <details className="orch-estimate-steps">
+                <summary>Por paso</summary>
+                {estimate.steps.map(s => (
+                  <div key={s.nodeId} className="orch-estimate-step">
+                    <span>{fmtAgentName(s.agentName)}</span>
+                    <span>
+                      {s.script ? 'script · 0 tokens'
+                        : s.history
+                          ? `~${(s.history.input + s.history.output).toLocaleString()} tokens${s.history.costUSD !== null ? ` · ~${fmtCost(s.history.costUSD)}` : ''}`
+                          : `≥ ${s.inputTokens.toLocaleString()} tokens de entrada`}
+                    </span>
+                  </div>
+                ))}
+              </details>
+            </section>
+          )}
 
           {temporalFields.length > 0 && (() => {
             const groups = temporalFields.reduce((acc, f) => {

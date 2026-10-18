@@ -262,11 +262,22 @@ export interface OrchestrationNode {
   scriptParams?: Record<string, unknown>;
 }
 
+/** GET /orchestrations/:id/estimate — floor from the prompts Agent Hub sends + average of past runs */
+export interface CostHistory { runs: number; input: number; output: number; costUSD: number | null }
+export interface CostEstimate {
+  provider:  string;
+  priced:    boolean;   // only Claude (CLI / API) has a known price list
+  nativeCLI: boolean;
+  steps:  Array<{ nodeId: string; agentName: string; script: boolean; inputTokens: number; minCostUSD: number | null; history: CostHistory | null }>;
+  totals: { inputTokens: number; minCostUSD: number | null; history: CostHistory | null };
+}
+
 export interface ExecutionConfig {
   stopOnError:           boolean;
   validateAfterEachStep: boolean;
   maxTurns:              number;
   timeout:               number;
+  stepTimeout?:          number;  // per node (default 600 000 ms)
   maxContextChars?:      number;  // max chars for user message per step (default 12 000)
   requiresBrowser?:      boolean;
 }

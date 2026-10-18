@@ -12,14 +12,16 @@ const crypto = require('crypto');
 const { EventEmitter } = require('events');
 
 const { readConfig, ensureDir } = require('./config');
-const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
+const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider, resolveModel } = require('./agents');
 const mcp = require('./mcp');
-const { calcAnthropicCost, isNativeCLI } = require('./ai');
+const { calcAnthropicCost, isNativeCLI, MODEL } = require('./ai');
 const prompts           = require('./prompts');
 const scriptsRegistry   = require('./scripts-registry');
 const gitCheckpointer   = require('./git-checkpointer');
 const opsLedger         = require('./ops-ledger');
-const { migrateOrchestration } = require('./workflows');
+const workflows = require('./workflows');
+const { migrateOrchestration } = workflows;
+const { readProjectContext } = require('./projects');
 const { resolveSkills, skillsPromptBlock } = require('./skills');
 const { runInProject } = require('./project-runner');
 const crypto2           = crypto; // alias for ops id generation
@@ -45,6 +47,7 @@ const MAX_FILE_SIZE_BYTES = 256 * 1024; // 256KB per file in snapshot
 const MAX_SNAPSHOT_FILES  = 500;        // Limit snapshot size
 
 // Token-efficiency limits (kept low for GitHub Copilot Free 8k-token window)
+const STEP_TIMEOUT_MS         = 600_000; // per node, so one hung agent can't eat the whole run
 const MAX_CONTEXT_FILE_CHARS  = 2000;   // max chars per fixed-context file
 
 // ── Filesystem helpers ────────────────────────────────────────────────────────
@@ -165,6 +168,7 @@ class OrchestrationExecutor extends EventEmitter {
     this.state                 = 'idle';
     this.currentStep           = -1;
     this.cancelled             = false;
+    this._abort                = new AbortController();
     this._browserContinueFn    = null;
     this.results               = [];
     this.logs                  = [];
@@ -174,6 +178,7 @@ class OrchestrationExecutor extends EventEmitter {
   cancel() {
     if (this.state === 'running') {
       this.cancelled = true;
+      this._abort.abort();   // kills the agent CLI that is running right now
       if (this._browserContinueFn) { this._browserContinueFn(); this._browserContinueFn = null; }
       this._pendingGate = null;
       this._log('warn', 'Ejecución cancelada por el usuario');
@@ -587,6 +592,61 @@ class OrchestrationExecutor extends EventEmitter {
     }
   }
 
+  // ── Cost estimate ─────────────────────────────────────────────────────────
+  // What Agent Hub sends to each step is known before running; what the agent then does (turns, output,
+  // the CLI's own system prompt and tools) is not. So: a floor from the prompts, plus the average of past runs.
+
+  estimate() {
+    const cfg      = readConfig();
+    const provider = cfg.aiProvider || 'cli';
+    const priced   = provider === 'cli' || provider === 'api';   // only Claude has a known price list
+    const nodes    = (this.orchestration.nodes || []).filter(n => !(n.dependsOn.length === 0 && n.isRoot === false));
+    const contextChars = readProjectContext(this.project.path).content.length;
+
+    const past = workflows.getExecutions(this.orchestration.id, this.project.path)
+      .filter(m => m.status === 'success' || m.status === 'partial')
+      .slice(0, 5)
+      .map(m => workflows.getExecution(m.executionId, this.project.path))
+      .filter(r => Array.isArray(r?.results));
+    const avg = (list, f) => list.reduce((a, x) => a + f(x), 0) / list.length;
+
+    const steps = nodes.map((node, i) => {
+      const script = scriptsRegistry.isScript(node.agentName);
+      const agent  = script ? null : this._getAgent(node.agentName);
+      const chars  = script ? 0
+        : this._buildSystemPrompt(node).length + this._buildUserMessage(node, {}, i).length
+          + (this._includesProjectContext(node) ? contextChars : 0);
+      const inputTokens = Math.ceil(chars / 4);
+      const model = provider === 'api' ? (cfg.apiModel || MODEL) : resolveModel(agent?.model);
+      const runs  = past.map(r => r.results.find(s => s.nodeId === node.id)).filter(s => s && s.status !== 'error');
+      return {
+        nodeId: node.id, agentName: node.agentName, script, inputTokens,
+        minCostUSD: priced && !script ? calcAnthropicCost(model, inputTokens, 0) : null,
+        history: runs.length ? {
+          runs:    runs.length,
+          input:   Math.round(avg(runs, s => s.tokensUsed?.input  || 0)),
+          output:  Math.round(avg(runs, s => s.tokensUsed?.output || 0)),
+          costUSD: priced ? avg(runs, s => s.estimatedCost || 0) : null,
+        } : null,
+      };
+    });
+
+    return {
+      provider, priced, nativeCLI: isNativeCLI(provider, cfg),
+      steps,
+      totals: {
+        inputTokens: steps.reduce((a, s) => a + s.inputTokens, 0),
+        minCostUSD:  priced ? steps.reduce((a, s) => a + (s.minCostUSD || 0), 0) : null,
+        history: past.length ? {
+          runs:    past.length,
+          input:   Math.round(avg(past, r => r.totalTokensUsed?.input  || 0)),
+          output:  Math.round(avg(past, r => r.totalTokensUsed?.output || 0)),
+          costUSD: priced ? avg(past, r => r.estimatedCost || 0) : null,
+        } : null,
+      },
+    };
+  }
+
   // ── Validation ────────────────────────────────────────────────────────────
 
   async validate() {
@@ -656,6 +716,7 @@ class OrchestrationExecutor extends EventEmitter {
 
     const ec = orchestration.executionConfig || {};
     if (ec.timeout  && ec.timeout  < 5000)        errors.push('El timeout mínimo es 5 segundos');
+    if (ec.stepTimeout && ec.stepTimeout < 5000)  errors.push('El timeout por paso mínimo es 5 segundos');
     if (ec.maxTurns && (ec.maxTurns < 1 || ec.maxTurns > 100)) errors.push('maxTurns debe estar entre 1 y 100');
 
     const cfg      = readConfig();
@@ -840,11 +901,15 @@ class OrchestrationExecutor extends EventEmitter {
         userMessage: msg,
         includeContext: this._includesProjectContext(node),
         maxTurns:   orchestration.executionConfig?.maxTurns || 10,
-        timeout:    Math.max(10_000, orchTimeout - (Date.now() - startTime)),
+        timeout:    Math.max(10_000, Math.min(
+          orchestration.executionConfig?.stepTimeout || STEP_TIMEOUT_MS,
+          orchTimeout - (Date.now() - startTime),
+        )),
         model:      agent?.model,
         mcpServers: mcp.getServersForAgent(agent, this.project.id),
         useBrowser: orchestrationUsesBrowser,
         log:        (level, msg) => this._log(level, msg),
+        signal:     this._abort.signal,
       });
       let run = await runStep(userMessage);
       let { inputTokens, outputTokens } = run;

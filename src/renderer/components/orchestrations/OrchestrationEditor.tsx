@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { req } from '../../api';
-import type { Orchestration, OrchestrationNode, DataFlow, ContextExtra, Agent } from '../../types';
+import type { Orchestration, OrchestrationNode, DataFlow, ContextExtra, Agent, ExecutionConfig } from '../../types';
 import { NodeCanvas, NODE_W, NODE_H, getAgentIcon, autoLayoutNodes } from './NodeCanvas';
 import type { SelectedEdge } from './NodeCanvas';
 import { ConnectionConfigurator, type ScriptParamSchema } from './ConnectionConfigurator';
@@ -46,6 +46,14 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
   const [description,  setDescription]  = useState(orchestration.description);
   const [dagNodes,     setDagNodes]     = useState<OrchestrationNode[]>(() => orchestration.nodes ?? []);
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null);
+  // Same defaults as workflows.create / the orchestrator, for orchestrations saved before these fields existed
+  const [execConfig,   setExecConfig]   = useState<ExecutionConfig>(() => ({
+    stopOnError: true, validateAfterEachStep: false, maxTurns: 10, timeout: 1_800_000, stepTimeout: 600_000,
+    ...(orchestration.executionConfig as Partial<ExecutionConfig> | undefined),
+  }));
+  const [showExecConfig, setShowExecConfig] = useState(false);
+  const setMinutes = (key: 'timeout' | 'stepTimeout') => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setExecConfig(c => ({ ...c, [key]: Math.max(1, Number(e.target.value) || 1) * 60_000 }));
   const [isSaving,     setIsSaving]     = useState(false);
   const [validating,   setValidating]   = useState(false);
   const [errors,       setErrors]       = useState<string[]>([]);
@@ -114,7 +122,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     if (dagNodes.length < 2) { setErrors(['Necesitas al menos 2 nodos']); return; }
     setValidating(true);
     try {
-      await onSave({ name, description, nodes: dagNodes });
+      await onSave({ name, description, nodes: dagNodes, executionConfig: execConfig });
       const result = await req<{ valid: boolean; errors: string[] }>('POST', `/orchestrations/${orchestration.id}/validate`);
       setErrors(result.errors || []);
       if (result.valid) addToast('Validación correcta', 'ok');
@@ -129,7 +137,7 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
     if (!name.trim()) { addToast('El nombre es obligatorio', 'warn'); return; }
     setIsSaving(true);
     try {
-      await onSave({ name, description, nodes: dagNodes, projectId });
+      await onSave({ name, description, nodes: dagNodes, executionConfig: execConfig, projectId });
       setErrors([]);
     } finally {
       setIsSaving(false);
@@ -275,6 +283,10 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
           />
         </div>
         <div className="orch-editor-actions">
+          <button className={`btn ghost${showExecConfig ? ' active' : ''}`} onClick={() => setShowExecConfig(v => !v)}
+            title="Timeouts, turnos y comportamiento ante errores">
+            <i className="ti ti-adjustments-horizontal" />{' '}Ejecución
+          </button>
           <button className="btn ghost" onClick={handleValidate} disabled={validating || isSaving}>
             {validating ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-check" />}
             {' '}Validar
@@ -285,6 +297,35 @@ export function OrchestrationEditor({ orchestration, projectId, onSave, onBack, 
           </button>
         </div>
       </div>
+
+      {showExecConfig && (
+        <div className="orch-exec-config">
+          <label>
+            <span>Timeout total</span>
+            <input type="number" className="input" min={1} value={Math.round(execConfig.timeout / 60_000)} onChange={setMinutes('timeout')} />
+            <span className="orch-exec-config-unit">min</span>
+          </label>
+          <label>
+            <span>Timeout por paso</span>
+            <input type="number" className="input" min={1} value={Math.round((execConfig.stepTimeout ?? 600_000) / 60_000)} onChange={setMinutes('stepTimeout')} />
+            <span className="orch-exec-config-unit">min</span>
+          </label>
+          <label>
+            <span>Turnos máx. por paso</span>
+            <input type="number" className="input" min={1} max={100} value={execConfig.maxTurns}
+              onChange={e => setExecConfig(c => ({ ...c, maxTurns: Math.min(100, Math.max(1, Number(e.target.value) || 1)) }))} />
+          </label>
+          <label className="orch-exec-config-check">
+            <input type="checkbox" checked={execConfig.stopOnError} onChange={e => setExecConfig(c => ({ ...c, stopOnError: e.target.checked }))} />
+            <span>Detener ante el primer error</span>
+          </label>
+          {(execConfig.stepTimeout ?? 600_000) > execConfig.timeout && (
+            <div className="orch-exec-config-warn">
+              <i className="ti ti-alert-triangle" /> El timeout por paso supera al total: cada paso tendrá como mucho lo que quede del total.
+            </div>
+          )}
+        </div>
+      )}
 
       {errors.length > 0 && (
         <div className="orch-error-banner">

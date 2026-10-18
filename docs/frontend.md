@@ -1,7 +1,7 @@
 # Documentación técnica — Frontend (`src/renderer/`)
 
 > Stack: React 19 + Vite 8 + Zustand 5 + TypeScript
-> Última actualización: 2026-10-17 · Versión: 2.5.0
+> Última actualización: 2026-10-18 · Versión: 2.6.0
 
 ---
 
@@ -490,6 +490,8 @@ Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 
 **Tab General → Proveedor de IA:** la columna de CLIs muestra solo los verificados (Claude Code, Copilot CLI y Antigravity CLI), más los CLIs personalizados. Gemini CLI, Codex, Aider, Cline y Goose ya no aparecen; quien los tuviera seleccionados se migra al arrancar (backend §8).
 
+**Tab General → Prueba real:** botón visible con cualquier proveedor, también los CLIs. Guarda el formulario (`persistPending`, compartido con *Guardar* y *Probar conexión*) y llama a `POST /ai/smoke-test`. El resultado ("Lee el proyecto correctamente (9.1s)" o el error) se muestra en la misma línea que *Probar conexión*, que solo hace ping a las APIs.
+
 **Tab General → CLI de terminal:** tarjeta visible solo si `GET /cli` devuelve `supported: true` (Windows). Botón *Instalar CLI* / *Desinstalar* → `POST` / `DELETE /cli`; muestra badge "Instalado" y la carpeta destino. Estado `cliStatus` + `cliBusy`, cargado al entrar en la tab. Ver backend §19.
 
 **GitHub Models (tab General):** al seleccionar el proveedor `github`, el selector de modelo se rellena dinámicamente con `POST /api/ai/models`. Usa primero el token introducido en el formulario (sin necesidad de guardar) y, si está vacío, el backend intenta `gh auth token`. Si la detección falla, usa una lista fallback local y muestra el error en línea.
@@ -543,6 +545,8 @@ Los agentes del proyecto tienen prioridad (aparecen primero). Los agentes exclui
 **Drag-and-drop desde paleta:** al arrastrar un agente o script sobre el canvas, se crea un nodo en la posición de suelta con `isRoot: false` (flotante, sin conexión). Si se suelta sobre un nodo existente, el nuevo nodo se coloca debajo y se conecta automáticamente con `dependsOn = [targetNode.id]`. Un agente solo puede aparecer una vez en el canvas (los scripts sí pueden repetirse).
 
 **Purga del canvas:** al cargar, si un agente del canvas ya no existe en disco, se elimina automáticamente. Sus conexiones (`dependsOn`) también se limpian.
+
+**Ajustes de ejecución:** el botón *Ejecución* (`ti-adjustments-horizontal`) de la cabecera despliega una barra con el timeout total y el timeout por paso (en minutos), los turnos máximos por paso (1–100) y *Detener ante el primer error*. Estado `execConfig`, con los mismos valores por defecto que el backend (30 min, 10 min, 10 turnos) para las orquestaciones guardadas antes de que existieran esos campos. Se guarda con *Guardar* y *Validar* (`executionConfig` en `PUT /orchestrations/:id`). Si el timeout por paso supera al total se avisa en ámbar: cada paso recibe como mucho lo que queda del total.
 
 **Estado:** `dagNodes: OrchestrationNode[]` — único estado del canvas. `selectedEdge: SelectedEdge | null` — arista o nodo raíz seleccionado (controla qué muestra `ConnectionConfigurator`).
 
@@ -631,6 +635,8 @@ Cuatro estados: formulario previo → corriendo (SSE) → **gate HITL / browser 
 **Gate HITL en la UI:** cuando el SSE emite `gate-open` (con `nodeId` y `agentName`), el panel muestra un bloque con tres botones: *Aprobar*, *Revisar* (muestra textarea para feedback) y *Cancelar*. La decisión se envía a `POST /executions/:execId/gate { action, feedbackText?, nodeId }`.
 
 **Browser pause:** cuando el SSE emite `browser-required`, el panel muestra el panel de autenticación con estado del navegador y lista de tabs. "Continuar ejecución" llama a `POST /orchestrations/:id/browser-continue?executionId=`.
+
+**Estimación de coste:** en el formulario previo, `GET /orchestrations/:id/estimate` muestra la media de las ejecuciones anteriores (o, la primera vez, que depende de los turnos), el mínimo de tokens de entrada con su coste y un desglose por paso plegable (`<details>`). Sin precio conocido muestra "coste n/d".
 
 **Quality Score:** componente `QualityBadge` por paso. Click expande los checks individuales.
 

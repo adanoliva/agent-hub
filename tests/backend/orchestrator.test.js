@@ -217,3 +217,32 @@ test('validate: ciclo produce error', async () => {
   assert.equal(valid, false);
   assert.ok(errors.some((e) => e.includes('ciclo')));
 });
+
+test('estimate: suelo por los prompts y media de las ejecuciones anteriores', () => {
+  const dir  = makeProjectDir('proj-estimate').dir;
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), 'x'.repeat(4000));
+  const orch = makeDag([dagNode('a', 'agent-uno'), dagNode('b', 'agent-dos', ['a'])]);
+
+  const first = new OrchestrationExecutor(orch, { id: 'p13', path: dir }).estimate();
+  assert.equal(first.priced, true);                      // Claude CLI by default
+  assert.ok(first.steps[0].inputTokens > first.steps[1].inputTokens, 'only the root gets the project context');
+  assert.ok(first.totals.minCostUSD > 0);
+  assert.equal(first.totals.history, null);
+
+  const execDir = path.join(dir, '.agent-hub', 'executions', 'e1');
+  fs.mkdirSync(execDir, { recursive: true });
+  fs.writeFileSync(path.join(execDir, 'metadata.json'), JSON.stringify({
+    orchestrationId: 'orch-dag', executionId: 'e1', status: 'success', startedAt: new Date().toISOString(),
+  }));
+  fs.writeFileSync(path.join(execDir, 'result.json'), JSON.stringify({
+    totalTokensUsed: { input: 300, output: 30 }, estimatedCost: 0.5,
+    results: [
+      { nodeId: 'a', status: 'success', tokensUsed: { input: 100, output: 10 }, estimatedCost: 0.2 },
+      { nodeId: 'b', status: 'success', tokensUsed: { input: 200, output: 20 }, estimatedCost: 0.3 },
+    ],
+  }));
+
+  const again = new OrchestrationExecutor(orch, { id: 'p13', path: dir }).estimate();
+  assert.deepEqual(again.steps[1].history, { runs: 1, input: 200, output: 20, costUSD: 0.3 });
+  assert.equal(again.totals.history.costUSD, 0.5);
+});

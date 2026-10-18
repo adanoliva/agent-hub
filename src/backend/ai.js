@@ -75,11 +75,20 @@ function resetAllUsage() {
   saveCumulative(cumulative);
 }
 
-// Anthropic pricing per 1M tokens (claude-sonnet-4-20250514)
+// Anthropic pricing per 1M tokens (first-party API, checked 2026-10)
 const ANTHROPIC_PRICING = {
   'claude-sonnet-4-20250514':    { input: 3.00,  output: 15.00  },
-  'claude-haiku-4-5-20251001':   { input: 0.25,  output: 1.25   },
+  'claude-haiku-4-5-20251001':   { input: 1.00,  output: 5.00   },
   'claude-opus-4-20250514':      { input: 15.00, output: 75.00  },
+  'claude-fable-5-1':            { input: 10.00, output: 50.00  },
+  'claude-opus-5-5':             { input: 4.00,  output: 20.00  },
+  'claude-opus-5':               { input: 5.00,  output: 25.00  },
+  'claude-opus-4-8':             { input: 5.00,  output: 25.00  },
+  'claude-sonnet-5-5':           { input: 2.00,  output: 10.00  },
+  'claude-sonnet-5':             { input: 2.00,  output: 10.00  },
+  'claude-sonnet-4-6':           { input: 3.00,  output: 15.00  },
+  'claude-haiku-5-5':            { input: 0.10,  output: 0.50   },
+  'claude-haiku-4-5':            { input: 1.00,  output: 5.00   },
 };
 
 function calcAnthropicCost(model, inputTokens, outputTokens) {
@@ -289,9 +298,37 @@ function estimatedUsage(text) {
   return { text: text.trim(), inputTokens: 0, outputTokens: Math.ceil(text.length / 4), costUSD: 0 };
 }
 
+// On Windows the npm .cmd shim is the child: kill() would leave the real CLI running and editing files
+function killTree(child) {
+  if (process.platform === 'win32' && child.pid) {
+    execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {});
+  } else {
+    child.kill();
+  }
+}
+
+const cancelledError = () => Object.assign(new Error('Ejecución cancelada'), { cancelled: true });
+
+const TRANSIENT_RE = /\b(429|500|502|503|504|529)\b|rate.?limit|overloaded|econnreset|econnrefused|etimedout|socket hang up|fetch failed|limite de peticiones/i;
+const isTransientError = (err) => TRANSIENT_RE.test(err?.message || '');
+
+/** Retries `fn` on rate limits, 5xx and network errors with exponential backoff. Anything else rethrows at once. */
+async function withRetry(fn, { retries = 2, baseMs = 3000, onRetry, signal } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await fn(); }
+    catch (err) {
+      if (attempt >= retries || signal?.aborted || !isTransientError(err)) throw err;
+      const wait = baseMs * 2 ** attempt;
+      onRetry?.(err, attempt + 1, wait);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+}
+
 /** Spawns a CLI and resolves its stdout. Rejects on non-zero exit, timeout or missing binary. */
-function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS } = {}) {
+function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS, signal } = {}) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(cancelledError());
     const child = spawn(bin, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -309,12 +346,15 @@ function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS } = {}) {
     child.stdin.end(stdin ?? '', 'utf8');
 
     const timer = setTimeout(() => {
-      child.kill();
+      killTree(child);
       reject(new Error(`${bin} timed out after ${Math.round(timeout / 1000)}s`));
     }, timeout);
+    const onAbort = () => { clearTimeout(timer); killTree(child); reject(cancelledError()); };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     child.on('close', (code) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       if (code === 0) return resolve(stdout);
       const detail = [stderr.trim(), stdout.trim()].filter(Boolean).join(' | ');
       if (/is not recognized|no se reconoce|command not found/i.test(detail)) reject(new Error(`${bin} no encontrado en PATH`));
@@ -322,6 +362,7 @@ function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS } = {}) {
     });
     child.on('error', (err) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       reject(err.code === 'ENOENT' ? new Error(`${bin} no encontrado en PATH`) : err);
     });
   });
@@ -600,7 +641,7 @@ async function callOpenAICompatChat(messages, systemPrompt, { baseUrl, key, mode
     method:  'POST',
     headers: finalHeaders,
     body:    JSON.stringify({ model, messages: allMessages, max_tokens: opts.maxTokens || 4096 }),
-    signal:  AbortSignal.timeout(opts.timeout || CALL_TIMEOUT_MS),
+    signal:  AbortSignal.any([AbortSignal.timeout(opts.timeout || CALL_TIMEOUT_MS), opts.signal].filter(Boolean)),
   });
 
   if (!res.ok) {
@@ -616,7 +657,7 @@ async function callOpenAICompatChat(messages, systemPrompt, { baseUrl, key, mode
   const text  = data.choices?.[0]?.message?.content || '';
   const { prompt_tokens: pt = 0, completion_tokens: ct = 0 } = data.usage ?? {};
   trackUsage({ inputTokens: pt, outputTokens: ct });
-  return { text, inputTokens: pt, outputTokens: ct };
+  return { text, inputTokens: pt, outputTokens: ct, truncated: data.choices?.[0]?.finish_reason === 'length' };
 }
 
 // ── Agent system prompt generation ───────────────────────────────────────────
@@ -1182,7 +1223,8 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     const client = new Anthropic.default({ apiKey: cfg.apiKey });
     const params = {
       model:      cfg.apiModel || MODEL,
-      max_tokens: opts.maxTokens || 4096,
+      // Room for a full-file TOOL: write; every current Claude model allows at least 32k
+      max_tokens: opts.maxTokens || 16_384,
       messages,
     };
     if (systemPrompt) params.system = systemPrompt;
@@ -1191,6 +1233,7 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     const timeoutMs    = opts.timeout || CALL_TIMEOUT_MS;
     const controller   = new AbortController();
     const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
+    opts.signal?.addEventListener('abort', () => controller.abort(), { once: true });
 
     let result;
     try {
@@ -1211,6 +1254,7 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
       text: result.content.filter(b => b.type === 'text').map(b => b.text).join(''),
       inputTokens,
       outputTokens,
+      truncated: result.stop_reason === 'max_tokens',
     };
   }
 
@@ -1275,8 +1319,11 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     mcpServers:     opts.mcpServers     || {},
     projectId:      opts.projectId      || null,
     readOnly:       opts.readOnly       || false,
-    callAIRaw: (messages, systemPrompt, callOpts = {}) =>
-      callAIChatWithTokens(messages, systemPrompt, { provider, model: opts.model || null, timeout: callOpts.timeout }),
+    signal:         opts.signal,
+    callAIRaw: (messages, systemPrompt, callOpts = {}) => withRetry(
+      () => callAIChatWithTokens(messages, systemPrompt, { provider, model: opts.model || null, timeout: callOpts.timeout, signal: opts.signal }),
+      { onRetry: opts.onRetry, signal: opts.signal },
+    ),
   });
 
   return result;
@@ -1401,6 +1448,9 @@ module.exports = {
   API_PROVIDERS,
   MODEL,
   isNativeCLI,
+  isTransientError,
+  runCLI,
+  withRetry,
   GITHUB_GROUP_PROVIDERS,
   callAI,
   callAIRich,

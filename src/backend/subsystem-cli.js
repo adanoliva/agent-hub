@@ -44,6 +44,8 @@ const crypto  = require('crypto');
 const apiFs   = require('./api-fs');
 const browser = require('./browser');
 
+const MAX_CONTINUATIONS = 3; // per turn, when the model hits its output token limit
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 /**
@@ -655,6 +657,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     mcpServers     = {},   // Record<name, config> — servers for this agent
     projectId      = null,
     readOnly       = false,  // chat: reads the project, never writes
+    signal,
   } = config;
 
   if (!projectPath) throw new Error('projectPath is required for Subsystem CLI');
@@ -691,6 +694,7 @@ async function execute(prompt, agentSystemPrompt, config) {
   let   completedNormally = false;
 
   while (turn < maxTurns) {
+    if (signal?.aborted) break;
     // Check remaining time before each turn
     const elapsed = Date.now() - startTime;
     if (elapsed >= timeout) break;
@@ -702,6 +706,21 @@ async function execute(prompt, agentSystemPrompt, config) {
     let aiResult;
     try {
       aiResult = await callAIRaw(messages, systemPrompt, { timeout: turnTimeout });
+      // Cut at the output limit mid TOOL: write → ask the model to carry on from the exact point
+      for (let n = 0; aiResult.truncated && n < MAX_CONTINUATIONS; n++) {
+        const more = await callAIRaw([
+          ...messages,
+          { role: 'assistant', content: aiResult.text },
+          { role: 'user', content: 'Tu respuesta se cortó por el límite de tokens. Continúa exactamente desde el último carácter, sin repetir nada ni añadir introducción.' },
+        ], systemPrompt, { timeout: Math.max(5_000, timeout - (Date.now() - startTime)) });
+        aiResult = {
+          ...more,
+          text:         aiResult.text + more.text,
+          inputTokens:  (aiResult.inputTokens  || 0) + (more.inputTokens  || 0),
+          outputTokens: (aiResult.outputTokens || 0) + (more.outputTokens || 0),
+          warnings:     [...(aiResult.warnings || []), ...(more.warnings || [])],
+        };
+      }
     } catch (err) {
       return {
         success:       false,
@@ -729,6 +748,18 @@ async function execute(prompt, agentSystemPrompt, config) {
 
     // 2. Parse tool calls from AI response
     const parsed = parseAgentResponse(finalResponse);
+    if (aiResult.truncated && parsed.toolCalls.length > 0) {
+      // Still cut after the continuations: the last block is incomplete, never write half a file
+      const dropped = parsed.toolCalls.pop();
+      warnings.push({ message: `Respuesta cortada por el límite de tokens: se descarta "${dropped.tool}${dropped.args?.path ? ' ' + dropped.args.path : ''}" incompleto` });
+      if (parsed.toolCalls.length === 0) {
+        messages.push(
+          { role: 'assistant', content: finalResponse },
+          { role: 'user', content: `El bloque ${dropped.tool} quedó incompleto por el límite de tokens y no se ha ejecutado. Divide el contenido: escribe el fichero más corto o en varios ficheros.` },
+        );
+        continue;
+      }
+    }
 
     // 3. No tool calls → AI finished its work
     if (parsed.hasClosed || parsed.toolCalls.length === 0) {
@@ -800,6 +831,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     ...(fatalError && { error: fatalError.message, errorCode: fatalError.code }),
     ...(exceededTurns                    && { error: 'MAX_TURNS_EXCEEDED' }),
     ...(exceededTimeout && !exceededTurns && { error: 'TIMEOUT_EXCEEDED' }),
+    ...(signal?.aborted && { error: 'Ejecución cancelada' }),
   };
 }
 

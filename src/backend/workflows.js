@@ -107,6 +107,7 @@ function create(projectId, projectPath, data) {
       validateAfterEachStep: false,
       maxTurns:              10,
       timeout:               1_800_000,
+      stepTimeout:           600_000,
       ...(data.executionConfig || {}),
     },
     createdAt:      now,
