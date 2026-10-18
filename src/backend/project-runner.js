@@ -70,6 +70,8 @@ async function runInProject(project, {
   const r = await ai.callAIWithSubsystemCLI(userMessage, systemPrompt, {
     projectPath: project.path, projectContext: context, provider, maxTurns, timeout,
     useBrowser, mcpServers, projectId: project.id, readOnly: mode !== 'agent',
+    // GitHub Models falls back to config.githubModel when the agent's model is unknown
+    model: provider === 'github' ? model : undefined,
   });
   const text = r.finalResponse || r.result || '';
   if (!r.success && r.error) {

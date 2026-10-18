@@ -110,6 +110,25 @@ function stripHandoff(response) {
   return (response || '').replace(/^HANDOFF:\s*\{.+\}\s*$/m, '').trimEnd();
 }
 
+function hasExecutableTaskInMessage(message) {
+  const text = String(message || '');
+  const hasTaskSentence = /ejecuta ahora esta tarea concreta:\s*\S+/i.test(text)
+    || /solicitud ejecutable\s*:\s*\S+/i.test(text);
+
+  const kvLines = text.match(/^[ \t>*-]*[^:\n]{2,80}:\s*\S.+$/gim) || [];
+  const nonMetaKvLines = kvLines.filter(line => {
+    const trimmed = String(line).trim();
+    return !/^(system|user|assistant|role)\s*:/i.test(trimmed);
+  });
+
+  return hasTaskSentence || nonMetaKvLines.length > 0;
+}
+
+function looksLikeTaskRefusal(response) {
+  const text = String(response || '').toLowerCase();
+  return /no se ha indicado ninguna tarea concreta|no se incluy[oó] ninguna tarea|no hay .*objetivo|no puedo proceder sin saber qu[eé] tarea|indica(r)? la tarea espec[ií]fica/.test(text);
+}
+
 // ── DAG scheduler ────────────────────────────────────────────────────────────
 
 /**
@@ -318,6 +337,7 @@ class OrchestrationExecutor extends EventEmitter {
     let prompt = agent?.system ||
       `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
 
+    prompt += `\n\n# REGLA DE EJECUCIÓN\nSi el mensaje incluye un bloque "## Solicitud ejecutable", "## Solicitud activa", "## Parametros de ejecucion" o "## Solicitud concreta a ejecutar", trata ese contenido como la tarea activa. No respondas que falta una tarea concreta si esos bloques existen.`;
     // Fixed context lives on the node itself in the DAG model
     const fc = node.contextExtra?.fixed;
     if (fc) {
@@ -353,6 +373,37 @@ class OrchestrationExecutor extends EventEmitter {
     let message = '';
     const isRoot = node.dependsOn.length === 0;
 
+    const temporalItems = [];
+    for (const n of this.orchestration.nodes || []) {
+      for (const temp of (n.contextExtra?.temporal || [])) {
+        const value = this.temporalContextValues[`${n.id}-${temp.id}`];
+        if (!value) continue;
+        temporalItems.push({
+          label: String(temp.label || temp.id || 'INPUT').trim(),
+          value: String(value).trim(),
+        });
+      }
+    }
+
+    const isIdentifierLabel = (label) => /(^|[^a-z])(id|ids|uuid|guid|key|clave|codigo|c[oó]digo|referencia|ref)([^a-z]|$)/i.test(String(label || '').toLowerCase());
+    const actionableItems = temporalItems.filter(item => !isIdentifierLabel(item.label));
+
+    // Build a global execution-params block (LABEL: value) using the exact
+    // field names defined in the orchestration.
+    const globalParams = temporalItems.map(item => ({ key: item.label, value: item.value }));
+    const seenParams = new Set();
+    const paramLines = [];
+    for (const p of globalParams) {
+      if (seenParams.has(p.key)) continue;
+      seenParams.add(p.key);
+      paramLines.push(`${p.key}: ${p.value}`);
+    }
+    const paramsList = paramLines.join('\n');
+
+    if (!isRoot && paramsList) {
+      message += `## Parametros de ejecucion\n\n${paramsList}\n\n`;
+    }
+
     // Revision feedback (keyed by nodeId)
     const revisions = this._revisionFeedback?.[node.id];
     if (revisions?.length > 0) {
@@ -363,16 +414,35 @@ class OrchestrationExecutor extends EventEmitter {
     }
 
     if (isRoot) {
-      // Root node: temporal inputs and optional task text from the node itself
-      for (const temp of (node.contextExtra?.temporal || [])) {
-        const val = this.temporalContextValues[`${node.id}-${temp.id}`];
-        if (val) message += `## ${temp.label || 'Entrada'}\n\n${val}\n\n`;
-      }
+      // Root node: build one explicit active request from the orchestration inputs.
       const taskText = node.contextExtra?.fixed?.freeText?.trim();
-      message += taskText
-        ? `## Tarea\n\n${taskText}`
+      const nodeTemporalItems = [];
+      for (const temp of (node.contextExtra?.temporal || [])) {
+        const raw = this.temporalContextValues[`${node.id}-${temp.id}`];
+        if (!raw) continue;
+        nodeTemporalItems.push({
+          label: String(temp.label || temp.id || 'INPUT').trim(),
+          value: String(raw).trim(),
+        });
+      }
+
+      const primaryAction = actionableItems.length > 0 ? actionableItems[0] : null;
+      const actionableSummary = actionableItems.length > 0
+        ? actionableItems.map(item => `${item.label}: ${item.value}`).join('\n')
+        : '';
+      const nodeInputsSummary = nodeTemporalItems.length > 0
+        ? nodeTemporalItems.map(item => `${item.label}: ${item.value}`).join('\n')
+        : '';
+      const activeRequest = taskText || primaryAction?.value || nodeInputsSummary || actionableSummary;
+
+      const executableInstruction = `Como ${node.agentName}, ejecuta ahora esta tarea concreta: ${activeRequest}`;
+      const dynamicInputsBlock = nodeInputsSummary || paramsList || '(Sin parametros de entrada)';
+
+      message += activeRequest
+        ? `Solicitud ejecutable: ${executableInstruction}\n\nEntradas del orquestador (campos dinamicos):\n${dynamicInputsBlock}\n\nNo respondas pidiendo una tarea concreta: la tarea ya esta definida arriba y debes ejecutarla ahora.\n\n${taskText && taskText !== activeRequest ? `Instruccion de flujo:\n${taskText}\n\n` : ''}${paramsList ? `Parametros de ejecucion:\n${paramsList}\n\n` : ''}Ejecuta exactamente la solicitud ejecutable usando estos campos como fuente de verdad. Si falta contexto, inspecciona el repositorio y aplica el cambio mínimo necesario.`
         : `## Tarea\n\nEjecuta las acciones correspondientes a tu rol de "${node.agentName}" en este proyecto.` +
-          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.`;
+          ` Revisa el código, analiza los archivos relevantes y aplica los cambios necesarios según tu especialidad.` +
+          (paramsList ? `\n\n## Parametros de ejecucion\n\n${paramsList}` : '');
 
     } else {
       // Non-root: merge outputs from all predecessor nodes
@@ -568,6 +638,16 @@ class OrchestrationExecutor extends EventEmitter {
           errors.push(`Nodo "${node.agentName}": archivo de contexto no existe: ${filePath}`);
         }
       }
+
+      for (const temp of (node.contextExtra?.temporal || [])) {
+        if (!temp.required) continue;
+        const value = this.temporalContextValues[`${node.id}-${temp.id}`];
+        const missing = value === undefined || value === null || String(value).trim() === '';
+        if (missing) {
+          const label = temp.label?.trim() || temp.id;
+          errors.push(`Nodo "${node.agentName}": falta el campo requerido "${label}"`);
+        }
+      }
     }
 
     if (!fs.existsSync(this.project.path)) {
@@ -732,7 +812,7 @@ class OrchestrationExecutor extends EventEmitter {
       const agent          = this._getAgent(agentName);
       const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
       const useNativeCLI   = isNativeCLI(provider, cfg);
-      const stepRemaining  = Math.max(10_000, orchTimeout - (Date.now() - startTime));
+      const hasConcreteTask = hasExecutableTaskInMessage(userMessage);
 
       // Native CLIs drive the browser themselves: launch it, let the user log in, pass the page state
       let browserContext = '';
@@ -755,20 +835,30 @@ class OrchestrationExecutor extends EventEmitter {
         browserContext = await this._buildBrowserContext();
       }
 
-      const run = await runInProject(this.project, {
+      const runStep = (msg) => runInProject(this.project, {
         systemPrompt: systemPrompt + browserContext,
-        userMessage,
+        userMessage: msg,
         includeContext: this._includesProjectContext(node),
         maxTurns:   orchestration.executionConfig?.maxTurns || 10,
-        timeout:    stepRemaining,
+        timeout:    Math.max(10_000, orchTimeout - (Date.now() - startTime)),
         model:      agent?.model,
         mcpServers: mcp.getServersForAgent(agent, this.project.id),
         useBrowser: orchestrationUsesBrowser,
         log:        (level, msg) => this._log(level, msg),
       });
-      const response = run.text;
-      const { inputTokens, outputTokens, costUnavailable } = run;
+      let run = await runStep(userMessage);
+      let { inputTokens, outputTokens } = run;
       let stepCostUSD = run.costUSD;
+
+      if (hasConcreteTask && looksLikeTaskRefusal(run.text)) {
+        this._log('warn', `Rechazo de tarea detectado en "${agentName}"; reintentando con corrección obligatoria.`);
+        run = await runStep(`${userMessage}\n\n## Correccion obligatoria del orquestador\nExiste una tarea concreta ya definida y debes ejecutarla ahora. No pidas aclaraciones ni repitas que falta tarea. Realiza la accion solicitada y entrega resultado util.`);
+        inputTokens  += run.inputTokens;
+        outputTokens += run.outputTokens;
+        stepCostUSD  += run.costUSD;
+      }
+      const response = run.text;
+      const { costUnavailable } = run;
 
       // Claude without reported usage: estimate from the response length at the agent model's price
       let costIsEstimated = false;
@@ -784,6 +874,7 @@ class OrchestrationExecutor extends EventEmitter {
 
       const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
       if (filesModified.length > 0) this._log('info', `${filesModified.length} archivo(s) modificado(s)`);
+      else this._log('warn', `El paso no modifico archivos en disco`);
 
       const handoff      = extractHandoff(response);
       const cleanResponse = stripHandoff(response);
@@ -961,11 +1052,34 @@ class OrchestrationExecutor extends EventEmitter {
         })),
       );
 
-      for (const settled of levelSettled) {
+      for (const [idx, settled] of levelSettled.entries()) {
         if (settled.status === 'rejected') {
-          this._log('error', `Nodo rechazado inesperadamente: ${settled.reason?.message}`);
+          const failedNode = level[idx];
+          const message = settled.reason?.message || 'Error inesperado en nodo';
+          this._log('error', `Nodo rechazado inesperadamente: ${message}`);
+
+          const rejectedStep = {
+            stepIndex:      Math.max(0, stepCounter - level.length + idx),
+            nodeId:         failedNode?.id,
+            agentName:      failedNode?.agentName || '(desconocido)',
+            input:          { systemPrompt: '', userMessage: '' },
+            output:         { response: '' },
+            filesModified:  [],
+            tokensUsed:     { input: 0, output: 0 },
+            estimatedCost:  0,
+            costIsEstimated:false,
+            duration:       0,
+            status:         'error',
+            error:          { message, category: 'unexpected_rejection', recoverable: true },
+            backupPath:     null,
+          };
+
+          this.results.push(rejectedStep);
+          this.emit('step-done', rejectedStep);
+          this._writeExecutionState(failedNode?.id || `rejected-${idx}`, rejectedStep);
           continue;
         }
+
         const { stepResult, agentOutput, budgetError } = settled.value;
         if (!stepResult) continue;
 
@@ -977,11 +1091,8 @@ class OrchestrationExecutor extends EventEmitter {
 
       if (budgetExceededError) break;
 
-      if (
-        this.results.some(r => r.status === 'error') &&
-        orchestration.executionConfig?.stopOnError !== false
-      ) {
-        this._log('error', 'Deteniendo ejecución (stopOnError=true)');
+      if (this.results.some(r => r.status === 'error')) {
+        this._log('error', 'Deteniendo ejecución por error en un agente');
         break;
       }
 
@@ -1036,9 +1147,19 @@ class OrchestrationExecutor extends EventEmitter {
             this.results.push(reResult.stepResult);
             if (reResult.stepResult.status !== 'error') stepsCompleted++;
             if (reResult.agentOutput) agentOutputs[gatedNode.id] = reResult.agentOutput;
+            if (reResult.stepResult.status === 'error') {
+              this._log('error', `Deteniendo ejecución por error al revisar "${gatedNode.agentName}"`);
+              this.cancelled = true;
+              break;
+            }
           }
         }
         // approve → continue
+      }
+
+      if (this.results.some(r => r.status === 'error')) {
+        this._log('error', 'Deteniendo ejecución por error en un agente');
+        break;
       }
     }
 

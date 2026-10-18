@@ -282,6 +282,30 @@ function writeFile(projectPath, filePath, content, metadata = {}) {
 }
 
 /**
+ * Creates a directory inside the project root.
+ *
+ * @param {string} projectPath
+ * @param {string} dirPath
+ * @returns {{ created: boolean, existed: boolean, path: string }}
+ */
+function createDirectory(projectPath, dirPath) {
+  const resolved = validatePath(projectPath, dirPath);
+
+  if (fs.existsSync(resolved)) {
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      const err = new Error(`Path exists and is not a directory: ${dirPath}`);
+      err.code = 'PATH_NOT_DIRECTORY';
+      throw err;
+    }
+    return { created: true, existed: true, path: dirPath };
+  }
+
+  fs.mkdirSync(resolved, { recursive: true });
+  return { created: true, existed: false, path: dirPath };
+}
+
+/**
  * Lists files in the project, respecting exclusions.
  *
  * @param {string} projectPath
@@ -385,4 +409,4 @@ function grepFiles(projectPath, pattern, glob) {
   return { matches, count: matches.length };
 }
 
-module.exports = { readFile, writeFile, listFiles, bashCommand, grepFiles };
+module.exports = { readFile, writeFile, createDirectory, listFiles, bashCommand, grepFiles };

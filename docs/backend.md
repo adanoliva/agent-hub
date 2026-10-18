@@ -336,6 +336,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/ai/status` | `{ provider, ready: bool }` |
+| POST | `/api/ai/models` | Lista modelos disponibles por proveedor. Soporta `github` con body `{ provider, token? }` y devuelve `{ models: string[] }`. Si `token` no llega, usa `config.githubToken` y luego fallback a `gh auth token`. |
 | GET | `/api/ai/usage` | `AIUsage`: `{ cumulative, session }` con tokens y coste estimado |
 | POST | `/api/ai/usage/reset` | Reinicia contadores de sesión |
 | POST | `/api/ai/usage/reset-all` | Reinicia todo; borra `cache/ai-usage.json` |
@@ -679,6 +680,8 @@ syncProject(projectId)
 
 Solo hay CLIs verificados de punta a punta. Gemini CLI, Codex, Aider, Cline y Goose se retiraron: `readConfig()` migra `gemini-cli` → `antigravity-cli` y el resto → `cli`.
 
+Con el proveedor `github`, si el agente define `model` se usa ese ID; si no, `config.githubModel`.
+
 ### Adaptadores de CLI nativos (`CLI_ADAPTERS`)
 
 Cada CLI tiene tres modos. Sin `cwd`, el proceso corre en una carpeta neutra (`%TEMP%/agent-hub-ai`), así que nunca carga ni toca los ficheros de Agent Hub.
@@ -793,6 +796,7 @@ Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta an
 |---|---|
 | `readFile(projectPath, filePath)` | Lee fichero. Devuelve `{ path, content, size, hash, language, modified }` |
 | `writeFile(projectPath, filePath, content)` | Escribe con backup automático. Devuelve `{ saved, path, hash, backupPath }` |
+| `createDirectory(projectPath, dirPath)` | Crea directorios de forma segura (recursivo). Devuelve `{ created, existed, path }` |
 | `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5). Máx. 500 resultados. `pattern`: `*.ts` (a cualquier profundidad), glob completo `src/**/*.ts` (`path.matchesGlob`) o prefijo de directorio `src` |
 | `bashCommand(projectPath, command, { exec? })` | Ejecuta un comando de la whitelist. Solo lectura: 30 s. `exec`: añade toolchains, 5 min |
 | `grepFiles(projectPath, pattern, glob?)` | Búsqueda regex. Máx. 300 coincidencias |
@@ -813,6 +817,9 @@ TOOL: write
 PATH: src/utils.ts
 CONTENT:
 [contenido]
+---
+TOOL: mkdir
+PATH: src/nueva-carpeta
 ---
 TOOL: bash
 COMMAND: find src -name "*.ts"
@@ -924,6 +931,7 @@ HANDOFF: {"done":"...","changed":["ruta"],"issues":["..."],"next":"..."}
 - **Contexto del proyecto**: los nodos raíz lo reciben salvo `dataFlow.projectContext === false`, y el resto solo con `=== true` (`_includesProjectContext`). Cómo llega lo decide `runInProject` (§8c): un CLI lo carga de su fichero (`AGENTS.md`, `CLAUDE.md`…) y con API va en el prompt. Antes se recortaba a 2 000 caracteres y se duplicaba con API.
 - **Pasos i > 0**: handoff del agente anterior + archivos modificados + contextos temporales del nodo.
 - **Skills**: `resolveSkills(project, agent)` (§5b), es decir, las del stack detectado, las del proyecto y las del agente. El log registra cuáles se inyectaron en cada nodo. Con proveedores API también llegan (antes el subsistema solo recibía `agent.system`).
+- **Rechazo de tarea**: si el mensaje trae una tarea concreta (`## Solicitud ejecutable`…) y el agente responde que falta la tarea (`looksLikeTaskRefusal`), se reintenta una vez con una corrección obligatoria; los tokens de ambos intentos se suman.
 - **Límite**: `maxContextChars` (defecto 4 000) trunca el mensaje de usuario si supera el límite.
 
 ### Timeout global

@@ -10,7 +10,7 @@ const { createTray, destroyTray }                                = require('./tr
 const { readConfig, bootstrapDirectories, APP_DIR }              = require('./config');
 const { migrateAgentFiles, syncGlobalAgentsToClaudeDir }         = require('./agents');
 const agentsSync                                                  = require('./agents-sync');
-const { bootstrapDefaultMcpServers }                              = require('./mcp');
+const { bootstrapDefaultMcpServers }                             = require('./mcp');
 
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
@@ -18,6 +18,19 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
 // ── Auto-updater ──────────────────────────────────────────────────────────────
 
 let autoUpdater = null;
+let mainWindow = null;
+let server     = null;
+
+function isWindowAlive(win = mainWindow) {
+  return Boolean(win && !win.isDestroyed());
+}
+
+function safeSendToRenderer(channel, payload) {
+  if (!isWindowAlive()) return;
+  const wc = mainWindow.webContents;
+  if (!wc || wc.isDestroyed()) return;
+  wc.send(channel, payload);
+}
 
 function setupAutoUpdater() {
   if (isDev) return;
@@ -31,22 +44,22 @@ function setupAutoUpdater() {
     autoUpdater.logger = null;
 
     autoUpdater.on('update-available', (info) => {
-      mainWindow?.webContents.send('update-available', {
+      safeSendToRenderer('update-available', {
         version: info.version,
         releaseDate: info.releaseDate,
       });
     });
 
     autoUpdater.on('download-progress', (p) => {
-      mainWindow?.webContents.send('update-progress', Math.round(p.percent));
+      safeSendToRenderer('update-progress', Math.round(p.percent));
     });
 
     autoUpdater.on('update-downloaded', () => {
-      mainWindow?.webContents.send('update-ready');
+      safeSendToRenderer('update-ready');
     });
 
     autoUpdater.on('error', (err) => {
-      mainWindow?.webContents.send('update-error', err.message);
+      safeSendToRenderer('update-error', err.message);
     });
 
     // Comprobar al arrancar, con retraso para no bloquear la carga
@@ -59,9 +72,6 @@ function setupAutoUpdater() {
 ipcMain.handle('update:check',    () => autoUpdater?.checkForUpdates().catch(e => ({ error: e.message })));
 ipcMain.handle('update:download', () => autoUpdater?.downloadUpdate().catch(e => ({ error: e.message })));
 ipcMain.handle('update:install',  () => { autoUpdater?.quitAndInstall(false, true); });
-
-let mainWindow = null;
-let server     = null;
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
@@ -92,6 +102,7 @@ function createWindow() {
   mainWindow.loadURL(url);
 
   mainWindow.once('ready-to-show', () => {
+    if (!isWindowAlive()) return;
     mainWindow.show();
     if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
@@ -105,7 +116,10 @@ function createWindow() {
       if (filename !== 'index.html') return;
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(() => {
-        mainWindow?.webContents.reload();
+        if (!isWindowAlive()) return;
+        const wc = mainWindow.webContents;
+        if (!wc || wc.isDestroyed()) return;
+        wc.reload();
       }, 300);
     });
   }
@@ -116,23 +130,30 @@ function createWindow() {
     handleClose();
   });
 
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   function handleClose() {
     const { readConfig, writeConfig } = require('./config');
     const cfg = readConfig();
     const action = cfg.closeAction || 'ask';
 
-    if (action === 'tray') { mainWindow.hide(); return; }
+    if (action === 'tray') {
+      if (isWindowAlive()) mainWindow.hide();
+      return;
+    }
     if (action === 'quit') { app.isQuiting = true; app.quit(); return; }
 
     // action === 'ask' — show custom in-app dialog via IPC
-    mainWindow.webContents.send('app:close-requested');
+    safeSendToRenderer('app:close-requested');
     ipcMain.once('app:close-response', (_, { action: chosen, remember }) => {
       if (remember) {
         cfg.closeAction = chosen;
         writeConfig(cfg);
       }
       if (chosen === 'tray') {
-        mainWindow.hide();
+        if (isWindowAlive()) mainWindow.hide();
       } else {
         app.isQuiting = true;
         app.quit();
@@ -153,20 +174,22 @@ function createWindow() {
 ipcMain.handle('app:version',        () => app.getVersion());
 ipcMain.handle('app:appDir',         () => APP_DIR);
 ipcMain.handle('app:isDev',          () => isDev);
-ipcMain.handle('window:minimize',    () => mainWindow?.minimize());
-ipcMain.handle('window:hide',        () => mainWindow?.hide());
+ipcMain.handle('window:minimize',    () => { if (isWindowAlive()) mainWindow.minimize(); });
+ipcMain.handle('window:hide',        () => { if (isWindowAlive()) mainWindow.hide(); });
 ipcMain.handle('shell:openPath',     (_, p)   => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url));
 
 ipcMain.handle('dialog:pickFolder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const owner = isWindowAlive() ? mainWindow : undefined;
+  const result = await dialog.showOpenDialog(owner, {
     properties: ['openDirectory', 'createDirectory'],
   });
   return result.canceled ? null : result.filePaths[0];
 });
 
 ipcMain.handle('dialog:pickFile', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const owner = isWindowAlive() ? mainWindow : undefined;
+  const result = await dialog.showOpenDialog(owner, {
     properties: ['openFile'],
   });
   return result.canceled ? null : result.filePaths[0];
@@ -231,7 +254,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform === 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    app.isQuiting = true;
+    app.quit();
+  }
 });
 
 app.on('activate', () => {
@@ -250,10 +276,9 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    if (!isWindowAlive()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
 }

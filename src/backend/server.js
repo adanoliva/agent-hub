@@ -116,8 +116,23 @@ function whichCLI(bin) {
   const cmd = isWin ? `where ${bin}` : `which ${bin}`;
   return new Promise((resolve) => {
     exec(cmd, (err, stdout) => {
-      const found = !err && stdout.trim().length > 0;
-      resolve({ found, path: found ? stdout.trim().split('\n')[0] : null });
+      const lines = String(stdout || '')
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      const found = !err && lines.length > 0;
+      if (!found) return resolve({ found: false, path: null });
+
+      if (!isWin) return resolve({ found: true, path: lines[0] });
+
+      const preferredExt = new Set(['.exe', '.cmd', '.bat']);
+      const direct = lines.find(p => preferredExt.has(path.extname(p).toLowerCase()));
+      if (direct) return resolve({ found: true, path: direct });
+
+      const cmdSibling = lines.find(p => !path.extname(p) && fs.existsSync(`${p}.cmd`));
+      if (cmdSibling) return resolve({ found: true, path: `${cmdSibling}.cmd` });
+
+      resolve({ found: true, path: lines[0] });
     });
   });
 }
@@ -535,9 +550,9 @@ app.get('/api/projects/:id/context', (req, res) => {
   const cfg     = readConfig();
   const project = cfg.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  
+
   if (req.query.type === 'auto') return res.json(getContextAuto(project, cfg.aiProvider));
-  
+
   const type = req.query.type || (project.aiProviders?.includes('github') ? 'github' : 'claude');
   res.json(getContextFile(project, type));
 });
@@ -545,7 +560,7 @@ app.get('/api/projects/:id/context', (req, res) => {
 app.put('/api/projects/:id/context', (req, res) => {
   const project = readConfig().projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  
+
   const type     = req.body.type || (project.aiProviders?.includes('github') ? 'github' : 'claude');
   const filePath = saveContextFile(project, type, req.body.content || '');
   res.json({ ok: true, filePath });
@@ -1176,6 +1191,7 @@ app.post('/api/dashboard/notifications/restore', (req, res) => {
 
 const {
   getProviderStatus,
+  listGitHubModels,
   testConnection,
   generateAgentPrompt,
   getSuggestions,
@@ -1221,6 +1237,20 @@ app.get('/api/ai/status', async (req, res) => {
     res.json(await getProviderStatus());
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/ai/models — list available models for a provider
+app.post('/api/ai/models', async (req, res) => {
+  const provider = String(req.body?.provider || 'github');
+  try {
+    if (provider === 'github') {
+      const models = await listGitHubModels({ token: req.body?.token });
+      return res.json({ models });
+    }
+    return res.status(400).json({ error: `Provider no soportado para listado de modelos: ${provider}` });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 

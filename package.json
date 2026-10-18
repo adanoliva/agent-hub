@@ -13,13 +13,15 @@
     "build:renderer": "vite build",
     "test:backend": "node --test tests/backend/*.test.js",
     "prepare:build": "npm run build:renderer && node scripts/generate-icon.js",
-    "build": "npm run prepare:build && electron-builder --win portable",
+    "build": "node scripts/build-portable-safe.js",
+    "build:safe": "node scripts/build-portable-safe.js",
     "build:dir": "npm run prepare:build && electron-builder --win dir",
     "postbuild": "node scripts/post-build.js",
     "release": "npm run prepare:build && electron-builder --win portable --publish always"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
+    "@github/copilot": "^1.0.73",
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.6",
     "electron-updater": "^6.8.3",
@@ -37,7 +39,7 @@
     "cross-env": "^7.0.3",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
-    "sharp": "^0.33.0",
+    "sharp": "^0.35.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "wait-on": "^9.0.10"
