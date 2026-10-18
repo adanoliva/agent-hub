@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
-    "@github/copilot": "^1.0.73",
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.6",
     "electron-updater": "^6.8.3",
