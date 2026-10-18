@@ -30,9 +30,12 @@ export const PROJECT_PROVIDERS: Record<string, ProjectProvider> = {
     label: 'OpenAI (Cursor)',
     icon: 'ti-brain',
     agentDir: ['.openai', 'agents'],
-    contextFile: '.instructions.md',
+    contextFile: 'AGENTS.md',
     templateType: 'openai'
   }
 };
 
 export const PROJECT_PROVIDERS_LIST = Object.values(PROJECT_PROVIDERS);
+
+// AI engines that run as a native CLI (mirror of CLI_ADAPTERS in backend/ai.js)
+export const NATIVE_CLI_PROVIDERS = ['cli', 'copilot-cli', 'antigravity-cli'];

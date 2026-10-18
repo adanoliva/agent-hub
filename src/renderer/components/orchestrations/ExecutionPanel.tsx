@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { req, API_BASE } from '../../api';
 import type { Agent, BrowserStatus, Orchestration, OrchestrationNode, ExecutionLog, ExecutionResult, StepResult, QualityScore, AtomicOp, OpsLedger } from '../../types';
 import { useStore } from '../../store';
+import { NATIVE_CLI_PROVIDERS } from '../../constants/projects';
 
 function computeLevels(nodes: OrchestrationNode[]): OrchestrationNode[][] {
   const inDeg = new Map(nodes.map(n => [n.id, n.dependsOn.length]));
@@ -93,9 +94,8 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
   const setIsOrchestrating = useStore(s => s.setIsOrchestrating);
   const config             = useStore(s => s.config);
 
-  const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
   const provider   = config?.aiProvider ?? 'cli';
-  const isNativeCLI = CLI_NATIVE.includes(provider) ||
+  const isNativeCLI = NATIVE_CLI_PROVIDERS.includes(provider) ||
     (config?.customProviders?.some(p => p.id === provider && p.type === 'cli') ?? false);
 
   // Temporal context values collected from user
@@ -1005,7 +1005,7 @@ export function ExecutionPanel({ orchestration, projectId, onBack }: Props) {
                       <span className="orch-step-tokens">
                         <i className="ti ti-coin" />
                         {(step.tokensUsed.input + step.tokensUsed.output).toLocaleString()}
-                        {step.estimatedCost > 0 && ` · ~$${step.estimatedCost.toFixed(4)}`}
+                        {step.costUnavailable ? ' · coste n/d' : step.estimatedCost > 0 && ` · ~$${step.estimatedCost.toFixed(4)}`}
                       </span>
                     )}
                   </div>

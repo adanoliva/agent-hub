@@ -82,6 +82,8 @@ switch ($cmd) {
     $body = @{ agent = $opts.agent; task = $task }
     if ($opts.maxTurns) { $body.maxTurns = $opts.maxTurns }
     $r = Req POST "/projects/$($p.id)/run" $body
+    if ($r.skills) { [Console]::Error.WriteLine("> Skills: $($r.skills -join ', ')") }
+    if ($r.mcpIgnored) { [Console]::Error.WriteLine("! MCP no aplicado con $($r.provider): $($r.mcpIgnored -join ', ')") }
     Write-Output $r.result
     [Console]::Error.WriteLine(('✓ {0} · {1:N1}s' -f $r.provider, ($r.durationMs / 1000)))
   }

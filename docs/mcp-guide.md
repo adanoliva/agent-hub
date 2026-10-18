@@ -216,27 +216,13 @@ Los agentes que tienen servidores MCP asociados muestran un badge verde `⊞` co
 
 El comportamiento varía según el proveedor de IA configurado en el proyecto:
 
-### Proveedor CLI nativo (`claude`)
+### CLI nativo: Claude Code y Copilot CLI
 
-Es el camino más directo. Antes de cada ejecución, Agent Hub escribe (o actualiza) el fichero `{projectPath}/.claude/settings.json` con los servidores MCP del agente:
+Antes de cada ejecución, Agent Hub escribe un fichero temporal con los servidores MCP del agente y se lo pasa al CLI: `claude --mcp-config <fichero>` o `copilot --additional-mcp-config @<fichero>`. Las variables `$env:VAR` ya van resueltas, por eso el fichero se borra al terminar. Tu `.claude/settings.json` y tu `~/.copilot/mcp-config.json` no se tocan. El CLI gestiona el ciclo de vida de los procesos stdio.
 
-```json
-{
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_TOKEN": "ghp_xxx" }
-    }
-  }
-}
-```
+### Antigravity CLI y CLIs personalizados
 
-El CLI de Claude lee este fichero al arrancar y activa los servidores MCP automáticamente. No hay interacción adicional — el CLI gestiona el ciclo de vida de los procesos stdio.
-
-### Proveedores CLI alternativos (`gemini-cli`)
-
-Para `gemini-cli`, Agent Hub sincroniza la configuración en `~/.gemini/settings.json` con el mismo formato. Los CLIs que no tienen soporte nativo de MCP reciben las herramientas disponibles inyectadas en el system prompt (prompt injection), y un parser en el loop multi-turno intercepta las llamadas y las ejecuta.
+No reciben los servidores MCP del agente. La ejecución sigue, pero el log lo avisa y `agent-hub run` imprime `! MCP no aplicado`.
 
 ### Proveedores API (`api`, `github`, custom)
 

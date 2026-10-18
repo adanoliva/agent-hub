@@ -33,16 +33,24 @@ const ALLOWED_BASH_COMMANDS = new Set([
   'head', 'tail', 'file', 'echo', 'pwd',
 ]);
 
+// Agent mode adds the toolchains an agent needs to build, test and lint, like a native CLI in a terminal.
+// They run project scripts (that is the point): same trust level as `claude --dangerously-skip-permissions`.
+const EXEC_BASH_COMMANDS = new Set([
+  'npm', 'npx', 'pnpm', 'yarn', 'node', 'tsc', 'deno', 'bun',
+  'python', 'python3', 'py', 'pytest', 'go', 'cargo', 'rustc',
+  'dotnet', 'mvn', 'mvnw', 'gradle', 'gradlew', 'java', 'javac',
+  'make', 'cmake', 'git', 'php', 'composer', 'ruby', 'bundle', 'rake',
+]);
+
 // Patterns that are never allowed regardless of command
 const FORBIDDEN_BASH_PATTERNS = [
   /\brm\b/i,
-  /\bdel\b/i,
-  /\bformat\b/i,
+  /^\s*(del|format)\b/i, // only as the command itself: `npm run format` is fine
+
   /\bsudo\b/i,
-  /\bnpm\s+install\b/i,
-  /\bpip\s+install\b/i,
-  /\bgit\s+push\b/i,
-  /\bgit\s+clone\b/i,
+  /\bpip\s+install\b/i,                            // installs into the global Python
+  /\s(-g|--global)\b/i,                            // global package installs
+  /\bgit\s+(push|clone|clean|reset\s+--hard)\b/i,
   /\bcurl\b/i,
   /\bwget\b/i,
   /\binvoke-expression\b/i,
@@ -132,12 +140,13 @@ function validatePath(projectPath, filePath) {
   return resolved;
 }
 
-function isBashCommandForbidden(command) {
+function isBashCommandForbidden(command, exec = false) {
   if (!command || typeof command !== 'string') return true;
   const trimmed = command.trim();
   if (FORBIDDEN_BASH_PATTERNS.some(p => p.test(trimmed))) return true;
   const [base, ...args] = trimmed.split(/\s+/).map(t => t.replace(/^["']|["']$/g, ''));
-  if (!ALLOWED_BASH_COMMANDS.has(base.toLowerCase())) return true;
+  const cmd = base.toLowerCase().replace(/^\.[\\/]/, '').replace(/\.(cmd|bat|exe)$/, ''); // ./gradlew, mvnw.cmd
+  if (!ALLOWED_BASH_COMMANDS.has(cmd) && !(exec && EXEC_BASH_COMMANDS.has(cmd))) return true;
   return args.some(a => OUTSIDE_PATH_ARG.test(a));
 }
 
@@ -315,8 +324,8 @@ function listFiles(projectPath, pattern) {
  * @param {string} command
  * @returns {Promise<{ stdout, stderr, exitCode }>}
  */
-function bashCommand(projectPath, command) {
-  if (isBashCommandForbidden(command)) {
+function bashCommand(projectPath, command, { exec: execMode = false } = {}) {
+  if (isBashCommandForbidden(command, execMode)) {
     const err = new Error(`Command not allowed: ${command}`);
     err.code = 'FORBIDDEN_COMMAND';
     return Promise.reject(err);
@@ -325,13 +334,14 @@ function bashCommand(projectPath, command) {
   return new Promise((resolve) => {
     exec(command, {
       cwd:         projectPath,
-      timeout:     30_000,
-      maxBuffer:   512 * 1024,
+      timeout:     execMode ? 300_000 : 30_000,
+      maxBuffer:   4 * 1024 * 1024,
       windowsHide: true,
     }, (error, stdout, stderr) => {
+      // Builds and test runs put the verdict at the end: keep the tail
       resolve({
-        stdout:   String(stdout  || '').slice(0, 10_000),
-        stderr:   String(stderr  || '').slice(0,  2_000),
+        stdout:   String(stdout  || '').slice(-10_000),
+        stderr:   String(stderr  || '').slice(-4_000),
         exitCode: error ? (error.code || 1) : 0,
       });
     });

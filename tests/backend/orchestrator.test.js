@@ -3,7 +3,6 @@
  *
  * Unit tests for:
  *   - extractHandoff / stripHandoff  (protocolo HANDOFF entre agentes)
- *   - _getContextFile                (usa cfg.aiProvider, no project.aiProvider)
  *   - validate()                     (errores de configuración de orquestación)
  */
 
@@ -103,69 +102,6 @@ test('stripHandoff: devuelve el texto intacto si no hay HANDOFF', () => {
 test('stripHandoff: maneja cadena vacía/null sin lanzar', () => {
   assert.equal(stripHandoff(''), '');
   assert.equal(stripHandoff(null), '');
-});
-
-// ── _getContextFile: usa project.aiProvider para seleccionar el archivo ────────
-
-test('_getContextFile: lee CLAUDE.md cuando project.aiProvider es claude', () => {
-  const { dir } = makeProjectDir('proj-ctx-claude');
-
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Claude context', 'utf8');
-  fs.mkdirSync(path.join(dir, '.github'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.github', 'copilot-instructions.md'), '# Copilot context', 'utf8');
-
-  const project = { id: 'p-ctx-c', name: 'Ctx Claude', path: dir, aiProvider: 'claude' };
-  const executor = new OrchestrationExecutor(makeOrch(['a', 'b'], [makeNode(0, 1)]), project);
-
-  assert.equal(executor._getContextFile(), '# Claude context');
-});
-
-test('_getContextFile: lee copilot-instructions.md cuando project.aiProvider es github', () => {
-  const { dir } = makeProjectDir('proj-ctx-github');
-
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Claude context', 'utf8');
-  fs.mkdirSync(path.join(dir, '.github'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.github', 'copilot-instructions.md'), '# Copilot context', 'utf8');
-
-  const project = { id: 'p-ctx-gh', name: 'Ctx GH', path: dir, aiProvider: 'github' };
-  const executor = new OrchestrationExecutor(makeOrch(['a', 'b'], [makeNode(0, 1)]), project);
-
-  assert.equal(executor._getContextFile(), '# Copilot context');
-});
-
-test('_getContextFile: con project.aiProvider=github y cfg.aiProvider=cli no lee CLAUDE.md', () => {
-  // cfg.aiProvider es irrelevante para esta decisión
-  const { dir } = makeProjectDir('proj-ctx-cross');
-
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Claude context', 'utf8');
-  // No hay copilot-instructions.md → debe devolver vacío, no CLAUDE.md
-
-  const project = { id: 'p-cross', name: 'Cross', path: dir, aiProvider: 'github' };
-  const executor = new OrchestrationExecutor(makeOrch(['a', 'b'], [makeNode(0, 1)]), project);
-
-  assert.equal(executor._getContextFile(), '');
-});
-
-test('_getContextFile: devuelve string vacío si el archivo del proyecto no existe', () => {
-  const { dir } = makeProjectDir('proj-no-context');
-
-  const project = { id: 'p-nc', name: 'No Context', path: dir, aiProvider: 'claude' };
-  const executor = new OrchestrationExecutor(makeOrch(['a', 'b'], [makeNode(0, 1)]), project);
-
-  assert.equal(executor._getContextFile(), '');
-});
-
-test('_getContextFile: con project.aiProvider=both lee CLAUDE.md si existe', () => {
-  const { dir } = makeProjectDir('proj-ctx-both');
-
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Both claude', 'utf8');
-  fs.mkdirSync(path.join(dir, '.github'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.github', 'copilot-instructions.md'), '# Both copilot', 'utf8');
-
-  const project = { id: 'p-both', name: 'Both', path: dir, aiProvider: 'both' };
-  const executor = new OrchestrationExecutor(makeOrch(['a', 'b'], [makeNode(0, 1)]), project);
-
-  assert.equal(executor._getContextFile(), '# Both claude');
 });
 
 // ── validate ──────────────────────────────────────────────────────────────────

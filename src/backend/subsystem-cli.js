@@ -195,7 +195,7 @@ function parseAgentResponse(text) {
  * @param {string} projectPath — absolute path to the project root
  * @returns {Promise<OperationResult>}
  */
-async function executeToolCall(toolCall, projectPath) {
+async function executeToolCall(toolCall, projectPath, { readOnly = false } = {}) {
   const start = Date.now();
 
   try {
@@ -207,6 +207,15 @@ async function executeToolCall(toolCall, projectPath) {
         data,
         executionTime: Date.now() - start,
         filesAffected: [data.path],
+      };
+    }
+
+    if (toolCall.tool === 'write' && readOnly) {
+      return {
+        toolCall,
+        success: false,
+        error: { code: 'READ_ONLY', message: 'Modo solo lectura: no se pueden modificar ficheros' },
+        executionTime: Date.now() - start,
       };
     }
 
@@ -241,7 +250,7 @@ async function executeToolCall(toolCall, projectPath) {
     }
 
     if (toolCall.tool === 'bash') {
-      const data = await apiFs.bashCommand(projectPath, toolCall.args.command);
+      const data = await apiFs.bashCommand(projectPath, toolCall.args.command, { exec: !readOnly });
       return {
         toolCall,
         success:       data.exitCode === 0,
@@ -463,7 +472,26 @@ function buildToolResultsMessage(results) {
  * @returns {string}
  */
 function buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, opts = {}) {
-  const { useBrowser = false, mcpTools = [] } = opts;
+  const { useBrowser = false, mcpTools = [], readOnly = false } = opts;
+
+  const writeTool = readOnly ? '' : `2. WRITE — Escribir/modificar archivo (incluye el contenido COMPLETO)
+TOOL: write
+PATH: src/main.ts
+CONTENT:
+[contenido completo del archivo]
+
+---
+
+`;
+  const bashTool = readOnly
+    ? `3. BASH — Ejecutar comando de solo lectura (ls, find, grep, cat, wc, head, tail)
+TOOL: bash
+COMMAND: find src -name "*.ts" -type f`
+    : `3. BASH — Ejecutar un comando en la carpeta del proyecto: lectura (ls, find, cat…) y desarrollo
+   (tests, build, lint, git local, gestores de paquetes: npm test, npx tsc, pytest, go test, cargo build, git diff…).
+   Un comando por bloque: sin encadenar (; && |) ni redirigir (> <). Máximo 5 minutos.
+TOOL: bash
+COMMAND: npm test`;
 
   const toolInstructions = `HERRAMIENTAS DISPONIBLES:
 ─────────────────────────
@@ -475,17 +503,7 @@ PATH: src/main.ts
 
 ---
 
-2. WRITE — Escribir/modificar archivo (incluye el contenido COMPLETO)
-TOOL: write
-PATH: src/main.ts
-CONTENT:
-[contenido completo del archivo]
-
----
-
-3. BASH — Ejecutar comando de solo lectura (ls, find, grep, cat, wc, head, tail)
-TOOL: bash
-COMMAND: find src -name "*.ts" -type f
+${writeTool}${bashTool}
 
 ---
 
@@ -523,7 +541,7 @@ Siempre usa browser_get primero para ver el estado de la página antes de actuar
 
 REGLAS:
 - Cada herramienta va en su propia sección separada por ---
-- Al usar WRITE incluye el contenido COMPLETO del archivo
+${readOnly ? '- Modo SOLO LECTURA: analiza y responde, no puedes modificar ficheros' : '- Al usar WRITE incluye el contenido COMPLETO del archivo'}
 - Los --- deben estar solos en su línea
 - Puedes usar múltiples herramientas en un mismo turno
 - Cuando no necesites más herramientas, da tu respuesta final directamente (sin bloques TOOL)${mcpTools.length > 0 ? `
@@ -588,6 +606,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     useBrowser     = false,
     mcpServers     = {},   // Record<name, config> — servers for this agent
     projectId      = null,
+    readOnly       = false,  // chat: reads the project, never writes
   } = config;
 
   if (!projectPath) throw new Error('projectPath is required for Subsystem CLI');
@@ -606,7 +625,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     }
   }
 
-  const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, { useBrowser, mcpTools });
+  const systemPrompt  = buildSubsystemSystemPrompt(agentSystemPrompt, projectContext, { useBrowser, mcpTools, readOnly });
   const messages      = [{ role: 'user', content: String(prompt) }];
 
   const allToolCalls     = [];
@@ -667,7 +686,7 @@ async function execute(prompt, agentSystemPrompt, config) {
     for (const toolCall of parsed.toolCalls) {
       const result = toolCall.tool === 'mcp'
         ? await executeMcpToolCall(toolCall, projectId)
-        : await executeToolCall(toolCall, projectPath);
+        : await executeToolCall(toolCall, projectPath, { readOnly });
       turnResults.push(result);
       allToolCalls.push(toolCall);
       allResults.push(result);

@@ -14,12 +14,14 @@ const { EventEmitter } = require('events');
 const { readConfig, ensureDir } = require('./config');
 const { listAgentsByLevel, parseAgentFile, getAgentsDirForProvider } = require('./agents');
 const mcp = require('./mcp');
-const { callAI, callAIWithSubsystemCLI, callAIRich, calcAnthropicCost, GITHUB_GROUP_PROVIDERS, CLI_PROVIDERS } = require('./ai');
+const { calcAnthropicCost, isNativeCLI } = require('./ai');
 const prompts           = require('./prompts');
 const scriptsRegistry   = require('./scripts-registry');
 const gitCheckpointer   = require('./git-checkpointer');
 const opsLedger         = require('./ops-ledger');
 const { migrateOrchestration } = require('./workflows');
+const { resolveSkills, skillsPromptBlock } = require('./skills');
+const { runInProject } = require('./project-runner');
 const crypto2           = crypto; // alias for ops id generation
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -297,30 +299,12 @@ class OrchestrationExecutor extends EventEmitter {
     return this._getAllAgents().find(a => a.name === agentName) || null;
   }
 
-  _getContextFile() {
-    // Use project.aiProvider to determine which context file format this project uses.
-    // cfg.aiProvider is the execution engine and is irrelevant here.
-    const projectProvider = this.project.aiProvider || 'claude';
-
-    const candidates = projectProvider === 'github'
-      ? [path.join(this.project.path, '.github', 'copilot-instructions.md')]
-      : projectProvider === 'both'
-        ? [
-            path.join(this.project.path, 'CLAUDE.md'),
-            path.join(this.project.path, '.claude', 'CLAUDE.md'),
-            path.join(this.project.path, '.github', 'copilot-instructions.md'),
-          ]
-        : [
-            path.join(this.project.path, 'CLAUDE.md'),
-            path.join(this.project.path, '.claude', 'CLAUDE.md'),
-          ];
-
-    for (const fp of candidates) {
-      if (fs.existsSync(fp)) {
-        try { return fs.readFileSync(fp, 'utf8'); } catch {}
-      }
-    }
-    return '';
+  // Root nodes get the project context by default; the rest only when the connection asks for it.
+  // Where it comes from (the CLI's own AGENTS.md/CLAUDE.md… or pasted in the prompt) is project-runner's call.
+  _includesProjectContext(node) {
+    return node.dependsOn.length === 0
+      ? node.dataFlow?.projectContext !== false
+      : node.dataFlow?.projectContext === true;
   }
 
   // ── Prompt building ───────────────────────────────────────────────────────
@@ -330,25 +314,9 @@ class OrchestrationExecutor extends EventEmitter {
     const agent       = this._getAgent(agentName);
     // A node is "last" if no other node depends on it
     const isLastNode  = !this.orchestration.nodes.some(n => n.dependsOn.includes(node.id));
-    const isRoot      = node.dependsOn.length === 0;
 
     let prompt = agent?.system ||
       `Eres el agente "${agentName}". Realiza las tareas relacionadas con tu especialidad.`;
-
-    // Project context: root nodes include it by default; non-root only if explicitly requested
-    const includeContext = isRoot
-      ? (node.dataFlow?.projectContext !== false)
-      : (node.dataFlow?.projectContext === true);
-
-    if (includeContext) {
-      const contextFile = this._getContextFile();
-      if (contextFile) {
-        const truncated = contextFile.length > MAX_CONTEXT_FILE_CHARS
-          ? contextFile.slice(0, MAX_CONTEXT_FILE_CHARS) + '\n[CLAUDE.md truncado]'
-          : contextFile;
-        prompt += `\n\n# CONTEXTO DEL PROYECTO\n${truncated}`;
-      }
-    }
 
     // Fixed context lives on the node itself in the DAG model
     const fc = node.contextExtra?.fixed;
@@ -369,18 +337,12 @@ class OrchestrationExecutor extends EventEmitter {
       }
     }
 
-    // Skills injection
-    if (agent?.skills?.length > 0) {
-      try {
-        const { listAllSkills } = require('./skills');
-        const allSkills = listAllSkills();
-        for (const skillName of agent.skills) {
-          const skill = allSkills.find(s => s.name === skillName);
-          if (skill?.content?.trim()) {
-            prompt += `\n\n# SKILL: ${skill.name}\n${skill.content.trim()}`;
-          }
-        }
-      } catch {}
+    try {
+      const nodeSkills = resolveSkills(this.project, agent);
+      if (nodeSkills.length) this._log('info', `Skills para "${node.agentName}": ${nodeSkills.map(s => s.name).join(', ')}`);
+      prompt += skillsPromptBlock(nodeSkills);
+    } catch (e) {
+      this._log('warn', `No se pudieron cargar las skills: ${e.message}`);
     }
 
     if (!isLastNode) prompt += prompts.agentHandoffInstruction();
@@ -618,7 +580,7 @@ class OrchestrationExecutor extends EventEmitter {
 
     const cfg      = readConfig();
     const provider = cfg.aiProvider || 'cli';
-    if (!CLI_PROVIDERS.includes(provider)) {
+    if (!isNativeCLI(provider, cfg)) {
       const needsBrowser = nodes.some(node => {
         const a = allAgents.find(x => x.name === node.agentName);
         return Array.isArray(a?.tools) && a.tools.some(t => t.startsWith('browser_'));
@@ -684,7 +646,7 @@ class OrchestrationExecutor extends EventEmitter {
    * Gates are NOT handled here — they are resolved at the level boundary in execute().
    */
   async _executeNode(node, agentOutputs, stepIndex, opts = {}) {
-    const { gitAvailable, startTime, orchTimeout, contextFile, orchestrationUsesBrowser } = opts;
+    const { gitAvailable, startTime, orchTimeout, orchestrationUsesBrowser } = opts;
     const { orchestration } = this;
     const { agentName }     = node;
 
@@ -769,76 +731,56 @@ class OrchestrationExecutor extends EventEmitter {
       const provider       = cfg.aiProvider || 'cli';
       const agent          = this._getAgent(agentName);
       const agentUsesBrowser = Array.isArray(agent?.tools) && agent.tools.some(t => t.startsWith('browser_'));
-      const CLI_NATIVE     = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
-      const isCustomCLI    = (cfg.customProviders || []).some(p => p.id === provider && p.type === 'cli');
-      const useNativeCLI   = CLI_NATIVE.includes(provider) || isCustomCLI;
+      const useNativeCLI   = isNativeCLI(provider, cfg);
       const stepRemaining  = Math.max(10_000, orchTimeout - (Date.now() - startTime));
 
-      let response = '', inputTokens = 0, outputTokens = 0, stepCostUSD = 0;
-
-      // Resolve MCP servers for this agent and acquire (start + refcount)
-      const agentMcpServers = mcp.getServersForAgent(agent, this.project.id);
-      const mcpNames = Object.keys(agentMcpServers);
-      const hasMcp = mcpNames.length > 0;
-      if (hasMcp) {
-        try { await mcp.acquireServers(mcpNames, this.project.id); }
-        catch (e) { this._log('warn', `MCP acquire error: ${e.message}`); }
-      }
-
-      if (useNativeCLI) {
-        let browserContext = '';
-        if (agentUsesBrowser) {
-          try {
-            const browser  = require('./browser');
-            const status   = await browser.getStatus();
-            if (!status.connected) {
-              const installed = browser.listInstalledBrowsers();
-              const preferred = installed.find(b => b.engine === 'chromium') || installed[0];
-              if (preferred) await browser.launchBrowserWithCdp(preferred.key, status.cdpPort || 9222);
-            }
-          } catch (e) { this._log('warn', `No se pudo lanzar el navegador: ${e.message}`); }
-
-          if (!this.cancelled) {
-            this._log('info', `Esperando confirmación del usuario (autenticación en el navegador)…`);
-            await this._pauseForBrowser(stepIndex, agentName);
+      // Native CLIs drive the browser themselves: launch it, let the user log in, pass the page state
+      let browserContext = '';
+      if (useNativeCLI && agentUsesBrowser) {
+        try {
+          const browser  = require('./browser');
+          const status   = await browser.getStatus();
+          if (!status.connected) {
+            const installed = browser.listInstalledBrowsers();
+            const preferred = installed.find(b => b.engine === 'chromium') || installed[0];
+            if (preferred) await browser.launchBrowserWithCdp(preferred.key, status.cdpPort || 9222);
           }
-          if (this.cancelled) throw new Error('Ejecución cancelada');
-          browserContext = await this._buildBrowserContext();
-        }
+        } catch (e) { this._log('warn', `No se pudo lanzar el navegador: ${e.message}`); }
 
-        const fullPrompt = `${systemPrompt}${browserContext}\n\n---\n\n${userMessage}`;
-        const extraArgs  = provider === 'cli'
-          ? ['--dangerously-skip-permissions', '--max-turns', String(orchestration.executionConfig?.maxTurns || 10)]
-          : [];
-        const rich = await callAIRich(fullPrompt, { timeout: stepRemaining, extraArgs, cwd: this.project.path, mcpServers: agentMcpServers });
-        response = rich.text; inputTokens = rich.inputTokens; outputTokens = rich.outputTokens; stepCostUSD = rich.costUSD;
-
-      } else {
-        const cliResult = await callAIWithSubsystemCLI(userMessage, agent?.system || '', {
-          projectPath: this.project.path, projectContext: contextFile,
-          provider, maxTurns: orchestration.executionConfig?.maxTurns || 10,
-          timeout: stepRemaining, useBrowser: orchestrationUsesBrowser,
-          mcpServers: agentMcpServers, projectId: this.project.id,
-        });
-        if (!cliResult.success && cliResult.error) {
-          if (cliResult.finalResponse?.trim()) {
-            this._log('warn', `${cliResult.error} — usando respuesta parcial`);
-          } else throw new Error(cliResult.error);
+        if (!this.cancelled) {
+          this._log('info', `Esperando confirmación del usuario (autenticación en el navegador)…`);
+          await this._pauseForBrowser(stepIndex, agentName);
         }
-        response = cliResult.finalResponse || cliResult.result || '';
-        inputTokens = cliResult.tokens?.input || 0; outputTokens = cliResult.tokens?.output || 0;
-        stepCostUSD = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', inputTokens, outputTokens);
+        if (this.cancelled) throw new Error('Ejecución cancelada');
+        browserContext = await this._buildBrowserContext();
       }
 
+      const run = await runInProject(this.project, {
+        systemPrompt: systemPrompt + browserContext,
+        userMessage,
+        includeContext: this._includesProjectContext(node),
+        maxTurns:   orchestration.executionConfig?.maxTurns || 10,
+        timeout:    stepRemaining,
+        model:      agent?.model,
+        mcpServers: mcp.getServersForAgent(agent, this.project.id),
+        useBrowser: orchestrationUsesBrowser,
+        log:        (level, msg) => this._log(level, msg),
+      });
+      const response = run.text;
+      const { inputTokens, outputTokens, costUnavailable } = run;
+      let stepCostUSD = run.costUSD;
+
+      // Claude without reported usage: estimate from the response length at the agent model's price
       let costIsEstimated = false;
-      if (stepCostUSD === 0 && response.trim().length > 0) {
+      if (!costUnavailable && stepCostUSD === 0 && response.trim().length > 0) {
         const outToks = Math.ceil(response.length / 4);
         stepCostUSD   = calcAnthropicCost(agent?.model || 'claude-sonnet-4-20250514', 0, outToks);
         costIsEstimated = true;
       }
 
       this._log('info', `Tokens entrada=${inputTokens} salida=${outputTokens}` +
-        (stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}${costIsEstimated ? ' (est.)' : ''}` : ''));
+        (costUnavailable ? ' coste no disponible'
+          : stepCostUSD > 0 ? ` coste~$${stepCostUSD.toFixed(5)}${costIsEstimated ? ' (est.)' : ''}` : ''));
 
       const filesModified = snapshot ? await this._detectChanges(snapshot) : [];
       if (filesModified.length > 0) this._log('info', `${filesModified.length} archivo(s) modificado(s)`);
@@ -853,7 +795,7 @@ class OrchestrationExecutor extends EventEmitter {
         output:        { response: cleanResponse, handoff: handoff || undefined },
         filesModified,
         tokensUsed:    { input: inputTokens, output: outputTokens },
-        estimatedCost: stepCostUSD, costIsEstimated,
+        estimatedCost: stepCostUSD, costIsEstimated, costUnavailable,
         duration:      Date.now() - stepStart,
         status:        'success',
         backupPath:    snapshot?.snapshotPath || null,
@@ -862,7 +804,7 @@ class OrchestrationExecutor extends EventEmitter {
 
       const agentOutput = {
         agentName, response: cleanResponse, handoff, filesModified,
-        estimatedCost: stepCostUSD, costIsEstimated,
+        estimatedCost: stepCostUSD, costIsEstimated, costUnavailable,
         tokensUsed: { input: inputTokens, output: outputTokens },
         model: agent?.model || null,
       };
@@ -919,11 +861,9 @@ class OrchestrationExecutor extends EventEmitter {
         } catch (e) { this._log('warn', `Git checkpoint falló: ${e.message}`); }
       }
 
-      if (hasMcp) mcp.releaseServers(mcpNames);
       return { stepResult, agentOutput };
 
     } catch (err) {
-      if (hasMcp) mcp.releaseServers(mcpNames);
       this._log('error', `Error en "${agentName}": ${err.message}`);
       const stepResult = {
         stepIndex, nodeId: node.id, agentName,
@@ -979,8 +919,7 @@ class OrchestrationExecutor extends EventEmitter {
     const agentOutputs = {};
     let   stepsCompleted = 0;
 
-    const contextFile = this._getContextFile();
-    const orchestrationUsesBrowser = !CLI_PROVIDERS.includes(provider) && (() => {
+    const orchestrationUsesBrowser = !isNativeCLI(provider, cfg) && (() => {
       const all = this._getAllAgents();
       return nodes.some(n => {
         const a = all.find(x => x.name === n.agentName);
@@ -1018,7 +957,7 @@ class OrchestrationExecutor extends EventEmitter {
       // Run all nodes in this level in parallel
       const levelSettled = await Promise.allSettled(
         level.map(node => this._executeNode(node, agentOutputs, stepCounter++, {
-          gitAvailable, startTime, orchTimeout, contextFile, orchestrationUsesBrowser,
+          gitAvailable, startTime, orchTimeout, orchestrationUsesBrowser,
         })),
       );
 
@@ -1091,7 +1030,7 @@ class OrchestrationExecutor extends EventEmitter {
           delete agentOutputs[gatedNode.id];
 
           const reResult = await this._executeNode(gatedNode, agentOutputs, nodeResult.stepIndex, {
-            gitAvailable, startTime, orchTimeout, contextFile, orchestrationUsesBrowser,
+            gitAvailable, startTime, orchTimeout, orchestrationUsesBrowser,
           });
           if (reResult.stepResult) {
             this.results.push(reResult.stepResult);
@@ -1120,7 +1059,7 @@ class OrchestrationExecutor extends EventEmitter {
     const totalIn          = this.results.reduce((s, r) => s + (r.tokensUsed?.input  || 0), 0);
     const totalOut         = this.results.reduce((s, r) => s + (r.tokensUsed?.output || 0), 0);
     const totalCost        = this.results.reduce((s, r) => s + (r.estimatedCost || 0), 0);
-    const totalCostIsApprox = this.results.some(r => r.costIsEstimated);
+    const totalCostIsApprox = this.results.some(r => r.costIsEstimated || r.costUnavailable);
 
     const executionResult = {
       orchestrationId: orchestration.id, projectId: this.project.id,

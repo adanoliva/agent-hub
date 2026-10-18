@@ -307,120 +307,28 @@ function getStatus() {
   return { running };
 }
 
-// ── CLI settings sync ─────────────────────────────────────────────────────────
+// ── MCP for native CLIs ───────────────────────────────────────────────────────
 
-/**
- * Returns extra CLI arguments to inject MCP servers for CLIs that support
- * per-invocation MCP flags (e.g. aider --mcp-server).
- * Returns an empty array for CLIs without this support.
- *
- * @param {string} provider - CLI provider id ('aider-cli', 'gemini-cli', etc.)
- * @param {Record<string, object>} servers
- * @returns {string[]} extra args to pass to the CLI spawn
- */
-function getMcpExtraArgs(provider, servers) {
-  const entries = Object.entries(servers);
-  if (entries.length === 0) return [];
+// CLIs that receive the agent's MCP servers when spawned (`claude --mcp-config`, `copilot --additional-mcp-config`)
+const NATIVE_MCP_PROVIDERS = ['cli', 'copilot-cli'];
 
-  switch (provider) {
-    case 'aider-cli': {
-      // aider supports: --mcp-server '{"name":"github","command":"npx",...}'
-      return entries.flatMap(([name, cfg_]) => {
-        if (cfg_.type === 'url') {
-          return ['--mcp-server', JSON.stringify({ name, type: 'url', url: resolveEnv(cfg_.url) })];
-        }
-        return ['--mcp-server', JSON.stringify({
-          name,
-          command: resolveEnv(cfg_.command),
-          args:    (cfg_.args || []).map(resolveEnv),
-          env:     resolveEnvMap(cfg_.env),
-        })];
-      });
-    }
-    // cline-cli has its own MCP config at ~/.cline/config.json — managed separately
-    // goose-cli, codex-cli, copilot-cli: no MCP flags; will use prompt injection via subsystem
-    default:
-      return [];
-  }
-}
-
-/**
- * Syncs MCP servers for Gemini CLI by writing ~/.gemini/settings.json.
- * Gemini CLI reads mcpServers from its own settings file, same shape as Claude CLI.
- */
-function syncGeminiCliSettings(servers) {
-  const os = require('os');
-  const geminiDir  = path.join(os.homedir(), '.gemini');
-  const settingsPath = path.join(geminiDir, 'settings.json');
-
-  let existing = {};
-  try {
-    if (fs.existsSync(settingsPath)) existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  } catch { /* start fresh */ }
-
+// A temp file per run: inline JSON gets mangled by cmd.exe through npm .cmd shims, and the project's or
+// user's own MCP settings must not be rewritten. It holds resolved secrets → the caller deletes it.
+function writeMcpConfigFile(provider, servers) {
+  const entries = Object.entries(servers || {});
+  if (entries.length === 0) return null;
+  // Copilot wants type local|http and an explicit tool filter (shape written by `copilot mcp add`)
+  const copilot = provider === 'copilot-cli';
   const mcpServers = {};
-  for (const [name, cfg_] of Object.entries(servers)) {
-    if (cfg_.type === 'url') {
-      mcpServers[name] = { type: 'url', url: resolveEnv(cfg_.url), headers: resolveEnvMap(cfg_.headers) };
-    } else {
-      mcpServers[name] = { command: resolveEnv(cfg_.command), args: (cfg_.args || []).map(resolveEnv), env: resolveEnvMap(cfg_.env) };
-    }
+  for (const [name, c] of entries) {
+    mcpServers[name] = c.type === 'url'
+      ? { type: 'http', url: resolveEnv(c.url), headers: resolveEnvMap(c.headers) }
+      : { ...(copilot && { type: 'local' }), command: resolveEnv(c.command), args: (c.args || []).map(resolveEnv), env: resolveEnvMap(c.env) };
+    if (copilot) mcpServers[name].tools = ['*'];
   }
-
-  try {
-    if (!fs.existsSync(geminiDir)) fs.mkdirSync(geminiDir, { recursive: true });
-    fs.writeFileSync(settingsPath, JSON.stringify({ ...existing, mcpServers }, null, 2), 'utf8');
-  } catch (e) {
-    console.warn(`[mcp] Could not write Gemini CLI settings: ${e.message}`);
-  }
-}
-
-/**
- * Writes (or updates) the mcpServers section in {projectPath}/.claude/settings.json
- * so the Claude CLI picks up the configured servers automatically.
- *
- * @param {string} projectPath
- * @param {Record<string, object>} servers - merged servers for this execution
- */
-function syncCliSettings(projectPath, servers) {
-  if (!projectPath || typeof projectPath !== 'string') return;
-
-  const claudeDir = path.join(projectPath, '.claude');
-  const settingsPath = path.join(claudeDir, 'settings.json');
-
-  let existing = {};
-  try {
-    if (fs.existsSync(settingsPath)) {
-      existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-    }
-  } catch { /* start fresh if corrupt */ }
-
-  // Build mcpServers block with env vars resolved inline for the CLI
-  const mcpServers = {};
-  for (const [name, cfg_] of Object.entries(servers)) {
-    if (cfg_.type === 'url') {
-      mcpServers[name] = {
-        type:    'url',
-        url:     resolveEnv(cfg_.url),
-        headers: resolveEnvMap(cfg_.headers),
-      };
-    } else {
-      mcpServers[name] = {
-        command: resolveEnv(cfg_.command),
-        args:    (cfg_.args || []).map(resolveEnv),
-        env:     resolveEnvMap(cfg_.env),
-      };
-    }
-  }
-
-  const updated = { ...existing, mcpServers };
-
-  try {
-    if (!fs.existsSync(claudeDir)) fs.mkdirSync(claudeDir, { recursive: true });
-    fs.writeFileSync(settingsPath, JSON.stringify(updated, null, 2), 'utf8');
-  } catch (e) {
-    console.warn(`[mcp] Could not write ${settingsPath}: ${e.message}`);
-  }
+  const file = path.join(require('os').tmpdir(), `agenthub-mcp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
+  fs.writeFileSync(file, JSON.stringify({ mcpServers }), 'utf8');
+  return file;
 }
 
 /**
@@ -706,9 +614,8 @@ module.exports = {
   listTools,
   callTool,
   getStatus,
-  syncCliSettings,
-  syncGeminiCliSettings,
-  getMcpExtraArgs,
+  NATIVE_MCP_PROVIDERS,
+  writeMcpConfigFile,
   buildMcpToolsBlock,
   listServers,
   addServer,

@@ -155,7 +155,7 @@ const PROJECT_PROVIDERS = {
     label: 'OpenAI (Cursor)',
     icon: 'ti-brain',
     agentDir: ['.openai', 'agents'],
-    contextFile: '.instructions.md',
+    contextFile: 'AGENTS.md',
     templateType: 'openai'
   }
 };

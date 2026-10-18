@@ -101,10 +101,6 @@ const DEFAULT_CONFIG = {
   // Custom Providers
   customProviders: [],
 
-  // CLI models
-  geminiCliModel: 'gemini-2.5-pro',
-  codexCliModel: 'o4-mini',
-
   closeAction: 'ask',  // 'ask' | 'tray' | 'quit'
   externalScriptsTimeoutMs: 60000,
   agentsDirectoryUrl:     'https://github.com/adanoliva/agents-directory',
@@ -165,6 +161,12 @@ function readConfig() {
         project.aiProviders = ['claude'];
         migrated = true;
       }
+    }
+    // Retired CLIs: Gemini CLI became Antigravity CLI; the unverified ones fall back to Claude Code
+    const RETIRED_CLI = { 'gemini-cli': 'antigravity-cli', 'codex-cli': 'cli', 'aider-cli': 'cli', 'cline-cli': 'cli', 'goose-cli': 'cli' };
+    if (RETIRED_CLI[cfg.aiProvider]) {
+      cfg.aiProvider = RETIRED_CLI[cfg.aiProvider];
+      migrated = true;
     }
     if (migrated) writeConfig(cfg);
 

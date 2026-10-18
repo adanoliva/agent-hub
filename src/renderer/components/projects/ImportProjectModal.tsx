@@ -23,7 +23,7 @@ export function ImportProjectModal({ onClose, onImported }: Props) {
   const getDefaultProviders = () => {
     const active = config?.aiProvider;
     if (active === 'github' || active === 'copilot-cli') return ['github'];
-    if (active === 'gemini-cli' || active === 'gemini-api') return ['gemini'];
+    if (active === 'antigravity-cli' || active === 'gemini-api') return ['gemini'];
     if (active === 'openai') return ['openai'];
     return ['claude'];
   };

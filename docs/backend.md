@@ -17,6 +17,7 @@
 7. [Gestión de proyectos (`projects.js`)](#7-gestión-de-proyectos-projectsjs)
 8. [Integración IA (`ai.js`)](#8-integración-ia-aijs)
 8b. [Prompts centralizados (`prompts.js`)](#8b-prompts-centralizados-promptsjs)
+8c. [Ejecución en proyecto (`project-runner.js`)](#8c-ejecución-en-proyecto-project-runnerjs)
 9. [Servicio de filesystem (`api-fs.js`)](#9-servicio-de-filesystem-api-fsjs)
 10. [Subsistema CLI (`subsystem-cli.js`)](#10-subsistema-cli-subsystem-clijs)
 11. [Orquestaciones — CRUD (`workflows.js`)](#11-orquestaciones--crud-workflowsjs)
@@ -53,7 +54,8 @@ Electron main process (Node.js)
   ├── agents-sync.js   ← sincronización con el Directorio de Agentes (GitHub)
   ├── skills.js        ← CRUD de skills (bloques de contexto inyectables)
   ├── projects.js      ← CRUD de proyectos, sync de agentes a proyectos
-  ├── ai.js            ← llamadas a IA (CLI / Anthropic API / GitHub)
+  ├── ai.js            ← llamadas a IA: adaptadores de CLI nativos + APIs
+  ├── project-runner.js ← ejecuta la IA dentro de un proyecto (orquestador, /run, chat)
   ├── api-fs.js        ← operaciones de filesystem para el Subsistema CLI
   ├── subsystem-cli.js ← CLI virtual multi-turno para providers API/GitHub
   ├── prompts.js       ← prompts centralizados para todas las operaciones IA
@@ -350,7 +352,7 @@ Express corre en el puerto `3737` (constante `PORT`). Todos los endpoints tienen
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/chat` | Conversación multi-turno `{ messages, systemPrompt }` → `{ reply }` |
+| POST | `/api/chat` | Conversación multi-turno `{ messages, systemPrompt, projectId? }` → `{ reply }`. Con `projectId` se ejecuta **dentro del proyecto en solo lectura** (`runInProject`, §8c): lee ficheros, contexto y skills, nunca modifica nada. Sin proyecto es una conversación de texto |
 | GET | `/api/chat/history?projectId=` | Carga historial (`cache/chat-{projectId}.json`) |
 | PUT | `/api/chat/history` | Guarda historial `{ projectId, messages }` |
 | DELETE | `/api/chat/history?projectId=` | Borra fichero de historial |
@@ -387,7 +389,6 @@ Endpoints bajo el prefijo `/api-fs`. Requieren que el proyecto exista en config.
 | POST | `/api-fs/projects/:id/files/write` | Escribe fichero con backup automático |
 | POST | `/api-fs/projects/:id/bash` | Ejecuta comando de la whitelist |
 | POST | `/api-fs/projects/:id/grep` | Busca patrón en ficheros |
-| POST | `/api-fs/projects/:id/execute-agent` | Ejecuta el loop completo del Subsistema CLI |
 
 ---
 
@@ -505,9 +506,25 @@ APP_DIR/agents/skills/
 | `deleteSkill(name)` | Elimina el fichero; lanza error si no existe |
 | `migrateSkillsFromSubdirs()` | Migra skills legacy desde subdirectorios a la raíz plana |
 
-### Inyección en ejecución
+### Inyección automática
 
-Cuando un agente se ejecuta (execute-task, orquestación, subsistema CLI), el motor lee `project.skills[]`, carga el contenido de cada skill y lo concatena al system prompt del agente antes de la llamada a la IA.
+Los agentes no declaran tecnologías: las skills se eligen solas en cada ejecución. Ocurre en orquestaciones, `/run` (CLI `agent-hub`) y el chat de proyecto. Funciones:
+
+- `detectProjectSkills(projectPath)`: lee los manifiestos de la raíz y de las subcarpetas de primer nivel (monorepos), sin entrar en `node_modules`, `dist`, `target`… Los mapea a skills con tablas:
+  - `package.json`: `NPM_SKILLS` y prefijos como `@aws-sdk/` → `aws`;
+  - contenido de `requirements.txt`/`pyproject.toml`, `pom.xml`/`build.gradle` y `composer.json`: `TEXT_SKILLS`;
+  - presencia de ficheros como `go.mod`, `Dockerfile`, `Chart.yaml` o `.github/workflows`: `FILE_SKILLS`;
+  - extensiones como `.tf`, `.csproj` o `.uproject`: `EXT_SKILLS`.
+- `resolveSkills(project, agent)`: une las detectadas, las de `project.skills[]` (añadidas a mano) y las de `agent.skills[]`. Devuelve solo las que existen en el catálogo.
+- `skillsPromptBlock(list)`: genera los bloques `# SKILL: <nombre>` que se concatenan al system prompt.
+
+Las skills genéricas (`owasp`, `clean-arch`, `api-rest`, `microservices`, `git-conventional`…) no se pueden detectar. Se añaden con `project.skills` o `agent.skills`. Todas las detectadas van a todos los agentes: un `front-coder` en un repo React + Spring también recibe `java-spring` (unos 150 tokens por skill).
+
+### Skills nativas de Claude Code
+
+`syncClaudeSkills(projectPath, list, previous)` escribe cada skill en `{proyecto}/.claude/skills/<nombre>/SKILL.md`. La `description` va entre comillas como YAML válido y termina en "Use when writing or reviewing <nombre> code". Claude Code las carga solo cuando las necesita, también fuera de Agent Hub.
+
+`projects.js` la invoca al crear, importar y sincronizar un proyecto con proveedor `claude`. Guarda los nombres escritos en `project.claudeSkills`, y la siguiente sincronización solo borra esos: las skills que el usuario creó a mano en `.claude/skills/` se respetan. Si el proyecto deja de usar `claude`, se eliminan las que escribió Agent Hub. Si el stack cambia (por ejemplo, una dependencia nueva), las skills nativas se actualizan en la siguiente sincronización del proyecto.
 
 ---
 
@@ -580,7 +597,8 @@ El resultado incluye `removed` (número de ficheros borrados), que la UI muestra
   id: 'p1234567890abc',
   name: 'Mi Proyecto',
   categoryId: 'frontend',
-  skills: ['react', 'tailwind', 'typescript'],  // skills inyectadas en agentes al ejecutar
+  skills: ['owasp'],                  // skills extra; las del stack se detectan solas (§5b)
+  claudeSkills: ['react', 'typescript'], // skills escritas en .claude/skills/ por la última sync
   path: 'C:/proyectos/mi-proyecto',
   description: '',
   status: 'active',                   // active | paused | archived
@@ -638,7 +656,11 @@ syncProject(projectId)
 | `claude` | `{path}/CLAUDE.md` |
 | `github` | `{path}/.github/copilot-instructions.md` |
 | `gemini` | `{path}/GEMINI.md` |
-| `openai` | `{path}/.instructions.md` |
+| **Común** (siempre, y proveedor `openai`) | `{path}/AGENTS.md` |
+
+`AGENTS.md` es el fichero que todos los motores leen por sí mismos: Claude Code, Copilot CLI y Antigravity CLI (comprobado con cada uno). `saveContextFile` lo escribe siempre junto a `CONTEXTO.md`, y `syncProject` lo crea desde `CONTEXTO.md` en proyectos anteriores (`ensureAgentsMd`). `.instructions.md` ya no se escribe: no lo leía ningún CLI.
+
+`readProjectContext(projectPath)` devuelve el primer fichero con contenido entre `AGENTS.md`, `CONTEXTO.md`, `CLAUDE.md`, `copilot-instructions.md` y `GEMINI.md`. Es el contexto que reciben los proveedores API.
 
 ---
 
@@ -648,24 +670,36 @@ syncProject(projectId)
 
 | Provider | Config necesaria | Backend |
 |---|---|---|
-| `cli` | Claude Code instalado en PATH | Spawn de proceso `claude --print` |
+| `cli` | Claude Code en PATH | `claude --print --output-format json` |
+| `copilot-cli` | Copilot CLI en PATH (`npm i -g @github/copilot`) | `copilot -s` |
+| `antigravity-cli` | Antigravity CLI en PATH (`agy`, sucesor de Gemini CLI) | `agy --output-format json --print` |
 | `api` | `config.apiKey` (Anthropic) | `@anthropic-ai/sdk` |
-| `github` | `config.githubToken` | `fetch` a Azure inference endpoint |
-| **Nativos** | DeepSeek, Groq, OpenRouter, Perplexity | `fetch` compatible OpenAI |
-| **CLIs** | Aider, Cline, Goose | Spawn de proceso nativo |
-| **Custom** | Dinámicos (API/CLI) | Soporta Azure, Headers custom |
+| `github` y compatibles OpenAI | token / API key | `fetch` compatible OpenAI |
+| **Custom** | Dinámicos (API/CLI) | Soporta Azure, headers custom |
 
-Todos los procesos externos (CLIs de IA, servidores MCP stdio, `code`) se lanzan con **`cross-spawn`**, nunca con `shell: true`. En Windows resuelve el binario y, si es un shim `.cmd`, escapa los argumentos para `cmd.exe`, así que un prompt con `&`, `|` o `"` no se interpreta como comando. Limitación: `cmd.exe` corta los argumentos en el primer salto de línea cuando el CLI es un `.cmd` (con un `.exe` no pasa). Por eso el prompt también se envía por stdin.
+Solo hay CLIs verificados de punta a punta. Gemini CLI, Codex, Aider, Cline y Goose se retiraron: `readConfig()` migra `gemini-cli` → `antigravity-cli` y el resto → `cli`.
 
-### `callAI(prompt, systemPrompt?)`
+### Adaptadores de CLI nativos (`CLI_ADAPTERS`)
 
-Punto de entrada único. Lee `config.aiProvider` y delega a la rama correspondiente. Captura uso de tokens y llama a `trackUsage()`.
+Cada CLI tiene tres modos. Sin `cwd`, el proceso corre en una carpeta neutra (`%TEMP%/agent-hub-ai`), así que nunca carga ni toca los ficheros de Agent Hub.
 
-### `callCLI(prompt, opts?)`
+| Modo | Uso | Claude | Copilot | Antigravity |
+|---|---|---|---|---|
+| `agent` | Orquestaciones, `/run` | `--dangerously-skip-permissions --max-turns N [--model]` | `--allow-all-tools` | `--dangerously-skip-permissions` |
+| `read` | Chat de proyecto, generar contexto, sugerencias de proyecto | `--tools Read,Grep,Glob` | `--allow-all-tools --deny-tool=write --deny-tool=shell` | No hay forma de impedir que escriba (`--mode plan` aún edita): pasa a `text` en la carpeta neutra |
+| `text` | Generar prompts, skills, optimizar, sugerencias, chat libre | `--tools ""` | igual que `read` | `--mode plan` |
 
-- `opts.extraArgs` — argumentos adicionales para `claude --print`.
-- `opts.cwd` — directorio de trabajo del proceso spawneado.
-- `opts.timeout` — timeout en ms (por defecto 60 000).
+Modo por defecto: `read` si hay `cwd`, `text` si no. `contextFiles` de cada adaptador lista los ficheros de instrucciones que ese CLI carga solo desde su `cwd`. Se comprobó con cada CLI: Claude lee `AGENTS.md` y `CLAUDE.md`; Copilot, además, `copilot-instructions.md` y `GEMINI.md`; Antigravity, `AGENTS.md` y `GEMINI.md`.
+
+**Cómo recibe el prompt:** Claude y Copilot por stdin. Son shims `.cmd` de npm, y `cmd.exe` cortaría un argumento en el primer salto de línea. `agy` es un `.exe` sin entrada por stdin, así que el prompt va como argumento, con un límite de 30 000 caracteres por el tope de línea de comandos de Windows.
+
+**Uso de tokens:** Claude y Antigravity lo informan en su JSON. Copilot y los CLIs personalizados se aproximan (longitud/4).
+
+Todos los procesos externos (CLIs de IA, servidores MCP stdio, `code`) se lanzan con **`cross-spawn`**, nunca con `shell: true`: un prompt con `&`, `|` o `"` no se interpreta como comando.
+
+### `callAI(prompt, opts?)`
+
+Punto de entrada único. Lee `config.aiProvider` y delega: `callNativeCLI(provider, prompt, opts)` para los CLIs o la API correspondiente. `opts`: `mode`, `cwd`, `timeout`, `maxTurns`, `model`, `mcpServers`. `callAIRich` devuelve además `{ inputTokens, outputTokens, costUSD }`. `callAIChat` / `callAIChatWithTokens` pasan la conversación a los CLIs como transcripción (`flattenChat`) en modo `text`.
 
 ### Funciones de generación
 
@@ -685,6 +719,8 @@ resetSessionUsage()
 resetAllUsage()
 getSessionUsage()  // → { cumulative, session }
 ```
+
+Solo hay precio conocido para Claude CLI (lo informa) y la API de Anthropic. El resto (Copilot, Antigravity, APIs no Anthropic, custom) cuenta tokens pero **no se le asigna coste**: el paso lleva `costUnavailable: true`, la UI muestra "coste n/d" y `budget-guard` marca el total como aproximado (los infravalora).
 
 **Coste estimado** (solo para `api`):
 
@@ -720,6 +756,18 @@ El parámetro `language` acepta `'es'` o `'en'`. Los skills de código se genera
 
 ---
 
+## 8c. Ejecución en proyecto (`project-runner.js`)
+
+`runInProject(project, { userMessage, systemPrompt, mode, includeContext, maxTurns, timeout, model, mcpServers, useBrowser, log })` es el único camino para ejecutar la IA sobre un proyecto, sea cual sea el proveedor. Lo usan el orquestador, `POST /projects/:id/run` y el chat de proyecto.
+
+- **CLI nativo**: se lanza en la carpeta del proyecto, como desde un terminal. El contexto solo se pega en el prompt si el CLI no tiene su propio fichero en el proyecto (`contextForPrompt`); si lo tiene, lo carga él y no se duplica. `model` solo se pasa a Claude, porque los alias de agente son de Claude.
+- **API**: Subsistema CLI (§10) con el contexto de `readProjectContext` en el system prompt (hasta 20 000 caracteres).
+- **`mode: 'read'`**: el CLI usa sus flags de solo lectura, y el subsistema rechaza `write` y limita `bash` a comandos de lectura. Un CLI sin `readOnly` en su adaptador (Antigravity, CLIs personalizados) va por el subsistema: Agent Hub ejecuta las herramientas de lectura y el CLI solo responde, desde la carpeta neutra.
+- **MCP**: con un CLI que no lo soporta, avisa por `log` y devuelve los nombres en `mcpIgnored`.
+- **Devuelve** `{ text, inputTokens, outputTokens, costUSD, costUnavailable, mcpIgnored, filesModified }`. `filesModified` es `null` con CLIs: el orquestador compara el disco.
+
+---
+
 ## 9. Servicio de filesystem (`api-fs.js`)
 
 Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta antes de cada operación.
@@ -730,7 +778,10 @@ Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta an
 - **Directorios excluidos**: `node_modules`, `dist`, `.git`, `.next`, `build`, etc.
 - **Archivos binarios**: `.exe`, `.bin`, imágenes, audio, vídeo, fuentes, comprimidos.
 - **Tamaño máximo**: 10 MB por fichero.
-- **Bash whitelist**: solo `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`. Además se rechazan:
+- **Bash whitelist**: en solo lectura, `ls`, `dir`, `find`, `grep`, `cat`, `type`, `wc`, `head`, `tail`, `file`, `echo`, `pwd`.
+  - **Modo agente** (`{ exec: true }`): añade toolchains para compilar, testear y hacer lint, como un CLI nativo en un terminal. Son `npm`, `npx`, `pnpm`, `yarn`, `node`, `tsc`, `python`, `pytest`, `go`, `cargo`, `dotnet`, `mvn`, `gradle`, `make`, `git`, `composer`… También admite `./gradlew` y `mvnw.cmd`. Timeout de 5 min y se conserva el final de la salida. Ejecutan scripts del proyecto: es el mismo nivel de confianza que `claude --dangerously-skip-permissions`.
+  - Siempre se rechazan:
+  - `rm`, `del`/`format` como comando, `pip install` (Python global), instalaciones `-g/--global`, `git push|clone|clean|reset --hard`, `curl`, `wget`;
   - encadenado, redirección y expansión: `; & | \` < > ^ % $(`, y los saltos de línea;
   - acciones de `find` con efectos (`-exec`, `-delete`, `-fprint`…);
   - argumentos que apuntan fuera del proyecto (`..`, `~`, `C:`, `\ruta`, `//unc`, `/c/...`).
@@ -743,7 +794,7 @@ Encapsula todas las operaciones de I/O para el Subsistema CLI. Valida la ruta an
 | `readFile(projectPath, filePath)` | Lee fichero. Devuelve `{ path, content, size, hash, language, modified }` |
 | `writeFile(projectPath, filePath, content)` | Escribe con backup automático. Devuelve `{ saved, path, hash, backupPath }` |
 | `listFiles(projectPath, pattern?)` | Recorre el proyecto (máx. profundidad 5). Máx. 500 resultados. `pattern`: `*.ts` (a cualquier profundidad), glob completo `src/**/*.ts` (`path.matchesGlob`) o prefijo de directorio `src` |
-| `bashCommand(projectPath, command)` | Ejecuta comando de la whitelist. Timeout 30 s |
+| `bashCommand(projectPath, command, { exec? })` | Ejecuta un comando de la whitelist. Solo lectura: 30 s. `exec`: añade toolchains, 5 min |
 | `grepFiles(projectPath, pattern, glob?)` | Búsqueda regex. Máx. 300 coincidencias |
 
 ---
@@ -770,6 +821,8 @@ TOOL: grep
 PATTERN: export const
 FILE: src/**/*.ts
 ```
+
+Con `readOnly: true` (chat de proyecto) el prompt no ofrece `WRITE`, `write` devuelve `READ_ONLY` y `bash` se limita a lectura. Sin él, `bash` usa el modo agente de `api-fs`.
 
 ### Loop multi-turno
 
@@ -867,9 +920,10 @@ HANDOFF: {"done":"...","changed":["ruta"],"issues":["..."],"next":"..."}
 
 ### Construcción del prompt del paso
 
-- **Paso 0**: contextos temporales del nodo de entrada + tarea fija. Incluye `CLAUDE.md` si `dataFlow.projectContext !== false`.
+- **Paso 0**: contextos temporales del nodo de entrada + tarea fija.
+- **Contexto del proyecto**: los nodos raíz lo reciben salvo `dataFlow.projectContext === false`, y el resto solo con `=== true` (`_includesProjectContext`). Cómo llega lo decide `runInProject` (§8c): un CLI lo carga de su fichero (`AGENTS.md`, `CLAUDE.md`…) y con API va en el prompt. Antes se recortaba a 2 000 caracteres y se duplicaba con API.
 - **Pasos i > 0**: handoff del agente anterior + archivos modificados + contextos temporales del nodo.
-- **Skills de agente**: si el agente tiene `skills[]` en su frontmatter, su contenido se concatena al system prompt antes de la llamada.
+- **Skills**: `resolveSkills(project, agent)` (§5b), es decir, las del stack detectado, las del proyecto y las del agente. El log registra cuáles se inyectaron en cada nodo. Con proveedores API también llegan (antes el subsistema solo recibía `agent.system`).
 - **Límite**: `maxContextChars` (defecto 4 000) trunca el mensaje de usuario si supera el límite.
 
 ### Timeout global
@@ -896,11 +950,10 @@ Si `orchestration.nodes[i].gateAfter === true` y no es el último paso:
 
 `_resumeFromStep` se establece antes de llamar a `execute()`. Los pasos `i < _resumeFromStep` se restauran desde `_executionState.steps[i]` sin llamar a la IA. La ejecución continúa normalmente desde el punto de interrupción.
 
-### Ejecución CLI vs. API/GitHub
+### Ejecución CLI vs. API
 
-- **CLI nativo** (`cli`, `gemini-cli`, `aider-cli`…): `callAIRich` con `cwd` del proyecto y timeout restante.
-- **API/GitHub/Custom**: `callAIWithSubsystemCLI` con loop multi-turno.
-- Si el agente usa herramientas `browser_*`: el CLI nativo lanza el navegador CDP automáticamente; el subsistema CLI inyecta las cookies y el contenido de la página activa en el prompt.
+Cada paso IA llama a `runInProject` en modo `agent` (§8c), con el `model` del agente, sus servidores MCP y el tiempo restante.
+- Si el agente usa herramientas `browser_*`, el CLI nativo lanza el navegador CDP y se añade el estado de la página al system prompt. El subsistema CLI inyecta las cookies y el contenido de la página activa.
 
 ---
 
@@ -1035,13 +1088,16 @@ Módulo central de integración MCP. Gestiona conexiones JSON-RPC 2.0 (stdio o H
 
 ### Estrategia por proveedor
 
+`NATIVE_MCP_PROVIDERS` (`cli`, `copilot-cli`) son los CLIs que reciben de verdad los servidores MCP del agente. Con otro CLI nativo (Antigravity, custom) `runInProject` deja un aviso en el log y `/run` devuelve `mcpIgnored` (el CLI `agent-hub` lo imprime por stderr).
+
 | Proveedor | Mecanismo |
 |---|---|
-| `cli` (Claude Code) | `syncCliSettings(cwd, servers)` escribe `{projectPath}/.claude/settings.json` con `mcpServers` antes del spawn |
-| `gemini-cli` | `syncGeminiCliSettings(servers)` escribe `~/.gemini/settings.json` con `mcpServers` |
-| `aider-cli` | `getMcpExtraArgs(provider, servers)` devuelve `['--mcp-server', JSON.stringify({...})]` para inyectar como flags |
+| `cli` (Claude Code) | `--mcp-config <fichero>` |
+| `copilot-cli` | `--additional-mcp-config @<fichero>` (`type: local\|http` + `tools: ["*"]`, el formato de `copilot mcp add`) |
 | `api` / `github` / custom API | Subsistema CLI: herramientas MCP inyectadas en el system prompt; loop multi-turno ejecuta `TOOL: mcp` |
-| Otros CLIs sin soporte nativo | Subsistema CLI con prompt injection |
+| `antigravity-cli`, custom CLI | Sin MCP (aviso) |
+
+`writeMcpConfigFile(provider, servers)` escribe un fichero temporal por ejecución, que se borra al acabar porque lleva los secretos ya resueltos. No se reescriben los ajustes del usuario ni del proyecto: antes se pisaban `.claude/settings.json` del proyecto y los servidores globales de `~/.gemini/settings.json`. Tampoco va JSON en línea, porque `cmd.exe` lo rompe al pasar por el shim `.cmd`.
 
 ### Pool de procesos con refcounting
 
@@ -1110,9 +1166,7 @@ mcp_servers: github, linear, postgres
 | `listTools(names, projectId)` | Descubre herramientas disponibles en los servidores |
 | `callTool(server, fn, input, projectId)` | Llama a una herramienta MCP |
 | `getStatus()` | Estado de todos los procesos en el pool |
-| `syncCliSettings(cwd, servers)` | Escribe `.claude/settings.json` con `mcpServers` |
-| `syncGeminiCliSettings(servers)` | Escribe `~/.gemini/settings.json` con `mcpServers` |
-| `getMcpExtraArgs(provider, servers)` | Devuelve flags CLI para proveedores con soporte per-invocation |
+| `writeMcpConfigFile(provider, servers)` | Fichero temporal con `mcpServers` para `claude --mcp-config` / `copilot --additional-mcp-config`; el llamante lo borra |
 | `buildMcpToolsBlock(tools)` | Genera el bloque de instrucciones MCP para system prompts |
 
 ### Endpoints REST
@@ -1254,11 +1308,14 @@ POST /api/projects/:id/run { agent, task }
   │
   server.js:
     ├── resolver agente (proyecto → global + section)
-    ├── leer CLAUDE.md / .claude/CLAUDE.md / copilot-instructions.md
-    ├── systemPrompt = agent.system + skills (project.skills ∪ agent.skills)
-    ├── CLI nativo → callAIRich(prompt, { cwd: project.path, mcpServers })
-    └── API/GitHub → callAIWithSubsystemCLI(task, systemPrompt, {...})
-  ← { result, agent, provider, durationMs }
+    ├── systemPrompt = agent.system + resolveSkills(project, agent)   ← stack detectado ∪ project.skills ∪ agent.skills
+    └── runInProject(project, { mode: 'agent', model, mcpServers })    ← §8c, igual que el orquestador
+  ← { result, agent, provider, skills, mcpIgnored, durationMs }   ← el CLI imprime "> Skills: …"
+
+POST /api/chat { messages, systemPrompt, projectId? }
+  ├── sin proyecto → callAIChat (texto, carpeta neutra)
+  └── con proyecto → runInProject(project, { mode: 'read', userMessage: flattenChat(messages) })
+                     systemPrompt += resolveSkills(project)
 ```
 
 ---

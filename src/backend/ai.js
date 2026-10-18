@@ -89,7 +89,16 @@ function calcAnthropicCost(model, inputTokens, outputTokens) {
 
 // ── Provider detection ────────────────────────────────────────────────────────
 
-const CLI_PROVIDERS          = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
+// Native CLIs verified end to end. `contextFiles`: instruction files each one loads by itself from its cwd
+// (checked with each CLI), so the project context is not pasted into the prompt again when one exists.
+// `readOnly`: the CLI can be forbidden to write. agy can't (its plan mode still edits files), so read-only
+// work never gives it the project folder.
+const CLI_ADAPTERS = {
+  'cli':             { bin: 'claude',  readOnly: true,  contextFiles: ['AGENTS.md', 'CLAUDE.md'] },
+  'copilot-cli':     { bin: 'copilot', readOnly: true,  contextFiles: ['AGENTS.md', '.github/copilot-instructions.md', 'CLAUDE.md', 'GEMINI.md'] },
+  'antigravity-cli': { bin: 'agy',     readOnly: false, contextFiles: ['AGENTS.md', 'GEMINI.md'] },
+};
+const CLI_PROVIDERS = Object.keys(CLI_ADAPTERS);
 const API_PROVIDERS          = ['api', 'openai', 'github', 'gemini-api', 'mistral', 'grok', 'deepseek', 'groq', 'openrouter', 'perplexity'];
 const GITHUB_GROUP_PROVIDERS = new Set(['github', 'copilot-cli']);
 
@@ -103,19 +112,8 @@ function whichBin(bin) {
 }
 
 async function checkAllCLIs() {
-  const [claude, gemini, codex, gh, aider, cline, goose] = await Promise.all([
-    whichBin('claude'), whichBin('gemini'), whichBin('codex'), whichBin('gh'),
-    whichBin('aider'), whichBin('cline'), whichBin('goose'),
-  ]);
-  return { 
-    'cli': claude, 
-    'gemini-cli': gemini, 
-    'codex-cli': codex, 
-    'copilot-cli': gh,
-    'aider-cli': aider,
-    'cline-cli': cline,
-    'goose-cli': goose,
-  };
+  const checks = await Promise.all(CLI_PROVIDERS.map(p => whichBin(CLI_ADAPTERS[p].bin)));
+  return Object.fromEntries(CLI_PROVIDERS.map((p, i) => [p, checks[i]]));
 }
 
 async function getProviderStatus() {
@@ -163,14 +161,6 @@ async function getProviderStatus() {
   return { provider, ready: false, cliChecks };
 }
 
-function isCLIAvailable() {
-  return new Promise((resolve) => {
-    execFile(process.platform === 'win32' ? 'where' : 'which', ['claude'], (err, stdout) => {
-      resolve(!err && stdout.trim().length > 0);
-    });
-  });
-}
-
 // ── Core AI call ──────────────────────────────────────────────────────────────
 
 /**
@@ -203,18 +193,9 @@ async function callAI(prompt, opts = {}) {
     return callOpenAICompat(prompt, null, customCfg, opts);
   }
 
-  // Check if it's a custom CLI provider
-  const customCLI = (cfg.customProviders || []).find(p => p.id === provider && p.type === 'cli');
-  if (customCLI) {
-    const args = customCLI.cliArgs || [];
-    return callGenericCLI(customCLI.cliBin, args, prompt, opts);
-  }
+  if (isNativeCLI(provider, cfg)) return (await callNativeCLI(provider, prompt, opts)).text;
 
   switch (provider) {
-    case 'cli':         return callCLI(prompt, opts);
-    case 'gemini-cli':  return callGeminiCLI(prompt, opts);
-    case 'codex-cli':   return callCodexCLI(prompt, opts);
-    case 'copilot-cli': return callCopilotCLI(prompt, opts);
     case 'api':         return callAPI(prompt, cfg.apiKey, opts);
     case 'openai':      return callOpenAICompat(prompt, null, {
                           baseUrl: 'https://api.openai.com/v1',
@@ -261,133 +242,154 @@ async function callAI(prompt, opts = {}) {
                           key:     cfg.perplexityKey,
                           model:   cfg.perplexityModel ?? 'sonar-reasoning-pro',
                         }, opts);
-    // ponytail: cmd.exe cuts args at the first newline when the CLI is a .cmd shim (.exe is fine); use a --message-file style flag if that bites
-    case 'aider-cli':   return callGenericCLI('aider', ['--message', prompt], prompt, opts);
-    case 'cline-cli':   return callGenericCLI('cline', ['--prompt', prompt], prompt, opts);
-    case 'goose-cli':   return callGenericCLI('goose', ['--prompt', prompt], prompt, opts);
     default: throw new Error(`Unknown AI provider: ${provider}`);
   }
 }
 
-// ── CLI backend ───────────────────────────────────────────────────────────────
+// ── Native CLI backends ───────────────────────────────────────────────────────
+// mode 'agent': edits files and runs commands · 'read': reads the project, never writes · 'text': plain
+// answer. Without cwd the CLI runs in a neutral folder, so it never loads or touches Agent Hub's own files.
 
-function callCLI(prompt, opts = {}) {
-  // Sync MCP servers to the project's .claude/settings.json before spawning
-  if (opts.cwd && opts.mcpServers && Object.keys(opts.mcpServers).length > 0) {
-    try {
-      const mcp = require('./mcp');
-      mcp.syncCliSettings(opts.cwd, opts.mcpServers);
-    } catch (e) {
-      console.warn('[ai] MCP sync failed:', e.message);
+const NEUTRAL_CWD = path.join(os.tmpdir(), 'agent-hub-ai');
+
+function isNativeCLI(provider, cfg = readConfig()) {
+  return !!CLI_ADAPTERS[provider] || (cfg.customProviders || []).some(p => p.id === provider && p.type === 'cli');
+}
+
+/** @returns {Promise<{ text, inputTokens, outputTokens, costUSD }>} */
+async function callNativeCLI(provider, prompt, opts = {}) {
+  const o = { ...opts, mode: opts.mode || (opts.cwd ? 'read' : 'text'), cwd: opts.cwd || NEUTRAL_CWD };
+  // A CLI that can't be kept from writing never reads inside a project: it answers from the prompt
+  if (o.mode === 'read' && !CLI_ADAPTERS[provider]?.readOnly) Object.assign(o, { mode: 'text', cwd: NEUTRAL_CWD });
+  ensureDir(o.cwd);
+  let r;
+  switch (provider) {
+    case 'cli':             r = await callClaudeCLI(prompt, o); break;
+    case 'copilot-cli':     r = await callCopilotCLI(prompt, o); break;
+    case 'antigravity-cli': r = await callAntigravityCLI(prompt, o); break;
+    default: {
+      // Custom CLI: the user defines the args, so there is no per-mode behaviour
+      const custom = readConfig().customProviders.find(p => p.id === provider);
+      r = estimatedUsage(await runCLI(custom.cliBin, custom.cliArgs || [], { ...o, stdin: prompt }));
     }
   }
+  trackUsage(r);
+  return r;
+}
 
+// CLIs that don't report usage: approximate tokens, never invent a cost
+function estimatedUsage(text) {
+  return { text: text.trim(), inputTokens: 0, outputTokens: Math.ceil(text.length / 4), costUSD: 0 };
+}
+
+/** Spawns a CLI and resolves its stdout. Rejects on non-zero exit, timeout or missing binary. */
+function runCLI(bin, args, { stdin, cwd, timeout = CALL_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
-    const timeout   = opts.timeout || CALL_TIMEOUT_MS;
-    const args      = ['--print', '--output-format', 'json'];
-    if (opts.extraArgs) args.push(...opts.extraArgs);
-    const claudeExe = 'claude';
-
-    const spawnOpts = {
+    const child = spawn(bin, args, {
+      cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-    };
-    if (opts.cwd) spawnOpts.cwd = opts.cwd;
-
-    const child = spawn(claudeExe, args, spawnOpts);
-
+      env: {
+        ...process.env,
+        CI: '1',          // tell CLIs they're running non-interactively
+        NO_COLOR: '1',    // disable ANSI color codes that pollute output
+        TERM: 'dumb',     // disable terminal features that require TTY
+      },
+    });
     let stdout = '';
     let stderr = '';
-
     child.stdout.on('data', d => { stdout += d.toString(); });
     child.stderr.on('data', d => { stderr += d.toString(); });
-
-    child.stdin.write(prompt, 'utf8');
-    child.stdin.end();
+    child.stdin.end(stdin ?? '', 'utf8');
 
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error(`Claude CLI call timed out after ${Math.round(timeout / 1000)}s`));
+      reject(new Error(`${bin} timed out after ${Math.round(timeout / 1000)}s`));
     }, timeout);
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== 0) {
-        const errText = stderr.trim() || stdout.trim() || 'unknown error';
-        if (/fichero por lotes|batch file|is not recognized|command not found/i.test(errText)) {
-          reject(new Error('Claude CLI not found. Install from https://claude.ai/code'));
-        } else if (/temp|AppData.*Local.*Temp|no such file|ENOENT|resource.*not.*found/i.test(errText)) {
-          reject(new Error('El CLI de Claude no encontró un archivo de agente. Puede que hayas eliminado un agente desde VS Code o el directorio de Claude directamente. Reinicia la app para limpiar el estado.'));
-        } else {
-          reject(new Error(`Claude CLI exited with code ${code}: ${errText}`));
-        }
-        return;
-      }
-      const raw = stdout.trim();
-
-      // Try parsing the last JSON object — multi-turn mode emits one JSON per line
-      function parseLastJson(text) {
-        try { return JSON.parse(text); } catch {}
-        const lines = text.split('\n');
-        for (let i = lines.length - 1; i >= 0; i--) {
-          try { return JSON.parse(lines[i].trim()); } catch {}
-        }
-        return null;
-      }
-
-      const parsed = parseLastJson(raw);
-      if (parsed) {
-        const text         = (parsed.result ?? raw).trim();
-        const usage        = parsed.usage || {};
-        const inputTokens  = usage.input_tokens  || 0;
-        const outputTokens = usage.output_tokens || 0;
-        const costUSD      = parsed.total_cost_usd || 0;
-        trackUsage({ inputTokens, outputTokens, costUSD });
-        if (opts.returnRich) {
-          resolve({ text, inputTokens, outputTokens, costUSD });
-        } else {
-          resolve(text);
-        }
-      } else {
-        // Old CLI version without JSON output — use raw text, no usage data
-        if (opts.returnRich) {
-          resolve({ text: raw, inputTokens: 0, outputTokens: 0, costUSD: 0 });
-        } else {
-          resolve(raw);
-        }
-      }
+      if (code === 0) return resolve(stdout);
+      const detail = [stderr.trim(), stdout.trim()].filter(Boolean).join(' | ');
+      if (/is not recognized|no se reconoce|command not found/i.test(detail)) reject(new Error(`${bin} no encontrado en PATH`));
+      else reject(new Error(`${bin} exited with code ${code}${detail ? ': ' + detail : ''}`));
     });
-
     child.on('error', (err) => {
       clearTimeout(timer);
-      if (err.code === 'ENOENT') {
-        reject(new Error('Claude CLI not found. Install from https://claude.ai/code'));
-      } else {
-        reject(err);
-      }
+      reject(err.code === 'ENOENT' ? new Error(`${bin} no encontrado en PATH`) : err);
     });
   });
+}
+
+async function withMcpFile(provider, servers, fn) {
+  const file = require('./mcp').writeMcpConfigFile(provider, servers);
+  try { return await fn(file); } finally { if (file) fs.rmSync(file, { force: true }); }
+}
+
+// Prompt via stdin: through the npm .cmd shim, cmd.exe would cut an argument at the first newline
+function callClaudeCLI(prompt, o) {
+  const args = ['--print', '--output-format', 'json'];
+  if (o.mode === 'agent') args.push('--dangerously-skip-permissions', '--max-turns', String(o.maxTurns || 10));
+  else args.push('--tools', o.mode === 'read' ? 'Read,Grep,Glob' : '');
+  if (o.model) args.push('--model', o.model);
+  return withMcpFile('cli', o.mcpServers, async (mcpFile) => {
+    if (mcpFile) args.push('--mcp-config', mcpFile);
+    const raw = (await runCLI('claude', args, { ...o, stdin: prompt })).trim();
+    // Multi-turn runs may print several JSON lines: the result is the last one
+    const parsed = raw.split('\n').reverse().map(l => { try { return JSON.parse(l); } catch { return null; } }).find(Boolean);
+    if (!parsed) return { text: raw, inputTokens: 0, outputTokens: 0, costUSD: 0 };
+    if (parsed.is_error) throw new Error(`Claude CLI: ${parsed.result || parsed.subtype || 'error'}`);
+    return {
+      text:         String(parsed.result ?? '').trim(),
+      inputTokens:  parsed.usage?.input_tokens  || 0,
+      outputTokens: parsed.usage?.output_tokens || 0,
+      costUSD:      parsed.total_cost_usd || 0,
+    };
+  });
+}
+
+// Copilot CLI (`copilot`, not the retired `gh copilot` extension). Prompt via stdin.
+function callCopilotCLI(prompt, o) {
+  const args = ['-s', '--allow-all-tools'];
+  // Deny rules win over --allow-all-tools: reads stay available, writes and shell don't
+  if (o.mode !== 'agent') args.push('--deny-tool=write', '--deny-tool=shell');
+  return withMcpFile('copilot-cli', o.mcpServers, async (mcpFile) => {
+    if (mcpFile) args.push('--additional-mcp-config', `@${mcpFile}`);
+    return estimatedUsage(await runCLI('copilot', args, { ...o, stdin: prompt }));
+  });
+}
+
+// ponytail: agy takes the prompt only as an argument (no plain stdin input) and Windows caps a command
+// line at ~32K chars. Switch to --input-format stream-json if prompts outgrow it.
+const AGY_MAX_PROMPT = 30_000;
+
+// Antigravity CLI (`agy`, successor of Gemini CLI). Only 'agent' and 'text' reach it (see callNativeCLI):
+// plan mode keeps it from running commands, not from editing files.
+async function callAntigravityCLI(prompt, o) {
+  // Without this it reaches for its own tools, gets them denied and answers nothing
+  const p = o.mode === 'agent' ? prompt : `Responde únicamente con texto, sin usar tus herramientas ni ejecutar comandos.\n\n${prompt}`;
+  if (p.length > AGY_MAX_PROMPT) throw new Error(`Prompt demasiado largo para Antigravity CLI (${p.length} caracteres, máx. ${AGY_MAX_PROMPT})`);
+  const args = ['--output-format', 'json', ...(o.mode === 'agent' ? ['--dangerously-skip-permissions'] : ['--mode', 'plan']), '--print', p];
+  const raw = (await runCLI('agy', args, o)).trim();
+  let r;
+  try { r = JSON.parse(raw); } catch { throw new Error(`Antigravity CLI: ${raw.slice(0, 500) || 'sin respuesta'}`); }
+  if (r.status !== 'SUCCESS') throw new Error(`Antigravity CLI: ${r.status} ${r.response || ''}`.trim());
+  if (!r.response?.trim() && r.denied_actions?.length) {
+    throw new Error(`Antigravity CLI no respondió: se denegó ${r.denied_actions.map(a => a.display_name || a.action).join(', ')}`);
+  }
+  return { text: String(r.response || '').trim(), inputTokens: r.usage?.input_tokens || 0, outputTokens: r.usage?.output_tokens || 0, costUSD: 0 };
 }
 
 // ── callAIRich — returns { text, inputTokens, outputTokens, costUSD } ────────
 
 /**
- * Like callAI but returns { text, inputTokens, outputTokens, costUSD }.
- * For CLI: parses the JSON output from --output-format json.
- * For API/GitHub: the orchestrator uses callAIWithSubsystemCLI which already returns tokens;
- * those paths fall back to callAI (text only) when invoked from here.
+ * Like callAI but returns usage too. Native CLIs report (or approximate) it; API providers inside a
+ * project go through callAIWithSubsystemCLI, which returns its own tokens.
  */
 async function callAIRich(prompt, opts = {}) {
   const cfg      = readConfig();
   const provider = cfg.aiProvider || 'cli';
-  if (provider === 'cli') return callCLI(prompt, { ...opts, returnRich: true });
-  const text = await callAI(prompt, opts);
-  // For generic CLI providers: estimate output tokens from response length so the
-  // orchestrator can build a meaningful tokensUsed / estimatedCost on the step result.
-  if (CLI_PROVIDERS.includes(provider)) {
-    return { text, inputTokens: 0, outputTokens: Math.ceil(text.length / 4), costUSD: 0 };
-  }
-  // For API/GitHub the orchestrator uses callAIWithSubsystemCLI which already returns tokens.
-  return { text, inputTokens: 0, outputTokens: 0, costUSD: 0 };
+  if (isNativeCLI(provider, cfg)) return callNativeCLI(provider, prompt, opts);
+  return { text: await callAI(prompt, opts), inputTokens: 0, outputTokens: 0, costUSD: 0 };
 }
 
 // ── API backend ───────────────────────────────────────────────────────────────
@@ -548,88 +550,6 @@ async function callOpenAICompatChat(messages, systemPrompt, { baseUrl, key, mode
   const { prompt_tokens: pt = 0, completion_tokens: ct = 0 } = data.usage ?? {};
   trackUsage({ inputTokens: pt, outputTokens: ct });
   return { text, inputTokens: pt, outputTokens: ct };
-}
-
-// ── New CLI backends ──────────────────────────────────────────────────────────
-
-function callGenericCLI(bin, extraArgs, prompt, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const timeout   = opts.timeout || CALL_TIMEOUT_MS;
-    const args      = [...extraArgs];
-    if (opts.extraArgs) args.push(...opts.extraArgs);
-
-    const spawnOpts = {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        CI: '1',          // tell CLIs they're running non-interactively
-        NO_COLOR: '1',    // disable ANSI color codes that pollute output
-        TERM: 'dumb',     // disable terminal features that require TTY
-        ...(opts.extraEnv || {}),
-      },
-    };
-    if (opts.cwd) spawnOpts.cwd = opts.cwd;
-
-    const child = spawn(bin, args, spawnOpts);
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', d => { stdout += d.toString(); });
-    child.stderr.on('data', d => { stderr += d.toString(); });
-    child.stdin.write(prompt, 'utf8');
-    child.stdin.end();
-
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error(`${bin} timed out after ${Math.round(timeout / 1000)}s`));
-    }, timeout);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        const detail = [stderr.trim(), stdout.trim()].filter(Boolean).join(' | ');
-        reject(new Error(`${bin} exited with code ${code}${detail ? ': ' + detail : ''}`));
-        return;
-      }
-      const text      = stdout.trim();
-      const outTokens = Math.ceil(text.length / 4);
-      trackUsage({ outputTokens: outTokens, costUSD: calcAnthropicCost('claude-sonnet-4-20250514', 0, outTokens) });
-      resolve(text);
-    });
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      if (err.code === 'ENOENT') reject(new Error(`${bin} not found in PATH`));
-      else reject(err);
-    });
-  });
-}
-
-function callGeminiCLI(prompt, opts = {}) {
-  const cfg   = readConfig();
-  const model = cfg.geminiCliModel ?? 'gemini-2.5-pro';
-
-  if (opts.cwd && opts.mcpServers && Object.keys(opts.mcpServers).length > 0) {
-    try {
-      const mcp = require('./mcp');
-      mcp.syncGeminiCliSettings(opts.mcpServers);
-    } catch (e) { console.warn('[ai] Gemini MCP sync failed:', e.message); }
-  }
-
-  return callGenericCLI('gemini', ['--model', model, '--yolo'], prompt, {
-    ...opts,
-    extraEnv: { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
-  });
-}
-
-function callCodexCLI(prompt, opts = {}) {
-  const cfg   = readConfig();
-  const model = cfg.codexCliModel ?? 'o4-mini';
-  return callGenericCLI('codex', ['--model', model, '--quiet'], prompt, opts);
-}
-
-function callCopilotCLI(prompt, opts = {}) {
-  return callGenericCLI('gh', ['copilot', 'suggest', '-t', 'shell'], prompt, opts);
 }
 
 // ── Agent system prompt generation ───────────────────────────────────────────
@@ -1150,19 +1070,17 @@ async function callAIChat(messages, opts = {}) {
     return text;
   }
 
-  // CLI providers: flatten conversation into a single prompt
-  const lines = [];
-  if (opts.systemPrompt) lines.push(`[System]: ${opts.systemPrompt}\n`);
-  for (const m of messages) {
-    lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+  if (isNativeCLI(provider, cfg)) {
+    return (await callNativeCLI(provider, flattenChat(messages, opts.systemPrompt), { mode: 'text' })).text;
   }
-  const flatPrompt = lines.join('\n\n');
-  switch (provider) {
-    case 'gemini-cli':  return callGeminiCLI(flatPrompt, opts);
-    case 'codex-cli':   return callCodexCLI(flatPrompt, opts);
-    case 'copilot-cli': return callCopilotCLI(flatPrompt, opts);
-    default:            return callCLI(flatPrompt, opts);
-  }
+  throw new Error(`Unknown AI provider: ${provider}`);
+}
+
+// CLIs take a single prompt: the conversation goes in as a transcript
+function flattenChat(messages, systemPrompt) {
+  const lines = systemPrompt ? [`[System]: ${systemPrompt}\n`] : [];
+  for (const m of messages) lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
+  return lines.join('\n\n');
 }
 
 // ── Low-level chat with token tracking (for Subsystem CLI) ───────────────────
@@ -1235,46 +1153,13 @@ async function callAIChatWithTokens(messages, systemPrompt, opts = {}) {
     return callOpenAICompatChat(messages, systemPrompt || null, oaConfig, opts);
   }
 
-  // CLI providers: flatten conversation to a single prompt and call in text-only mode.
-  // No agentic flags (--yolo, etc.) — SubsystemCLI handles tool execution via TOOL: blocks.
-  if (CLI_PROVIDERS.includes(provider)) {
-    const lines = [];
-    if (systemPrompt) lines.push(`[System]: ${systemPrompt}\n`);
-    for (const m of messages) {
-      lines.push(`[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`);
-    }
-    const flatPrompt = lines.join('\n\n');
-    const text = await _callCLITextOnly(provider, flatPrompt, cfg, opts);
-    return { text, inputTokens: 0, outputTokens: 0 };
+  // Native CLI as a plain text model: the Subsystem CLI runs the TOOL: blocks itself
+  if (isNativeCLI(provider, cfg)) {
+    const r = await callNativeCLI(provider, flattenChat(messages, systemPrompt), { mode: 'text', timeout: opts.timeout });
+    return { text: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
   }
 
   throw new Error(`Provider "${provider}" no soportado en modo multi-turno`);
-}
-
-function _callCLITextOnly(provider, prompt, cfg, opts = {}) {
-  // Resolve MCP extra args for providers that support per-invocation MCP flags
-  const mcpExtraArgs = (() => {
-    if (!opts.mcpServers || Object.keys(opts.mcpServers).length === 0) return [];
-    try { return require('./mcp').getMcpExtraArgs(provider, opts.mcpServers); }
-    catch { return []; }
-  })();
-
-  const optsWithMcp = mcpExtraArgs.length > 0
-    ? { ...opts, extraArgs: [...(opts.extraArgs || []), ...mcpExtraArgs] }
-    : opts;
-
-  switch (provider) {
-    case 'gemini-cli': {
-      const model = cfg.geminiCliModel ?? 'gemini-2.5-flash';
-      return callGenericCLI('gemini', ['--model', model], prompt, optsWithMcp);
-    }
-    case 'codex-cli':   return callCodexCLI(prompt, optsWithMcp);
-    case 'copilot-cli': return callCopilotCLI(prompt, optsWithMcp);
-    case 'aider-cli':   return callGenericCLI('aider', [], prompt, optsWithMcp);
-    case 'cline-cli':   return callGenericCLI('cline', [], prompt, optsWithMcp);
-    case 'goose-cli':   return callGenericCLI('goose', [], prompt, optsWithMcp);
-    default:            return callCLI(prompt, optsWithMcp);
-  }
 }
 
 // ── Subsystem CLI integration ─────────────────────────────────────────────────
@@ -1306,12 +1191,9 @@ async function callAIWithSubsystemCLI(prompt, agentSystemPrompt, opts = {}) {
     useBrowser:     opts.useBrowser     || false,
     mcpServers:     opts.mcpServers     || {},
     projectId:      opts.projectId      || null,
+    readOnly:       opts.readOnly       || false,
     callAIRaw: (messages, systemPrompt, callOpts = {}) =>
-      callAIChatWithTokens(messages, systemPrompt, {
-        provider,
-        timeout: callOpts.timeout,
-        cwd: opts.projectPath
-      }),
+      callAIChatWithTokens(messages, systemPrompt, { provider, timeout: callOpts.timeout }),
   });
 
   return result;
@@ -1383,16 +1265,7 @@ async function testConnection() {
   }
 
   if (CLI_PROVIDERS.includes(provider)) {
-    const binMap = { 
-      'cli': 'claude', 
-      'gemini-cli': 'gemini', 
-      'codex-cli': 'codex', 
-      'copilot-cli': 'gh',
-      'aider-cli': 'aider',
-      'cline-cli': 'cline',
-      'goose-cli': 'goose',
-    };
-    const bin    = binMap[provider] || provider;
+    const bin    = CLI_ADAPTERS[provider].bin;
     const check  = await whichBin(bin);
     return {
       ok:        check.found,
@@ -1440,8 +1313,11 @@ async function testConnection() {
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
+  CLI_ADAPTERS,
   CLI_PROVIDERS,
   API_PROVIDERS,
+  MODEL,
+  isNativeCLI,
   GITHUB_GROUP_PROVIDERS,
   callAI,
   callAIRich,
@@ -1449,6 +1325,7 @@ module.exports = {
   adaptSystemPromptForProvider,
   generateProjectSuggestions,
   callAIChat,
+  flattenChat,
   callAIChatWithTokens,
   callAIWithSubsystemCLI,
   generateAgentPrompt,
@@ -1458,7 +1335,6 @@ module.exports = {
   clearSuggestionsCache,
   getProviderStatus,
   testConnection,
-  isCLIAvailable,
   getSessionUsage,
   resetSessionUsage,
   resetAllUsage,

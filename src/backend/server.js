@@ -28,6 +28,7 @@ const {
   parseAgentFromString,
 } = require('./agents');
 const agentsSync = require('./agents-sync');
+const { runInProject } = require('./project-runner');
 const {
   createProject,
   importProject,
@@ -83,7 +84,6 @@ const CONFIG_ALLOWED_FIELDS = [
   'geminiApiKey', 'geminiApiModel',
   'mistralKey', 'mistralModel',
   'grokKey', 'grokModel',
-  'geminiCliModel', 'codexCliModel',
   'closeAction',
   'agentsDirectoryUrl', 'agentsDirectoryEnabled',
 ];
@@ -135,18 +135,10 @@ app.delete('/api/cli', (req, res) => {
 });
 
 app.get('/api/detect-cli', async (req, res) => {
-  const [claude, gemini, codex, gh] = await Promise.all([
-    whichCLI('claude'),
-    whichCLI('gemini'),
-    whichCLI('codex'),
-    whichCLI('gh'),
-  ]);
-  const checks = {
-    'cli':         claude,
-    'gemini-cli':  gemini,
-    'codex-cli':   codex,
-    'copilot-cli': gh,
-  };
+  const { CLI_ADAPTERS } = require('./ai');
+  const providers = Object.keys(CLI_ADAPTERS);
+  const found  = await Promise.all(providers.map(p => whichCLI(CLI_ADAPTERS[p].bin)));
+  const checks = Object.fromEntries(providers.map((p, i) => [p, found[i]]));
   const provider = readConfig().aiProvider;
   res.json({ found: !!(checks[provider]?.found), checks });
 });
@@ -410,10 +402,9 @@ app.delete('/api/projects/:id/agents/:name', (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/projects/:id/run — runs one agent on the project (used by bin/agent-hub.js)
+// POST /api/projects/:id/run — runs one agent on the project (used by cli/agent-hub.ps1)
 // Body: { agent, task, maxTurns?, timeout? }
 app.post('/api/projects/:id/run', async (req, res) => {
-  const { callAIRich, callAIWithSubsystemCLI } = require('./ai');
   const mcp = require('./mcp');
   const cfg = readConfig();
   const project = cfg.projects.find(p => p.id === req.params.id);
@@ -427,45 +418,22 @@ app.post('/api/projects/:id/run', async (req, res) => {
   ].find(a => a.name === agentName);
   if (!agent) return res.status(404).json({ error: `Agent "${agentName}" not found for this project` });
 
-  const contextFile = ['CLAUDE.md', '.claude/CLAUDE.md', '.github/copilot-instructions.md']
-    .map(f => path.join(project.path, f)).find(f => fs.existsSync(f));
-  const context = contextFile ? fs.readFileSync(contextFile, 'utf8') : '';
-
-  const skillNames = [...new Set([...(project.skills || []), ...(agent.skills || [])])];
-  const skillsBlock = skills.listAllSkills()
-    .filter(s => skillNames.includes(s.name) && s.content?.trim())
-    .map(s => `\n\n# SKILL: ${s.name}\n${s.content.trim()}`).join('');
-  const systemPrompt = (agent.system || `Eres el agente "${agentName}".`) + skillsBlock;
-
-  const provider = cfg.aiProvider || 'cli';
-  const CLI_NATIVE = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'];
-  const useNativeCLI = CLI_NATIVE.includes(provider)
-    || (cfg.customProviders || []).some(p => p.id === provider && p.type === 'cli');
-
-  const mcpServers = mcp.getServersForAgent(agent, project.id);
-  const mcpNames = Object.keys(mcpServers);
+  const runSkills = skills.resolveSkills(project, agent);
   const start = Date.now();
   try {
-    if (mcpNames.length) await mcp.acquireServers(mcpNames, project.id);
-    let result;
-    if (useNativeCLI) {
-      const prompt = `${systemPrompt}${context ? `\n\n# CONTEXTO DEL PROYECTO\n${context}` : ''}\n\n---\n\n${task}`;
-      const extraArgs = provider === 'cli' ? ['--dangerously-skip-permissions', '--max-turns', String(maxTurns)] : [];
-      const rich = await callAIRich(prompt, { timeout, extraArgs, cwd: project.path, mcpServers });
-      result = rich.text;
-    } else {
-      const r = await callAIWithSubsystemCLI(task, systemPrompt, {
-        projectPath: project.path, projectContext: context, provider, maxTurns, timeout,
-        mcpServers, projectId: project.id,
-      });
-      if (!r.success && r.error && !r.finalResponse?.trim()) throw new Error(r.error);
-      result = r.finalResponse || r.result || '';
-    }
-    res.json({ result, agent: agentName, provider, durationMs: Date.now() - start });
+    const r = await runInProject(project, {
+      systemPrompt: (agent.system || `Eres el agente "${agentName}".`) + skills.skillsPromptBlock(runSkills),
+      userMessage:  task,
+      maxTurns, timeout,
+      model:      agent.model,
+      mcpServers: mcp.getServersForAgent(agent, project.id),
+    });
+    res.json({
+      result: r.text, agent: agentName, provider: cfg.aiProvider || 'cli',
+      skills: runSkills.map(s => s.name), mcpIgnored: r.mcpIgnored, durationMs: Date.now() - start,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
-  } finally {
-    if (mcpNames.length) mcp.releaseServers(mcpNames);
   }
 });
 
@@ -1215,6 +1183,7 @@ const {
   clearSuggestionsCache,
   callAI,
   callAIChat,
+  flattenChat,
   getSessionUsage,
   resetSessionUsage,
   resetAllUsage,
@@ -1461,13 +1430,22 @@ app.delete('/api/ai/suggestions/cache', (req, res) => {
 
 // POST /api/chat — multi-turn chat with the configured AI provider
 app.post('/api/chat', async (req, res) => {
-  const { messages, systemPrompt } = req.body;
+  const { messages, systemPrompt, projectId } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages array required' });
   }
   try {
-    const reply = await callAIChat(messages, { systemPrompt });
-    res.json({ reply });
+    const project = projectId ? readConfig().projects.find(p => p.id === projectId) : null;
+    if (!project) return res.json({ reply: await callAIChat(messages, { systemPrompt }) });
+
+    // Project chat: reads the project (files, context, skills) but never modifies it
+    const r = await runInProject(project, {
+      systemPrompt: (systemPrompt || '') + skills.skillsPromptBlock(skills.resolveSkills(project)),
+      userMessage:  flattenChat(messages),
+      mode:         'read',
+      timeout:      300_000,
+    });
+    res.json({ reply: r.text });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1613,56 +1591,6 @@ app.post('/api-fs/projects/:id/grep', (req, res) => {
     res.json(apiFs.grepFiles(projectPath, pattern, file));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message, code: e.code });
-  }
-});
-
-// POST /api-fs/projects/:id/execute-agent
-// Body: { prompt, agentSystemPrompt, projectContext?, maxTurns?, timeout? }
-// Runs the full Subsystem CLI loop for a given prompt.
-app.post('/api-fs/projects/:id/execute-agent', async (req, res) => {
-  const { callAIWithSubsystemCLI } = require('./ai');
-  const cfg     = readConfig();
-  const project = cfg.projects.find(p => p.id === req.params.id);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-
-  // Use the global execution provider, not project.aiProvider (which only controls file format).
-  const provider = cfg.aiProvider || 'cli';
-  if (provider === 'cli') {
-    return res.status(400).json({ error: 'Subsystem CLI is only for api and github providers. Use the CLI provider natively.' });
-  }
-
-  const { prompt, agentSystemPrompt, projectContext, maxTurns, timeout, useBrowser, agentName } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'prompt required' });
-
-  // Resolve MCP servers for the agent (if agentName provided)
-  let mcpServers = {};
-  if (agentName) {
-    try {
-      const mcpModule = require('./mcp');
-      const { listProjectAgents, getApplicableAgents } = require('./agents');
-      const allAgents = [
-        ...getApplicableAgents(project.categoryId),
-        ...listProjectAgents(project),
-      ];
-      const agent = allAgents.find(a => a.name === agentName);
-      if (agent) mcpServers = mcpModule.getServersForAgent(agent, project.id);
-    } catch { /* ignore */ }
-  }
-
-  try {
-    const result = await callAIWithSubsystemCLI(prompt, agentSystemPrompt || '', {
-      projectPath:    project.path,
-      projectContext: projectContext || '',
-      provider,
-      maxTurns:       maxTurns  || 10,
-      timeout:        timeout   || 1_800_000,
-      useBrowser:     useBrowser || false,
-      mcpServers,
-      projectId:      project.id,
-    });
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
   }
 });
 

@@ -22,6 +22,7 @@ const {
   parseAgentFile,
 } = require('./agents');
 const { getContextTemplate } = require('./templates');
+const { resolveSkills, syncClaudeSkills } = require('./skills');
 const { PROJECT_PROVIDERS, adaptAgentForProvider, adaptFromGitHub } = require('./agent-adapters');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -269,6 +270,18 @@ function getProjectSyncPreview(project) {
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
 
+// Writes the stack's skills as native Claude Code skills (only if the project uses claude; otherwise removes ours).
+// Returns the names written, stored in project.claudeSkills so the next sync knows which ones it owns.
+function syncProjectClaudeSkills(project) {
+  try {
+    const list = getProviders(project).includes('claude') ? resolveSkills(project) : [];
+    return syncClaudeSkills(project.path, list, project.claudeSkills || []);
+  } catch (e) {
+    console.warn('[projects] Claude skills sync failed:', e.message);
+    return project.claudeSkills || [];
+  }
+}
+
 /**
  * Syncs a single project: copies updated and new agents to every provider dir.
  * Local (level-4) agents are never touched.
@@ -308,6 +321,8 @@ async function syncProject(project) {
     else                             added++;
   }
 
+  cfg.projects[projIdx].claudeSkills = syncProjectClaudeSkills(cfg.projects[projIdx]);
+  ensureAgentsMd(project.path);
   cfg.projects[projIdx].lastSyncAt = new Date().toISOString();
   writeConfig(cfg);
 
@@ -361,11 +376,33 @@ function getContextFile(project, providerId) {
   };
 }
 
+// AGENTS.md is the file every engine reads by itself (Claude Code, Copilot CLI, Antigravity…),
+// so it always gets a copy of the master CONTEXTO.md. Order = preference when reading the context.
+const SHARED_CONTEXT_FILES = ['AGENTS.md', 'CONTEXTO.md', 'CLAUDE.md', '.github/copilot-instructions.md', 'GEMINI.md'];
+
+function readProjectContext(projectPath) {
+  for (const file of SHARED_CONTEXT_FILES) {
+    try {
+      const content = fs.readFileSync(path.join(projectPath, file), 'utf8');
+      if (content.trim()) return { file, content };
+    } catch {}
+  }
+  return { file: null, content: '' };
+}
+
+// Projects created before AGENTS.md was adopted get it from CONTEXTO.md on their next sync
+function ensureAgentsMd(projectPath) {
+  const agentsMd = path.join(projectPath, 'AGENTS.md');
+  const central  = getContextFilePath({ path: projectPath }, 'central');
+  if (!fs.existsSync(agentsMd) && fs.existsSync(central)) fs.copyFileSync(central, agentsMd);
+}
+
 function saveContextFile(project, providerId, content) {
-  // 1. Always save to the central CONTEXTO.md
+  // 1. Always save to the central CONTEXTO.md and the shared AGENTS.md
   const centralPath = getContextFilePath(project, 'central');
   ensureDir(path.dirname(centralPath));
   fs.writeFileSync(centralPath, content, 'utf8');
+  fs.writeFileSync(path.join(project.path, 'AGENTS.md'), content, 'utf8');
 
   // 2. Also save to all active providers in the project
   const providers = getProviders(project);
@@ -426,6 +463,7 @@ async function createProject({ name, categoryId, projectPath, description, statu
     createdAt:      new Date().toISOString(),
     lastSyncAt:     new Date().toISOString(),
   };
+  project.claudeSkills = syncProjectClaudeSkills(project);
 
   const cfg = readConfig();
   cfg.projects.push(project);
@@ -470,7 +508,7 @@ async function importProject({ name, categoryId, projectPath, description, statu
   if (!fs.existsSync(centralPath)) {
     // Try to adopt from an existing provider context
     let adopted = false;
-    for (const p of ['claude', 'github', 'gemini', 'openai']) {
+    for (const p of ['openai', 'claude', 'github', 'gemini']) { // openai = AGENTS.md
       const pPath = getContextFilePath({ path: cleanPath }, p);
       if (fs.existsSync(pPath)) {
         fs.copyFileSync(pPath, centralPath);
@@ -491,6 +529,7 @@ async function importProject({ name, categoryId, projectPath, description, statu
   for (const p of providers) {
     ensureDir(getAgentsDirForProvider(cleanPath, p));
   }
+
 
   const initialSelection = resolveInitialAgentSelection(categoryId, selectedAgents || null);
   const excludedAgents = initialSelection.excludedAgents;
@@ -514,6 +553,7 @@ async function importProject({ name, categoryId, projectPath, description, statu
     lastSyncAt:     new Date().toISOString(),
     imported:       true,
   };
+  project.claudeSkills = syncProjectClaudeSkills(project);
 
   cfg.projects.push(project);
   writeConfig(cfg);
@@ -686,7 +726,7 @@ function getContextAuto(project, appAiProvider) {
   // Map appAiProvider to project provider type
   let useType = 'claude'; // default
   if (appAiProvider === 'github' || appAiProvider === 'copilot-cli') useType = 'github';
-  else if (appAiProvider === 'gemini-cli' || appAiProvider === 'gemini-api') useType = 'gemini';
+  else if (appAiProvider === 'antigravity-cli' || appAiProvider === 'gemini-api') useType = 'gemini';
   else if (appAiProvider === 'openai') useType = 'openai';
 
   // Check if project has this type
@@ -748,4 +788,5 @@ module.exports = {
   saveClaudeMd,
   copyAgentsToProject,
   getContextAuto,
+  readProjectContext,
 };

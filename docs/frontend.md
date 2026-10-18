@@ -233,6 +233,7 @@ interface StepResult {
   filesModified: string[];
   tokensUsed:    { input: number; output: number };
   estimatedCost: number;
+  costUnavailable?: boolean;   // CLI no-Claude: la UI muestra "coste n/d"
   duration:      number;
   status:        'success' | 'error' | 'warning';
   error?:        { message: string; category: string; recoverable: boolean };
@@ -253,6 +254,8 @@ interface StepResult {
 - **`LEVEL_COLOR`**: `global→var(--accent)`, `section→var(--blue)`, `project→var(--amber)`, `uncategorized→var(--text3)`
 
 El nivel `tech` fue eliminado; su entrada en `LEVEL_COLOR` ya no existe.
+
+`constants/projects.ts` exporta además `NATIVE_CLI_PROVIDERS` (`cli`, `copilot-cli`, `antigravity-cli`), el espejo de `CLI_ADAPTERS` del backend. Lo usan `Statusbar` y `ExecutionPanel` para saber si el motor es un CLI nativo.
 
 ---
 
@@ -485,6 +488,8 @@ Página de tres paneles (árbol / centro / editor). Gestiona dos modos: `agents`
 
 Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 
+**Tab General → Proveedor de IA:** la columna de CLIs muestra solo los verificados (Claude Code, Copilot CLI y Antigravity CLI), más los CLIs personalizados. Gemini CLI, Codex, Aider, Cline y Goose ya no aparecen; quien los tuviera seleccionados se migra al arrancar (backend §8).
+
 **Tab General → CLI de terminal:** tarjeta visible solo si `GET /cli` devuelve `supported: true` (Windows). Botón *Instalar CLI* / *Desinstalar* → `POST` / `DELETE /cli`; muestra badge "Instalado" y la carpeta destino. Estado `cliStatus` + `cliBusy`, cargado al entrar en la tab. Ver backend §19.
 
 **Tab Categorías:** lista simple de categorías con nombre, icono y color. Sin gestión de tecnologías (eliminada). Solo permite crear y eliminar categorías.
@@ -503,6 +508,8 @@ Cuatro tabs: **General**, **Categorías**, **Directorio de Agentes**, **MCP**.
 ### `Chat.tsx`
 
 Chat multi-turno con @mention de agentes, historial por proyecto e indicador de contexto.
+
+Con un proyecto seleccionado, `POST /chat` se ejecuta **dentro del proyecto en solo lectura** con cualquier proveedor: lee sus ficheros, el contexto (`AGENTS.md`…) y las skills, pero no modifica nada. Puede tardar más que una respuesta de texto (hasta 5 min). Sin proyecto es una conversación de texto.
 
 ### `Orchestrations.tsx`
 

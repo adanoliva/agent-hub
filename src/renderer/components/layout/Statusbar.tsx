@@ -2,15 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { req } from '../../api';
 import type { AIUsage } from '../../types';
+import { NATIVE_CLI_PROVIDERS } from '../../constants/projects';
 
 const PROVIDER_LABEL: Record<string, string> = {
   cli:           'Claude Code CLI',
-  'gemini-cli':  'Gemini CLI',
-  'codex-cli':   'OpenAI Codex CLI',
-  'copilot-cli': 'Copilot CLI (gh)',
-  'aider-cli':   'Aider CLI',
-  'cline-cli':   'Cline CLI',
-  'goose-cli':   'Goose CLI',
+  'antigravity-cli': 'Antigravity CLI',
+  'copilot-cli': 'Copilot CLI',
   api:           'Anthropic API',
   openai:        'OpenAI API',
   github:        'GitHub Models',
@@ -64,7 +61,7 @@ export function Statusbar() {
   if (!providerLabel) providerLabel = provider;
 
   // Asegurar sufijo CLI o API
-  let isCli = ['cli', 'gemini-cli', 'codex-cli', 'copilot-cli', 'aider-cli', 'cline-cli', 'goose-cli'].includes(provider);
+  let isCli = NATIVE_CLI_PROVIDERS.includes(provider);
   if (custom && custom.type === 'cli') isCli = true;
 
   if (isCli) {

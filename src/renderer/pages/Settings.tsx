@@ -102,8 +102,6 @@ export function Settings() {
   const [grokModel, setGrokModel] = useState(config?.grokModel ?? 'grok-3-mini');
 
   // CLI models
-  const [geminiCliModel, setGeminiCliModel] = useState(config?.geminiCliModel ?? 'gemini-2.5-pro');
-  const [codexCliModel,  setCodexCliModel]  = useState(config?.codexCliModel  ?? 'o4-mini');
 
   // DeepSeek API
   const [deepseekKey,   setDeepseekKey]   = useState(config?.deepseekKey ?? '');
@@ -209,8 +207,6 @@ export function Settings() {
       setOpenrouterModel(config.openrouterModel ?? 'anthropic/claude-3.5-sonnet');
       setPerplexityKey(config.perplexityKey ?? '');
       setPerplexityModel(config.perplexityModel ?? 'sonar-reasoning-pro');
-      setGeminiCliModel(config.geminiCliModel ?? 'gemini-2.5-pro');
-      setCodexCliModel(config.codexCliModel ?? 'o4-mini');
       setPendingProvider(config.aiProvider ?? 'cli');
       setDirUrl(config.agentsDirectoryUrl ?? DEFAULT_DIR_URL);
       setDirEnabled(config.agentsDirectoryEnabled ?? true);
@@ -244,7 +240,6 @@ export function Settings() {
         groqKey, groqModel,
         openrouterKey, openrouterModel,
         perplexityKey, perplexityModel,
-        geminiCliModel, codexCliModel,
       });
       await refreshConfig();
       await fetchAiStatus();
@@ -269,7 +264,6 @@ export function Settings() {
         groqKey, groqModel,
         openrouterKey, openrouterModel,
         perplexityKey, perplexityModel,
-        geminiCliModel, codexCliModel,
       });
       await refreshConfig();
       const r = await req<{ ok: boolean; error?: string; latencyMs?: number }>('POST', '/ai/test-connection');
@@ -526,22 +520,10 @@ export function Settings() {
                     </div>
                     <AIRadioRow value="cli" label="Claude Code CLI" selected={pendingProvider === 'cli'} onSelect={setPendingProvider}
                       badge={cliChecks['cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    <AIRadioRow value="gemini-cli" label="Gemini CLI" selected={pendingProvider === 'gemini-cli'} onSelect={setPendingProvider}
-                      badge={cliChecks['gemini-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    <AIRadioRow value="codex-cli" label="OpenAI Codex CLI" selected={pendingProvider === 'codex-cli'} onSelect={setPendingProvider}
-                      badge={cliChecks['codex-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>}
-                      extra={<span className="badge amber"><i className="ti ti-flask" />exp</span>} />
-                    <AIRadioRow value="copilot-cli" label="Copilot CLI (gh)" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
+                    <AIRadioRow value="copilot-cli" label="Copilot CLI" selected={pendingProvider === 'copilot-cli'} onSelect={setPendingProvider}
                       badge={cliChecks['copilot-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    
-                    <AIRadioRow value="aider-cli" label="Aider CLI" selected={pendingProvider === 'aider-cli'} onSelect={setPendingProvider}
-                      badge={cliChecks['aider-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    
-                    <AIRadioRow value="cline-cli" label="Cline CLI" selected={pendingProvider === 'cline-cli'} onSelect={setPendingProvider}
-                      badge={cliChecks['cline-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
-                    
-                    <AIRadioRow value="goose-cli" label="Goose CLI" selected={pendingProvider === 'goose-cli'} onSelect={setPendingProvider}
-                      badge={cliChecks['goose-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
+                    <AIRadioRow value="antigravity-cli" label="Antigravity CLI" selected={pendingProvider === 'antigravity-cli'} onSelect={setPendingProvider}
+                      badge={cliChecks['antigravity-cli']?.found ? <span className="badge green"><i className="ti ti-check" /></span> : <span className="badge gray"><i className="ti ti-x" /></span>} />
 
                     {/* Custom CLI Providers */}
                     {customProviders.filter(p => p.type === 'cli').map(p => (
@@ -604,48 +586,24 @@ export function Settings() {
                     </div>
                   )}
 
-                  {pendingProvider === 'gemini-cli' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ fontSize: 12, color: 'var(--text1)' }}>
-                        <strong>Gemini CLI</strong> — instala con <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>npm i -g @google/generative-ai-cli</code>
-                        {cliChecks['gemini-cli']?.found
-                          ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> detectado</span>
-                          : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>no detectado</span>}
-                      </div>
-                      <div className="field" style={{ marginBottom: 0 }}>
-                        <label>Modelo</label>
-                        <select value={geminiCliModel} onChange={(e) => setGeminiCliModel(e.target.value)}>
-                          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  {pendingProvider === 'codex-cli' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ fontSize: 12, color: 'var(--text1)' }}>
-                        <strong>OpenAI Codex CLI</strong> (experimental) — instala con <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>npm i -g @openai/codex</code>
-                        {cliChecks['codex-cli']?.found
-                          ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> detectado</span>
-                          : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>no detectado</span>}
-                      </div>
-                      <div className="field" style={{ marginBottom: 0 }}>
-                        <label>Modelo</label>
-                        <select value={codexCliModel} onChange={(e) => setCodexCliModel(e.target.value)}>
-                          <option value="o4-mini">o4-mini</option>
-                          <option value="gpt-4o">gpt-4o</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
                   {pendingProvider === 'copilot-cli' && (
                     <div style={{ fontSize: 12, color: 'var(--text1)' }}>
-                      <strong>GitHub Copilot CLI</strong> — requiere <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>gh</code> + extensión copilot.
+                      <strong>GitHub Copilot CLI</strong> — requiere <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>npm i -g @github/copilot</code> y una suscripción con Copilot CLI habilitado.
                       {cliChecks['copilot-cli']?.found
-                        ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> gh detectado en {cliChecks['copilot-cli'].path}</span>
-                        : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>gh no encontrado en PATH</span>}
+                        ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> copilot detectado en {cliChecks['copilot-cli'].path}</span>
+                        : <span style={{ color: 'var(--text3)', marginLeft: 8 }}>copilot no encontrado en PATH</span>}
+                    </div>
+                  )}
+
+                  {pendingProvider === 'antigravity-cli' && (
+                    <div style={{ fontSize: 12, color: 'var(--text1)' }}>
+                      <strong>Antigravity CLI</strong> — sucesor de Gemini CLI, comando <code style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg3)', padding: '1px 4px', borderRadius: 3 }}>agy</code>.
+                      {cliChecks['antigravity-cli']?.found
+                        ? <span style={{ color: 'var(--green)', marginLeft: 8 }}><i className="ti ti-circle-check" /> agy detectado en {cliChecks['antigravity-cli'].path}</span>
+                        : <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text3)' }}>agy no encontrado en PATH</span>
+                            <button className="btn sm ghost" onClick={() => openExternal('https://antigravity.google')}><i className="ti ti-download" /> Instalar</button>
+                          </span>}
                     </div>
                   )}
 

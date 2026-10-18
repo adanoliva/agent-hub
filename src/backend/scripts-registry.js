@@ -237,11 +237,11 @@ const SCRIPTS = {
 
     const outputs = Object.values(agentOutputs);
 
-    // The orchestrator guarantees estimatedCost > 0 for all AI steps (real or text-length fallback).
-    // costIsEstimated flags steps where the provider didn't report tokens.
+    // Claude AI steps always carry estimatedCost > 0 (real or text-length fallback); costIsEstimated flags the fallback.
+    // Non-Claude CLIs report costUnavailable with cost 0, so the guard undercounts them.
     let isEstimated = false;
     const spent = outputs.reduce((sum, r) => {
-      if (r.costIsEstimated) isEstimated = true;
+      if (r.costIsEstimated || r.costUnavailable) isEstimated = true;
       return sum + (r.estimatedCost ?? 0);
     }, 0);
 

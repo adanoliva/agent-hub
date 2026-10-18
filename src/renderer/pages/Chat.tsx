@@ -285,6 +285,7 @@ export function Chat() {
       const data = await req<{ reply: string }>('POST', '/chat', {
         messages:     windowedMessages,
         systemPrompt: buildSystem(activeAgents),
+        projectId:    projectId || undefined,
       });
       const updated = [...withUser, { role: 'assistant' as const, content: data.reply }];
       setMessages(updated);

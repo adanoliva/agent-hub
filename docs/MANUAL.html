@@ -366,8 +366,8 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
               <div class="card-body">DeepSeek, Groq, OpenRouter, Perplexity. Endpoint compatible con la API de OpenAI.</div>
             </div>
             <div class="card coral-l">
-              <div class="card-title">CLIs alternativos</div>
-              <div class="card-body">Aider, Cline, Goose. Se invocan como procesos nativos igual que Claude CLI.</div>
+              <div class="card-title">Copilot CLI y Antigravity CLI</div>
+              <div class="card-body">GitHub Copilot CLI (<code>copilot</code>) y Antigravity CLI (<code>agy</code>, sucesor de Gemini CLI). Se ejecutan en la carpeta del proyecto igual que Claude CLI.</div>
             </div>
             <div class="card">
               <div class="card-title">Proveedor Custom</div>
@@ -1876,16 +1876,16 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <h4>Comportamiento por proveedor</h4>
     <div class="grid2" style="margin-bottom:16px">
       <div class="card accent-l">
-        <div class="card-title">Proveedor CLI nativo (<code>claude</code>)</div>
-        <div class="card-body">Agent Hub escribe <code>{proyecto}/.claude/settings.json</code> con los servidores MCP del agente antes de cada spawn. El CLI los activa automáticamente — sin intervención adicional.</div>
+        <div class="card-title">Claude Code y Copilot CLI</div>
+        <div class="card-body">Agent Hub pasa los servidores MCP del agente en un fichero temporal (<code>--mcp-config</code> / <code>--additional-mcp-config</code>) que se borra al acabar. No toca tus ficheros de configuración.</div>
       </div>
       <div class="card blue-l">
         <div class="card-title">Proveedores API / GitHub / Custom</div>
         <div class="card-body">Las herramientas MCP se inyectan en el system prompt con su formato de invocación. El subsistema CLI multi-turno intercepta las llamadas y las ejecuta. Funciona con todos los modelos de alta capacidad.</div>
       </div>
       <div class="card green-l">
-        <div class="card-title"><code>gemini-cli</code></div>
-        <div class="card-body">Agent Hub sincroniza la configuración en <code>~/.gemini/settings.json</code> con el mismo formato que Claude CLI.</div>
+        <div class="card-title">Antigravity CLI y CLIs personalizados</div>
+        <div class="card-body">No reciben los servidores MCP: el agente se ejecuta sin esas herramientas y el log lo avisa.</div>
       </div>
       <div class="card">
         <div class="card-title">En orquestaciones</div>
@@ -1930,7 +1930,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">API key de Anthropic</strong> — introduce tu clave <code>sk-ant-api03-…</code> y guarda.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">GitHub Copilot Models API</strong> — introduce tu Personal Access Token con permiso <code>models:read</code> y selecciona el modelo.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Nativos (OpenAI-compatible)</strong> — DeepSeek, Groq, OpenRouter, Perplexity.</li>
-          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">CLIs alternativos</strong> — Aider, Cline, Goose. Invocados como procesos nativos.</li>
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Copilot CLI y Antigravity CLI</strong> — procesos nativos en la carpeta del proyecto.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Proveedor Custom</strong> — endpoint Azure, API privada o cualquier servicio compatible. Soporta headers propios e importación desde JSON.</li>
         </ul>
       </div>
@@ -2139,11 +2139,11 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
       <div class="card green-l">
         <div class="card-title"><code>GEMINI.md</code></div>
-        <div class="card-body">Contexto para Gemini CLI / Google AI Studio.</div>
+        <div class="card-body">Contexto para Antigravity CLI (también lo lee Copilot CLI).</div>
       </div>
       <div class="card">
-        <div class="card-title"><code>.instructions.md</code></div>
-        <div class="card-body">Contexto para proveedores compatibles con OpenAI (Custom, Azure, etc.).</div>
+        <div class="card-title"><code>AGENTS.md</code></div>
+        <div class="card-body">Fichero común: lo leen por sí mismos Claude Code, Copilot CLI y Antigravity CLI. Agent Hub lo escribe siempre junto a <code>CONTEXTO.md</code>.</div>
       </div>
     </div>
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
@@ -2473,7 +2473,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p class="section-intro">Agent Hub puede analizar la estructura de tu proyecto y generar automáticamente el fichero de contexto para IA.</p>
 
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:16px">
-      Al generar, Agent Hub escribe el <strong>fichero maestro <code>CONTEXTO.md</code></strong> y lo replica automáticamente a todos los ficheros de contexto del proveedor del proyecto (<code>CLAUDE.md</code>, <code>.github/copilot-instructions.md</code>, <code>GEMINI.md</code>, <code>.instructions.md</code>).
+      Al generar, Agent Hub escribe el <strong>fichero maestro <code>CONTEXTO.md</code></strong> y lo replica automáticamente a todos los ficheros de contexto del proveedor del proyecto (<code>CLAUDE.md</code>, <code>.github/copilot-instructions.md</code>, <code>GEMINI.md</code>) y siempre a <code>AGENTS.md</code>, el fichero común que leen todos los CLIs.
     </p>
 
     <div class="steps">
@@ -2559,7 +2559,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <div class="section" id="ejecutar-agente">
     <div class="section-badge">Tareas frecuentes</div>
     <h2 class="section-title">Ejecutar agente <span>sobre proyecto</span></h2>
-    <p class="section-intro">Agent Hub puede ejecutar un agente directamente sobre el código de tu proyecto usando el CLI nativo (Claude Code, Gemini CLI, Aider…) o el Subsistema CLI interno para cualquier proveedor API. El resultado aparece en markdown dentro de la app.</p>
+    <p class="section-intro">Agent Hub puede ejecutar un agente directamente sobre el código de tu proyecto usando el CLI nativo (Claude Code, Copilot CLI, Antigravity CLI) o el Subsistema CLI interno para cualquier proveedor API. El resultado aparece en markdown dentro de la app.</p>
 
     <div class="steps">
       <div class="step">
@@ -2603,7 +2603,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <i class="ti ti-info-circle" aria-hidden="true"></i>
       <div class="callout-body">
         <div class="callout-title">Modo CLI nativo vs. modo Subsistema</div>
-        <div class="callout-text">Con cualquier <strong>CLI nativo</strong> (Claude Code, Gemini CLI, Codex, Aider, Cline, Goose…), Agent Hub lanza el proceso con el CWD del proyecto y acceso real al filesystem. Con <strong>cualquier proveedor API</strong> (Anthropic, GitHub Copilot, OpenAI-compatible, Custom…), usa el Subsistema CLI interno que emula las herramientas de ficheros en un loop multi-turno — sin necesidad de tener ningún CLI instalado.</div>
+        <div class="callout-text">Con un <strong>CLI nativo</strong> (Claude Code, Copilot CLI, Antigravity CLI), Agent Hub lanza el proceso en la carpeta del proyecto, como desde un terminal: carga su contexto (<code>AGENTS.md</code>…) y tiene acceso real al filesystem. Con <strong>cualquier proveedor API</strong> (Anthropic, GitHub Copilot, OpenAI-compatible, Custom…), usa el Subsistema CLI interno que emula las herramientas de ficheros en un loop multi-turno — sin necesidad de tener ningún CLI instalado.</div>
       </div>
     </div>
   </div>
@@ -2682,7 +2682,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">Agent Hub escribe el fichero <code>.github/copilot-instructions.md</code> con el contexto del proyecto. Las instrucciones se inyectan automáticamente en cada conversación de Copilot dentro del repositorio.</p>
 
     <h4>Con otros proveedores (Gemini, OpenAI, Custom…)</h4>
-    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">El fichero maestro <code>CONTEXTO.md</code> se replica en el formato del proveedor configurado: <code>GEMINI.md</code>, <code>.instructions.md</code>, etc. Usa Agent Hub para generar y mantener ese contexto actualizado desde la pestaña Contexto del drawer del proyecto.</p>
+    <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">El fichero maestro <code>CONTEXTO.md</code> se replica en el formato del proveedor configurado: <code>GEMINI.md</code>, <code>AGENTS.md</code>, etc. Usa Agent Hub para generar y mantener ese contexto actualizado desde la pestaña Contexto del drawer del proyecto.</p>
 
     <h4>Dónde viven los agentes según proveedor</h4>
     <div class="grid2">
@@ -2717,7 +2717,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <div class="faq">
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Necesito tener Claude Code instalado?</div>
-        <div class="faq-a">No. Agent Hub es compatible con cualquier proveedor de IA: Claude Code CLI, Gemini CLI, Aider, Cline, Goose, API de Anthropic, GitHub Copilot, DeepSeek, Groq, OpenRouter y proveedores personalizados. Si tienes un CLI instalado, se usa directamente. Si usas una API, el Subsistema CLI interno emula las mismas capacidades de acceso al filesystem sin necesitar ningún CLI en el sistema.</div>
+        <div class="faq-a">No. Agent Hub es compatible con cualquier proveedor de IA: Claude Code CLI, Copilot CLI, Antigravity CLI, API de Anthropic, GitHub Copilot, DeepSeek, Groq, OpenRouter y proveedores personalizados. Si tienes un CLI instalado, se usa directamente. Si usas una API, el Subsistema CLI interno emula las mismas capacidades de acceso al filesystem sin necesitar ningún CLI en el sistema.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Puedo usar Agent Hub sin configurar ningún proveedor de IA?</div>
@@ -2749,7 +2749,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Con qué proveedores de IA funciona Agent Hub?</div>
-        <div class="faq-a">Con todos los configurados en Ajustes: CLIs nativos (Claude Code, Gemini CLI, Codex, Aider, Cline, Goose), APIs directas (Anthropic, GitHub Copilot, OpenAI, Gemini API, Mistral, DeepSeek, Groq, OpenRouter, Perplexity) y proveedores personalizados (Azure OpenAI, GAIA, cualquier endpoint compatible). No necesitas instalar ningún CLI si usas un proveedor API.</div>
+        <div class="faq-a">Con todos los configurados en Ajustes: CLIs nativos (Claude Code, Copilot CLI, Antigravity CLI), APIs directas (Anthropic, GitHub Copilot, OpenAI, Gemini API, Mistral, DeepSeek, Groq, OpenRouter, Perplexity) y proveedores personalizados (Azure OpenAI, GAIA, cualquier endpoint compatible). No necesitas instalar ningún CLI si usas un proveedor API.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><i class="ti ti-help" aria-hidden="true"></i> ¿Funciona en macOS o Linux?</div>

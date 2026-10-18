@@ -72,12 +72,8 @@ export interface Skill {
 
 export type AIProvider =
   | 'cli'          // Claude Code CLI
-  | 'gemini-cli'   // Gemini CLI
-  | 'codex-cli'    // OpenAI Codex CLI
+  | 'antigravity-cli' // Antigravity CLI (antes Gemini CLI)
   | 'copilot-cli'  // GitHub Copilot CLI
-  | 'aider-cli'    // Aider CLI
-  | 'cline-cli'    // Cline CLI
-  | 'goose-cli'    // Goose CLI
   | 'api'          // Anthropic API
   | 'openai'       // OpenAI API
   | 'github'       // GitHub Models
@@ -150,8 +146,6 @@ export interface Config {
   perplexityModel?: string;
 
   // CLI models
-  geminiCliModel?: string;
-  codexCliModel?: string;
 
   closeAction?: 'ask' | 'tray' | 'quit';
   agentsDirectoryUrl?: string;
@@ -335,6 +329,7 @@ export interface StepResult {
   filesModified: string[];
   tokensUsed:    { input: number; output: number };
   estimatedCost: number;
+  costUnavailable?: boolean;   // CLI no-Claude: sin precio conocido
   duration:      number;
   status:        'success' | 'error' | 'warning';
   error?:        { message: string; category: string; recoverable: boolean };
