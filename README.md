@@ -1,15 +1,17 @@
-# Agent Hub · v2.4.0
+# Agent Hub · v2.6.0
 
 Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo. Portable `.exe` para Windows x64.
 
 ## Qué hace
 
 - **Agentes**: crea, edita y sincroniza agentes IA (archivos `.md` con frontmatter YAML) organizados en tres niveles: global → categoría → proyecto.
-- **Skills**: bloques de contexto tecnológico (React, PostgreSQL, Unity…) que se inyectan automáticamente en el system prompt del agente al ejecutar. Generables con IA en ES/EN.
+- **Skills**: bloques de contexto tecnológico (React, PostgreSQL, Unity…). Se **detectan solas** por el stack del proyecto (`package.json`, `pom.xml`, `go.mod`, `Dockerfile`…, también en monorepos) y se inyectan en cada ejecución; con Claude Code se instalan además como skills nativas en `.claude/skills/`. Generables con IA en ES/EN.
 - **MCP**: integración nativa con servidores Model Context Protocol (stdio y HTTP/SSE). Pool de procesos con refcounting, catálogo de servidores predefinidos, variables `$env:VAR` resueltas en runtime, configuración global y por proyecto.
-- **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`CLAUDE.md` / `copilot-instructions.md` / `GEMINI.md`…), sincronización de agentes, skills asignadas y ejecución directa.
-- **Chat**: conversación multi-turno con agentes activos, soporte `@mention`, historial por proyecto.
-- **Orquestaciones DAG**: flujos multiagente en grafo dirigido acíclico. Los nodos sin dependencias entre sí se ejecutan **en paralelo** por niveles topológicos. Incluye canvas 2D interactivo, **scripts determinísticos** (sin IA), **gates HITL**, **quality score** automático, **git checkpointing**, **ops ledger** y reanudación de ejecuciones interrumpidas.
+- **Proyectos**: gestiona proyectos de desarrollo con su contexto de IA (`AGENTS.md`, que leen todos los motores, más `CLAUDE.md` / `copilot-instructions.md` / `GEMINI.md`), sincronización de agentes y ejecución directa.
+- **Agnóstico del proveedor**: agentes, skills, contexto y orquestaciones funcionan igual con un CLI nativo (se lanza dentro del proyecto) o con una API (Agent Hub le da herramientas de fichero y shell). *Prueba real* en Ajustes verifica de punta a punta que el proveedor lee un proyecto.
+- **Chat**: conversación multi-turno con `@mention` de agentes e historial por proyecto. Con un proyecto seleccionado lee sus ficheros, contexto y skills en **solo lectura**, con cualquier proveedor.
+- **CLI `agent-hub`**: ejecuta agentes sobre un proyecto desde cualquier terminal; se instala desde Ajustes.
+- **Orquestaciones DAG**: flujos multiagente en grafo dirigido acíclico. Los nodos sin dependencias entre sí se ejecutan **en paralelo** por niveles topológicos. Incluye canvas 2D interactivo, **scripts determinísticos** (sin IA), **gates HITL**, **quality score** automático, **git checkpointing**, **ops ledger**, reanudación de ejecuciones interrumpidas, **timeout por paso**, reintentos ante errores transitorios, **cancelación inmediata** y **estimación de coste** antes de ejecutar.
 - **Directorio de agentes**: sincronización automática (agentes + skills) desde un repositorio GitHub externo con resolución de conflictos.
 - **Búsqueda**: búsqueda global de agentes y skills por nombre y descripción con debounce y badges de origen.
 
@@ -21,14 +23,14 @@ Aplicación de escritorio para gestionar agentes de IA y proyectos de desarrollo
 | API | Express 4 en `localhost:3737` |
 | Renderer | React 19 + Vite + TypeScript |
 | Estado | Zustand 5 |
-| IA | Claude CLI · Anthropic SDK · GitHub Models · DeepSeek · Groq · OpenRouter · Perplexity · Gemini CLI · Aider · Goose |
+| IA | Claude Code CLI · Copilot CLI · Antigravity CLI · Anthropic SDK · GitHub Models · OpenAI · Gemini · Mistral · Grok · DeepSeek · Groq · OpenRouter · Perplexity |
 | MCP | stdio · HTTP/SSE · pool con refcounting · catálogo de servidores |
 | Build | electron-builder → portable `.exe` x64 |
 
 ## Requisitos
 
 - Windows 10/11 x64
-- [Claude Code CLI](https://claude.ai/download) instalado en PATH (si usas el provider `cli`)
+- Uno de: [Claude Code](https://claude.ai/download), Copilot CLI (`npm i -g @github/copilot`) o Antigravity CLI (`agy`) en el PATH, o una API key de un proveedor compatible
 
 ## Desarrollo
 
@@ -45,12 +47,21 @@ $env:CDM_DATA_DIR = "C:\MiCarpetaDatos"
 npm run dev
 ```
 
-## Novedades v2.4.0
+## Novedades v2.6.0
 
-- **Modelo DAG**: cada nodo declara sus dependencias con `dependsOn[]`. Nodos sin dependencias se ejecutan en paralelo con `Promise.allSettled` por niveles topológicos.
-- **Canvas 2D interactivo**: lienzo HTML+SVG con aristas Bézier, port-in/out, auto-layout topológico, detección de ciclos y paleta colapsable con tabs Agentes/Scripts.
-- **Scripts externos**: crea tus propios scripts `.js` en `user-scripts/`, se cargan en caliente y aparecen en la paleta. Sandbox Node.js con API `fs` segura.
-- **Migración automática**: las orquestaciones lineales antiguas (`agents[]`) se convierten al modelo DAG de forma transparente al leerlas.
+- **Timeouts por paso** (10 min por defecto) además del global, editables desde el editor de orquestación (botón *Ejecución*) junto a turnos máximos y *detener ante el primer error*. Al vencer, se mata el árbol de procesos del CLI.
+- **Reintentos automáticos** ante 429, 5xx y errores de red, sin repetir la conversación entera con las APIs.
+- **Respuestas largas completas** con la API: 16k tokens de salida con Anthropic y continuación automática si se cortan; nunca se escribe un fichero a medias.
+- **Estimación de coste** antes de ejecutar una orquestación: tokens mínimos por paso y media real de las ejecuciones anteriores. Precios de Anthropic actualizados.
+- **Cancelación inmediata**: cancelar una orquestación, Ctrl+C en `agent-hub run` o cerrar el chat detienen el agente en el acto.
+- **Prueba real del proveedor** en Ajustes: verificada con Claude Code, Copilot y Antigravity CLI.
+
+## Novedades v2.5.0
+
+- **Skills automáticas** por stack del proyecto, también como skills nativas de Claude Code.
+- **Ejecución unificada** (`runInProject`): orquestador, `/run` y chat comparten el mismo camino con cualquier proveedor.
+- **CLI `agent-hub`** instalable desde Ajustes.
+- CLIs verificados: Claude Code, Copilot CLI y Antigravity CLI (Gemini CLI, Codex, Aider, Cline y Goose se retiran y se migran solos).
 
 ## Documentación técnica
 
@@ -62,6 +73,6 @@ npm run dev
 
 | Tipo | Provider | Requisito |
 |---|---|---|
-| **CLI (Nativo)** | `cli`, `gemini-cli`, `codex-cli`, `copilot-cli`, `aider-cli`, `cline-cli`, `goose-cli` | Binario instalado en PATH |
+| **CLI (Nativo)** | `cli` (Claude Code), `copilot-cli`, `antigravity-cli` | Binario instalado en PATH |
 | **API (Cloud)** | `api`, `openai`, `github`, `gemini-api`, `mistral`, `grok`, `deepseek`, `groq`, `openrouter`, `perplexity` | API Key configurada en Ajustes |
 | **Personalizado** | **Custom Providers** | Configuración manual o importación de JSON (soporta Azure/GAIA) |

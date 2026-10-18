@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Hub — Manual de uso v2.4.0</title>
+<title>Agent Hub — Manual de uso v2.6.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.6.0/dist/tabler-icons.min.css">
@@ -215,7 +215,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
 <nav class="nav">
   <div class="nav-logo">
     <div class="nav-logo-title"><i class="ti ti-robot" aria-hidden="true"></i> Agent Hub</div>
-    <div class="nav-logo-sub">Manual de uso · v2.4.0</div>
+    <div class="nav-logo-sub">Manual de uso · v2.6.0</div>
   </div>
 
   <div class="nav-section">Primeros pasos</div>
@@ -270,7 +270,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
   <!-- Hero                   -->
   <!-- ══════════════════════ -->
   <div class="hero" id="inicio">
-    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.4.0</div>
+    <div class="hero-tag"><i class="ti ti-book" aria-hidden="true"></i> MANUAL DE USO · v2.6.0</div>
     <h1 class="hero-title">Agent <span>Hub</span></h1>
     <p class="hero-sub">Guía completa para gestionar tus agentes de IA, organizar proyectos y mantener contexto por proyecto. Incluye orquestaciones DAG con ejecución paralela, scripts determinísticos, gates HITL, skills por agente, servidores MCP y mucho más. Compatible con Claude, GitHub Copilot, Gemini, DeepSeek, Groq y cualquier proveedor compatible — todo desde una interfaz visual.</p>
     <p class="hero-tagline">Construida con IA. Para la IA. Con manos humanas al volante.</p>
@@ -580,7 +580,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <i class="ti ti-info-circle" aria-hidden="true"></i>
       <div class="callout-body">
         <div class="callout-title">Coste estimado</div>
-        <div class="callout-text">El coste en dólares solo está disponible con la <strong>API de Anthropic</strong> (Sonnet, Haiku, Opus). Con Claude CLI, GitHub Copilot u otros proveedores el coste aparece como $0.00. Al cambiar de proveedor en Ajustes, los contadores se reinician automáticamente.</div>
+        <div class="callout-text">El coste en dólares está disponible con <strong>Claude</strong>, por Claude CLI o por la API de Anthropic. Con Copilot, Antigravity u otros proveedores se cuentan los tokens y el coste aparece como <em>n/d</em>: Agent Hub no inventa precios. Al cambiar de proveedor en Ajustes, los contadores se reinician automáticamente.</div>
       </div>
     </div>
   </div>
@@ -1157,6 +1157,14 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
     <p style="font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:12px">
       Aparece en la parte inferior del panel configurador al seleccionar cualquier conexión. Aplica a toda la orquestación:
     </p>
+    <div class="callout info">
+      <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Se editan desde el editor</div>
+        <div class="callout-text">Pulsa <strong>Ejecución</strong> en la cabecera del editor de la orquestación para cambiar el timeout total, el timeout por paso (en minutos), los turnos máximos y <em>Detener ante el primer error</em>. Se guardan con <strong>Guardar</strong>.</div>
+      </div>
+    </div>
+
     <div class="grid2" style="margin-bottom:16px">
       <div class="card">
         <div class="card-title"><code>stopOnError</code></div>
@@ -1164,11 +1172,15 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       </div>
       <div class="card">
         <div class="card-title"><code>maxTurns</code></div>
-        <div class="card-body">Máximo de turnos del Subsistema CLI por paso (defecto: 10). Aumenta este valor si tus agentes necesitan muchas iteraciones para completar su tarea.</div>
+        <div class="card-body">Máximo de turnos del agente por paso (defecto: 10, máximo 100). Aumenta este valor si tus agentes necesitan muchas iteraciones para completar su tarea.</div>
       </div>
       <div class="card">
         <div class="card-title"><code>timeout</code></div>
-        <div class="card-body">Tiempo máximo global de toda la orquestación en milisegundos (defecto: 300 000 ms = 5 min). El tiempo restante se reparte entre los pasos. El tiempo de pausa en gates HITL <strong>no</strong> descuenta.</div>
+        <div class="card-body">Tiempo máximo de toda la orquestación (defecto: 30 min). El tiempo de pausa en gates HITL <strong>no</strong> descuenta.</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><code>stepTimeout</code></div>
+        <div class="card-body">Tiempo máximo de cada paso (defecto: 10 min), para que un agente colgado no se coma el tiempo de los demás. Cada paso recibe lo menor entre este valor y lo que quede del total. Al vencer, el proceso del agente se detiene por completo.</div>
       </div>
       <div class="card">
         <div class="card-title"><code>validateAfterEachStep</code></div>
@@ -1257,7 +1269,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
         <div class="step-num amber">1</div>
         <div class="step-body">
           <div class="step-title">Formulario previo</div>
-          <div class="step-desc">Si la orquestación tiene campos de contexto temporal, Agent Hub los muestra antes de lanzar. Los campos requeridos bloquean el botón "Ejecutar". Si algún agente usa herramientas de navegador (<code>browser_*</code>), aparece también la sección de <strong>Navegador CDP</strong> con el estado de conexión y la opción de lanzar un navegador dedicado. La ejecución no comienza hasta que el navegador esté conectado.</div>
+          <div class="step-desc">Si la orquestación tiene campos de contexto temporal, Agent Hub los muestra antes de lanzar. Los campos requeridos bloquean el botón "Ejecutar". Si algún agente usa herramientas de navegador (<code>browser_*</code>), aparece también la sección de <strong>Navegador CDP</strong> con el estado de conexión y la opción de lanzar un navegador dedicado. La ejecución no comienza hasta que el navegador esté conectado. El formulario incluye también la <strong>estimación de coste</strong>: los tokens mínimos que recibirá cada paso (con su precio si usas Claude) y, desde la segunda ejecución, la media real de las anteriores, con desglose por paso.</div>
         </div>
       </div>
       <div class="step">
@@ -1273,6 +1285,14 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
           <div class="step-title">Resultado final</div>
           <div class="step-desc">Al completar, se muestra: estado global (success / partial / failed), tarjeta por paso con respuesta del agente, ficheros modificados, tokens consumidos y duración. Los pasos con error muestran el mensaje de error y la categoría del fallo.</div>
         </div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <i class="ti ti-player-stop" aria-hidden="true"></i>
+      <div class="callout-body">
+        <div class="callout-title">Cancelar, timeouts y reintentos</div>
+        <div class="callout-text"><strong>Cancelar</strong> detiene el agente que está corriendo en el acto: su proceso se cierra con todos sus hijos y no sigue tocando ficheros. Si un paso supera su <strong>timeout por paso</strong> pasa lo mismo y el paso falla. Los errores pasajeros del proveedor (límite de peticiones, 5xx, red) se reintentan solos hasta dos veces, y lo verás como aviso en el log.</div>
       </div>
     </div>
 
@@ -1356,7 +1376,7 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
             <li style="font-size:12px;color:var(--text1)">Cada conexión tiene al menos un canal de DataFlow activo</li>
             <li style="font-size:12px;color:var(--text1)">Los ficheros de contexto fijo existen en disco</li>
             <li style="font-size:12px;color:var(--text1)">El directorio del proyecto existe</li>
-            <li style="font-size:12px;color:var(--text1)"><code>timeout ≥ 5 000 ms</code></li>
+            <li style="font-size:12px;color:var(--text1)">Timeout total y por paso de al menos 5 segundos</li>
           </ul>
         </div>
       </div>
@@ -1926,13 +1946,14 @@ h4{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.09em;text-t
       <div class="card-body">
         <p style="margin-bottom:8px">Proveedor que Agent Hub usa para generar prompts, sugerencias y el chat. Al cambiar de proveedor, los contadores de uso de tokens se reinician automáticamente.</p>
         <ul style="padding-left:16px;display:flex;flex-direction:column;gap:4px">
-          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Claude CLI</strong> — detectado automáticamente desde el PATH. Sin coste adicional.</li>
+          <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Claude Code CLI</strong> — detectado automáticamente desde el PATH. Usa tu suscripción de Claude.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">API key de Anthropic</strong> — introduce tu clave <code>sk-ant-api03-…</code> y guarda.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">GitHub Copilot Models API</strong> — introduce tu Personal Access Token con permiso <code>models:read</code> y selecciona el modelo.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Nativos (OpenAI-compatible)</strong> — DeepSeek, Groq, OpenRouter, Perplexity.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Copilot CLI y Antigravity CLI</strong> — procesos nativos en la carpeta del proyecto.</li>
           <li style="font-size:12px;color:var(--text1)"><strong style="color:var(--text0)">Proveedor Custom</strong> — endpoint Azure, API privada o cualquier servicio compatible. Soporta headers propios e importación desde JSON.</li>
         </ul>
+        <p style="margin-top:8px"><strong style="color:var(--text0)">Probar conexión</strong> hace un ping a las APIs. <strong style="color:var(--text0)">Prueba real</strong> funciona con cualquier proveedor, CLIs incluidos: guarda el formulario y pide al proveedor que lea un fichero de un proyecto de prueba (hasta 2 min). Si lo lee, tus agentes y el chat de proyecto funcionarán con él.</p>
       </div>
     </div>
     <div class="card amber-l" style="margin-bottom:10px">
