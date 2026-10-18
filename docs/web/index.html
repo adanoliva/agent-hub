@@ -1319,7 +1319,7 @@
           <div class="orch-feat-icon green"><i class="ti ti-clock-shield"></i></div>
           <div>
             <strong>Timeouts por paso, reintentos y cancelación</strong>
-            <p>Un agente colgado ya no bloquea el pipeline: tiempo límite por paso y total, reintentos ante errores pasajeros y parada inmediata al cancelar.</p>
+            <p>Un agente colgado ya no bloquea el pipeline: tiempo límite por paso y total, reintentos ante errores pasajeros y parada inmediata, desde el panel, la lista de orquestaciones o VS Code.</p>
           </div>
         </div>
         <div class="orch-feat">
@@ -1641,7 +1641,8 @@
         <div class="vsc-row l1"><i class="ti ti-robot"></i> test-writer <span class="d">global · haiku</span></div>
         <div class="vsc-row l1"><i class="ti ti-robot"></i> code-reviewer <span class="d">global · sonnet</span></div>
         <div class="vsc-row"><i class="ti ti-chevron-down"></i><i class="ti ti-topology-ring-2"></i> Orquestaciones <span class="d">2</span></div>
-        <div class="vsc-row l1"><i class="ti ti-hierarchy-2"></i> refactor + tests <span class="d">3 pasos · hace 2 h</span><i class="ti ti-player-play play"></i></div>
+        <div class="vsc-row l1"><i class="ti ti-loader-2"></i> refactor + tests <span class="d">en ejecución</span><i class="ti ti-player-stop" style="color:var(--coral); margin-left:6px;"></i></div>
+        <div class="vsc-row l1"><i class="ti ti-hierarchy-2"></i> auditoría de seguridad <span class="d">2 pasos · hace 1 d</span><i class="ti ti-player-play play"></i></div>
         <div class="vsc-row"><i class="ti ti-chevron-right"></i><i class="ti ti-history"></i> Ejecuciones recientes <span class="d">6</span></div>
       </div>
       <div class="vsc-out">
@@ -1674,15 +1675,15 @@
         <div class="orch-feat">
           <div class="orch-feat-icon green"><i class="ti ti-topology-ring-2"></i></div>
           <div>
-            <strong>Orquestaciones sin cambiar de ventana</strong>
-            <p>Estimación de coste antes de lanzar, logs en directo y gates de revisión para aprobar o pedir cambios mientras miras el diff en el editor.</p>
+            <strong>El canvas de la app, en una pestaña</strong>
+            <p>Crea, edita y ejecuta orquestaciones con las mismas pantallas que la app: el editor de grafos, el panel de ejecución con estimación de coste, los gates de revisión y el resultado con el diff de cada paso.</p>
           </div>
         </div>
         <div class="orch-feat">
-          <div class="orch-feat-icon blue"><i class="ti ti-plus"></i></div>
+          <div class="orch-feat-icon blue"><i class="ti ti-player-stop"></i></div>
           <div>
-            <strong>Crea orquestaciones en segundos</strong>
-            <p>Nombre, tarea y la cadena de agentes en orden. Las ramas paralelas, los gates y los scripts se editan después en el canvas de la app.</p>
+            <strong>Ejecuciones bajo control</strong>
+            <p>Lo que está en marcha aparece arriba, se lanzara desde VS Code, la app o la API. Detenlo con un clic o sigue su log en directo; nada se queda colgado sin forma de pararlo.</p>
           </div>
         </div>
         <div class="orch-feat">
