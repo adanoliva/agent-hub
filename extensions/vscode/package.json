@@ -27,7 +27,7 @@
       "properties": {
         "agentHub.url": {
           "type": "string",
-          "default": "http://localhost:3737",
+          "default": "http://127.0.0.1:3737",
           "description": "Dirección de la API local de Agent Hub (la app debe estar abierta)."
         }
       }
@@ -262,7 +262,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
-    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository -o agent-hub.vsix"
+    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository --skip-license -o agent-hub.vsix"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

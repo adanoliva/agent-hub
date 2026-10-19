@@ -29,7 +29,9 @@ export class ApiError extends Error {}
 
 export class Api {
   get base(): string {
-    return vscode.workspace.getConfiguration('agentHub').get<string>('url', 'http://localhost:3737').replace(/\/+$/, '');
+    // The app listens on 127.0.0.1 only, and `localhost` may resolve to ::1 first in the extension host
+    return vscode.workspace.getConfiguration('agentHub').get<string>('url', 'http://127.0.0.1:3737')
+      .replace(/\/+$/, '').replace(/\/\/localhost(?=[:/]|$)/i, '//127.0.0.1');
   }
 
   private async fetch(path: string, init: RequestInit = {}): Promise<Response> {

@@ -22,4 +22,4 @@ Desde la app: **Ajustes → General → Extensión de VS Code → Instalar exten
 
 | Ajuste | Defecto | Descripción |
 |---|---|---|
-| `agentHub.url` | `http://localhost:3737` | Dirección de la API local de Agent Hub |
+| `agentHub.url` | `http://127.0.0.1:3737` | Dirección de la API local de Agent Hub |
