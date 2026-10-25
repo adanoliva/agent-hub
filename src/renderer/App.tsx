@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { useStore } from './store';
 import { req } from './api';
 import { Sidebar } from './components/layout/Sidebar';
@@ -104,6 +105,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppInner />
+      <Analytics />
     </ErrorBoundary>
   );
 }

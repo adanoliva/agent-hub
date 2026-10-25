@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
+    "@vercel/analytics": "^2.0.1",
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.6",
     "electron-updater": "^6.8.3",
